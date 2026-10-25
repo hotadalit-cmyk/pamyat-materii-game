@@ -8,6 +8,7 @@ namespace PM.Systems.Gameplay {
 /// <summary>Идентификатор сущности симуляции на объекте (для сопоставления коллизий).</summary>
 public interface ISimEntity {
     int SimId { get; }
+    SimEntityKind Kind { get; }
 }
 /// <summary>Типы игровых сущностей сцены.</summary>
 public enum SimEntityKind { Player = 0, Ai = 1, Beetle = 2 }
@@ -20,6 +21,7 @@ public enum SimEntityKind { Player = 0, Ai = 1, Beetle = 2 }
 [RequireComponent(typeof(CircleCollider2D))]
 public sealed class SimEntityView2D : MonoBehaviour, ISimEntity {
     public SimEntityKind Kind;
+    SimEntityKind ISimEntity.Kind => Kind;
     public int SimId { get; set; }
     public SpriteRenderer Body;
     public Rigidbody2D Rb { get; private set; }
