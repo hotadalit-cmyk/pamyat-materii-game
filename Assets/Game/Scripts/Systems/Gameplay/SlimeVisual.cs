@@ -3,33 +3,71 @@ using PM.Systems.Sim;
 using PM.Systems.Input;
 
 namespace PM.Systems.Gameplay {
-/// <summary>Сжатие/растяжение героя: заряд сжимает, рывок растягивает (VISUAL_UI «Состояния героя»).</summary>
+/// <summary>
+/// Живой вид героя: сжатие при заряде, растяжение на рывке, «дыхание» в покое,
+/// пульс мембраны, ядро-маятник по скорости, брызги при рывке (VISUAL_UI).
+/// </summary>
 public sealed class SlimeVisual : MonoBehaviour {
     public Transform BodyRoot;
-    private Vector3 _baseScale = Vector3.one;
-    private float _deformTimer;
+    public SpriteRenderer Membrane;
+    public SpriteRenderer Core;
+    public float SplashSpeedJump = 3.5f; // порог скачка скорости → брызги
 
-    void Awake() { if (BodyRoot != null) _baseScale = BodyRoot.localScale; }
+    private Vector3 _baseScale = Vector3.one;
+    private bool _baseCaptured;
+    private float _deformTimer;
+    private float _time;
+    private float _prevSpeed;
+    private bool _prevSpeedValid;
+
+    void Awake() { }
 
     void LateUpdate() {
         if (BodyRoot == null) return;
+        if (!_baseCaptured) { _baseScale = BodyRoot.localScale; _baseCaptured = true; }
+        _time += Time.deltaTime;
         var runner = SimRunner.Instance;
         float charge = 0;
         var input = PullGestureInput.Instance;
         if (input != null && input.Active) charge = (float)input.Charge01;
+
         // сжатие при натяжении (против направления) — сплющивание по оси жеста
         float squash = 1f - 0.18f * charge;
         float speedStretch = 0f;
-        if (runner != null && runner.Sim != null)
-            speedStretch = Mathf.Min(0.15f, (float)runner.Sim.Player.Vel.Length * 0.012f);
+        float speed = 0f;
+        Vector2 velDir = Vector2.right;
+        if (runner != null && runner.Sim != null) {
+            speed = (float)runner.Sim.Player.Vel.Length;
+            var vel = runner.Sim.Player.Vel;
+            if (vel.Length > 0.01) velDir = new Vector2((float)(vel.X / vel.Length), (float)(vel.Y / vel.Length));
+            speedStretch = Mathf.Min(0.15f, speed * 0.012f);
+        }
         float stretch = 1f + charge * 0.10f + speedStretch;
+        // «дыхание» в покое: ±3.5% медленный пульс
+        float breath = (1f - charge) * 0.035f * Mathf.Sin(_time * 2.6f);
         // деформация при ударе
         float deform = _deformTimer > 0 ? 1f - _deformTimer * 0.25f : 1f;
         if (_deformTimer > 0) _deformTimer -= Time.deltaTime;
-        BodyRoot.localScale = new Vector3(
-            _baseScale.x * squash * deform,
-            _baseScale.y * stretch * deform,
-            _baseScale.z);
+        float sx = _baseScale.x * (squash + breath) * deform;
+        float sy = _baseScale.y * (stretch + breath) * deform;
+        BodyRoot.localScale = new Vector3(sx, sy, _baseScale.z);
+
+        // мембрана дышит чуть с отставанием — живой контур
+        if (Membrane != null) {
+            float mp = 1.12f + 0.04f * Mathf.Sin(_time * 2.6f + 0.9f);
+            Membrane.transform.localScale = new Vector3(mp, mp, 1f);
+        }
+        // ядро-маятник: слегка уходит против скорости (инерция содержимого)
+        if (Core != null) {
+            var target = new Vector3(-velDir.x, -velDir.y, 0f) * Mathf.Min(0.10f, speed * 0.02f);
+            Core.transform.localPosition = Vector3.Lerp(Core.transform.localPosition, target, 6f * Time.deltaTime);
+        }
+
+        // брызги на рывке: резкий скачок скорости
+        if (_prevSpeedValid && speed - _prevSpeed > SplashSpeedJump && SplashBurst2D.Instance != null)
+            SplashBurst2D.Instance.Burst(transform.position, velDir);
+        _prevSpeed = speed;
+        _prevSpeedValid = true;
     }
 
     public void OnImpact() { _deformTimer = 0.35f; }

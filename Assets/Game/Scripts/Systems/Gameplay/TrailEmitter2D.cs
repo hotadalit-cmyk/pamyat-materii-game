@@ -12,7 +12,7 @@ public sealed class TrailEmitter2D : MonoBehaviour {
     private readonly Dictionary<int, SpriteRenderer> _views = new Dictionary<int, SpriteRenderer>();
     private readonly Queue<SpriteRenderer> _pool = new Queue<SpriteRenderer>();
     public int MaxViews = 128;
-    public Color TrailColor = new Color(0.24f, 0.73f, 0.89f, 0.5f);
+    public Color TrailColor = new Color(0.24f, 0.73f, 0.89f, 0.38f);
 
     void LateUpdate() {
         var runner = SimRunner.Instance;
@@ -30,9 +30,9 @@ public sealed class TrailEmitter2D : MonoBehaviour {
             if (sr == null) continue;
             sr.gameObject.SetActive(true);
             sr.transform.position = new Vector3((float)r.Pos.X, (float)r.Pos.Y, 0.1f);
-            float s = Mathf.Clamp((float)r.Mass * 3f + 0.25f, 0.25f, 1.1f);
+            float s = Mathf.Clamp((float)r.Mass * 3f + 0.25f, 0.3f, 1.0f);
             sr.transform.localScale = new Vector3(s, s, 1f);
-            var c = TrailColor; c.a = Mathf.Lerp(0.12f, 0.5f, (float)r.Freshness);
+            var c = TrailColor; c.a = Mathf.Lerp(0.10f, 0.38f, (float)r.Freshness);
             sr.color = c;
         }
         // скрыть записи, которых больше нет
