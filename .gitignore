@@ -1,0 +1,32 @@
+# Unity generated
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]serSettings/
+[Mm]emoryCaptures/
+*.pidb.meta
+*.sysinfo
+*.stackdump
+apianalyzer/
+
+# Visual Studio / Rider — только в корне (не трогаем csproj тестового harness в tools/)
+/*.csproj
+/*.sln
+/*.user
+/*.suo
+/*.userprefs
+.idea/
+.vs/
+
+# Builds
+*.apk
+*.aab
+*.unitypackage
+*.app/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,81 @@
+using UnityEngine;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
+using PM.Systems.Bootstrap;
+using PM.Systems.Sim;
+using PM.Systems.Input;
+using PM.Systems.CameraRig;
+using PM.Systems.UI;
+
+namespace PM.EditorTools {
+/// <summary>
+/// PM/Setup: автоматизация подготовки проекта (T00/T01). Сцена генерируется кодом —
+/// никакого ручного YAML.
+/// </summary>
+public static class SetupMenu {
+    [MenuItem("PM/Setup/01 Create Boot Scene", priority = 1)]
+    public static void CreateBootScene() {
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        // камера
+        var camGo = new GameObject("main_camera");
+        var cam = camGo.AddComponent<Camera>();
+        cam.tag = "MainCamera";
+        cam.orthographic = true;
+        cam.orthographicSize = 5f;
+        cam.clearFlags = CameraClearFlags.SolidColor;
+        cam.backgroundColor = GameBootstrap.CBackground;
+        camGo.AddComponent<FollowCamera>();
+        // событийная система для UI
+        var esGo = new GameObject("event_system");
+        esGo.AddComponent<EventSystem>();
+        esGo.AddComponent<StandaloneInputModule>();
+        // бутстрап (создаст симуляцию, арену, сущности, системы)
+        var bootGo = new GameObject("game_bootstrap");
+        bootGo.AddComponent<GameBootstrap>();
+        // HUD (канва + элементы кодом)
+        HudBuilder.BuildIfMissing(bootGo.transform);
+        // сохранение сцены
+        System.IO.Directory.CreateDirectory("Assets/Game/Scenes");
+        const string path = "Assets/Game/Scenes/Boot.unity";
+        EditorSceneManager.SaveScene(scene, path);
+        // в билд
+        var scenes = new System.Collections.Generic.List<EditorBuildSettingsScene>(
+            EditorBuildSettings.scenes) { new EditorBuildSettingsScene(path, true) };
+        EditorBuildSettings.scenes = scenes.ToArray();
+        Debug.Log("PM/Setup 01: Boot-сцена создана и добавлена в Build Settings: " + path);
+    }
+
+    [MenuItem("PM/Setup/02 Apply Android Settings", priority = 2)]
+    public static void ApplyAndroidSettings() {
+        // D-02/D-18: Android, landscape, IL2CPP, Linear, пакет com.pamyatmaterii.game
+        PlayerSettings.companyName = "PamyatMaterii";
+        PlayerSettings.productName = "Память Материи";
+        PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "com.pamyatmaterii.game");
+        PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel24;
+        PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
+        PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARMv7 | AndroidArchitecture.ARM64;
+        PlayerSettings.colorSpace = ColorSpace.Linear;
+        PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
+        PlayerSettings.allowedAutorotateToPortrait = false;
+        PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
+        PlayerSettings.allowedAutorotateToLandscapeLeft = true;
+        PlayerSettings.allowedAutorotateToLandscapeRight = true;
+        PlayerSettings.targetFrameRate = 60;
+        AssetDatabase.SaveAssets();
+        Debug.Log("PM/Setup 02: Android-настройки применены (IL2CPP, ARM64, minSdk 24, Linear, landscape).");
+    }
+
+    [MenuItem("PM/Setup/03 Verify Project Wiring", priority = 3)]
+    public static void VerifyWiring() {
+        var boot = Object.FindFirstObjectByType<GameBootstrap>();
+        if (boot == null) { Debug.LogWarning("GameBootstrap не найден в сцене. Запустите 01."); return; }
+        var cam = Camera.main;
+        bool camOk = cam != null && cam.GetComponent<FollowCamera>() != null;
+        Debug.Log(string.Format(
+            "PM/Setup 03: bootstrap={0}, camera+rig={1}, hud={2}. Проверьте Game View 16:9/20:9 (PM/Dev).",
+            boot != null, camOk, Object.FindFirstObjectByType<HudPresenter>() != null));
+    }
+}
+}

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    .NET 8 harness (D-20): компилирует ИСТОЧНИКИ Domain и Persistence напрямую из Assets.
+    ПРАВИЛО: сюда включаются ТОЛЬКО файлы без ссылок на UnityEngine
+    (Scripts/Domain/** и Scripts/Persistence/**; Systems/UI не включать!).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>PMHarness</AssemblyName>
+    <RootNamespace>PMHarness</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Assets/Game/Scripts/Domain/**/*.cs" />
+    <Compile Include="../../Assets/Game/Scripts/Persistence/**/*.cs" />
+    <Compile Include="TestKit/**/*.cs" />
+    <Compile Include="Tests/**/*.cs" />
+  </ItemGroup>
+</Project>

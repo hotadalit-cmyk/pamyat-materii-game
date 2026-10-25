@@ -1,0 +1,19 @@
+{
+    "name": "PM.Editor",
+    "rootNamespace": "PM.EditorTools",
+    "references": [
+        "PM.Domain",
+        "PM.Persistence",
+        "PM.Systems"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": []
+}

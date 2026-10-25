@@ -1,0 +1,16 @@
+{
+    "name": "PM.Persistence",
+    "rootNamespace": "PM.Persistence",
+    "references": [
+        "PM.Domain"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}
