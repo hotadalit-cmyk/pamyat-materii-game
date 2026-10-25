@@ -41,8 +41,10 @@ public static class SetupMenu {
         const string path = "Assets/Game/Scenes/Boot.unity";
         EditorSceneManager.SaveScene(scene, path);
         // в билд
-        var scenes = new System.Collections.Generic.List<EditorBuildSettingsScene>(
-            EditorBuildSettings.scenes) { new EditorBuildSettingsScene(path, true) };
+        // идемпотентно: повторный запуск не плодит дубли Boot.unity
+        var scenes = new System.Collections.Generic.List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+        scenes.RemoveAll(s => s.path == path);
+        scenes.Insert(0, new EditorBuildSettingsScene(path, true));
         EditorBuildSettings.scenes = scenes.ToArray();
         Debug.Log("PM/Setup 01: Boot-сцена создана и добавлена в Build Settings: " + path);
     }
