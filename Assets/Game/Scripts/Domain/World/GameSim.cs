@@ -39,6 +39,10 @@ public sealed partial class GameSim {
     public OrganStats PlayerOrgans = OrganStats.BaseSlime();
     private readonly MovementConfig _moveCfg = new MovementConfig();
     private readonly DamageDebouncer _debouncer = new DamageDebouncer();
+    // Статистика текущей жизни (экран смерти, финал демо) — сбрасывается при реинкарнации
+    public int LifePellets, LifeBeetles, LifeNodes, LifeAssists;
+    public void ResetLifeStats() { LifePellets = LifeBeetles = LifeNodes = LifeAssists = 0; }
+    private bool _demoCycleRecorded;
     private readonly Dictionary<int, Queue<ActorCommand>> _commands = new Dictionary<int, Queue<ActorCommand>>();
     private readonly Queue<Vec2> _playerPendingImpulses = new Queue<Vec2>();
     private readonly Dictionary<int, Queue<Vec2>> _aiPendingImpulses = new Dictionary<int, Queue<Vec2>>();

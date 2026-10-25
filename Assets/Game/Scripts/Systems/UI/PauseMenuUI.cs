@@ -3,7 +3,9 @@ using UnityEngine.UI;
 using PM.Systems.Bootstrap;
 
 namespace PM.Systems.UI {
-/// <summary>Пауза и сохранения (QA-10): два слота, загрузка, без молча новой кампании.</summary>
+/// <summary>Пауза и сохранения (QA-10): два слота, загрузка, без молча новой кампании.
+/// Слушатели вешаются в Wire() (идемпотентно): в запечённой сцене code-added listeners
+/// не выживают пересохранение, а Awake/Start неактивной панели не запускаются.</summary>
 public sealed class PauseMenuUI : MonoBehaviour {
     public static PauseMenuUI Instance { get; private set; }
     public GameObject Panel;
@@ -13,13 +15,19 @@ public sealed class PauseMenuUI : MonoBehaviour {
     public Button GenesButton;
     public Text StatusText;
     private GameBootstrap _game;
+    private bool _wired;
 
-    void Awake() {
-        Instance = this;
-        if (Panel != null) Panel.SetActive(false);
+    void Awake() { Instance = this; }
+
+    private GameBootstrap Game {
+        get { if (_game == null) _game = GameBootstrap.Instance; return _game; }
     }
-    void Start() {
-        _game = GameBootstrap.Instance;
+
+    /// <summary>Повторный вызов безопасен: навешивает слушатели кнопок ровно один раз.</summary>
+    public void Wire() {
+        Instance = this;
+        if (_wired) return;
+        _wired = true;
         Assign(PauseButton, () => SetPaused(true));
         Assign(ResumeButton, () => SetPaused(false));
         Assign(SaveSlot0, () => DoSave(0));
@@ -38,13 +46,13 @@ public sealed class PauseMenuUI : MonoBehaviour {
     }
 
     private void DoSave(int slot) {
-        bool ok = _game != null && _game.SaveToSlot(slot);
+        bool ok = Game != null && Game.SaveToSlot(slot);
         if (StatusText != null) StatusText.text = ok ? "Сохранено в слот " + (slot + 1) : "Ошибка сохранения";
     }
     private void DoLoad(int slot) {
-        bool ok = _game != null && _game.LoadFromSlot(slot);
+        bool ok = Game != null && Game.LoadFromSlot(slot);
         if (StatusText != null)
-            StatusText.text = ok ? "Загружено из слота " + (slot + 1)
+            StatusText.text = ok ? "Загружено из слот " + (slot + 1)
                 : "Слот пуст или повреждён (новая кампания НЕ начата молча)";
     }
 }

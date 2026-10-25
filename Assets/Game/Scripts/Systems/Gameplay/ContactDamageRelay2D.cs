@@ -29,6 +29,9 @@ public sealed class ContactDamageRelay2D : MonoBehaviour {
             Penetration = 1.0,
             TargetResistance = 1.0
         });
+        // память ИИ: удар игрока запоминается (T16, QA-9 — союз/конфликт меняют решения)
+        if (self.Kind == SimEntityKind.Player && other.Kind == SimEntityKind.Ai)
+            runner.Sim.NotifyAiOfAttack(other.SimId);
     }
 
     private static double MassOf(int simId, SimRunner runner) {

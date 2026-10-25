@@ -15,6 +15,8 @@ public sealed class HudPresenter : MonoBehaviour {
     public Text HintText;
     private GameBootstrap _game;
     private float _hintTimer;
+    private bool _wasDead;
+    private bool _demoEndShown;
 
     void Awake() { Instance = this; }
 
@@ -53,6 +55,16 @@ public sealed class HudPresenter : MonoBehaviour {
         // контекстные подсказки
         if (_hintTimer > 0) _hintTimer -= Time.deltaTime;
         else if (HintText != null) HintText.gameObject.SetActive(false);
+        // смерть/воскрешение — детект здесь: панели неактивны и сами следить не могут
+        bool dead = !p.Alive;
+        if (dead && !_wasDead) ShowDeath();
+        if (!dead && _wasDead) HideDeath();
+        _wasDead = dead;
+        // финал демо — один раз после первой реинкарнации (критерий «очевидное завершение»)
+        if (!_demoEndShown && sim.Soul.LivesLived >= 1 && p.Alive) {
+            _demoEndShown = true;
+            if (DemoEndUI.Instance != null) DemoEndUI.Instance.Show();
+        }
     }
 
     public void ShowHint(string message, float seconds = 4f) {
@@ -67,5 +79,6 @@ public sealed class HudPresenter : MonoBehaviour {
     public void HideDeath() {
         if (DeathScreenUI.Instance != null) DeathScreenUI.Instance.Hide();
     }
+    public void ResetDemoEndFlag() { _demoEndShown = false; }
 }
 }

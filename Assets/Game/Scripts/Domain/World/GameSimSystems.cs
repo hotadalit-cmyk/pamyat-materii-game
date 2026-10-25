@@ -44,9 +44,65 @@ public sealed partial class GameSim {
             _firstDiscoverDone = true;
             SoulGrowth.Apply(Soul, SoulGrowth.ActFirstDiscover, SoulGrowth.BaseReward);
         }
+        LifePellets++;
         Player.LastSignificantAt = Clock.WorldTime;
         RecordEvent("pellet_consumed", p.Id.ToString());
         return true;
+    }
+
+    // ---------- Химическое чутьё (T14, узел n_chem_sense) ----------
+    public const double ChemSenseRadius = 6.0;
+    /// <summary>Чутьё активно, когда открыт узел n_chem_sense.</summary>
+    public bool ChemSenseActive => Unlocked.Has("n_chem_sense");
+    /// <summary>Направление к ближайшей пище в радиусе чутья (Zero — ничего не чувствуется).
+    /// Наблюдаются только факты мира: непоглощённые гранулы в радиусе.</summary>
+    public Vec2 ChemSenseDirection(out double dist, out int pelletId) {
+        dist = 0; pelletId = 0;
+        if (!ChemSenseActive) return Vec2.Zero;
+        double best = double.MaxValue;
+        Vec2 dir = Vec2.Zero;
+        for (int i = 0; i < Food.Count; i++) {
+            var p = Food[i];
+            if (p.Consumed) continue;
+            double d = (p.Pos - Player.Pos).Length;
+            if (d <= ChemSenseRadius && d < best) {
+                best = d;
+                dir = d < 1e-6 ? Vec2.Up : (p.Pos - Player.Pos) / d;
+                pelletId = p.Id;
+            }
+        }
+        dist = best == double.MaxValue ? 0 : best;
+        return dir;
+    }
+
+    // ---------- Помощь игрока ИИ-носителю души (T16, социальная развилка) ----------
+    public const double AssistRadius = 4.0;
+    /// <summary>Игрок делится водой с ИИ-носителем души. null — успех, иначе код причины.
+    /// Событие попадает в память ИИ (HelpedBy → Trust+20) — развилка «помочь».</summary>
+    public string PlayerAssistAi(int aiActorId) {
+        var a = FindAi(aiActorId);
+        var prof = ProfileOf(aiActorId);
+        if (a == null || prof == null || !a.Alive) return "actor_missing";
+        if ((a.Pos - Player.Pos).Length > AssistRadius) return "too_far";
+        double give = MathUtil.Min(0.25, MathUtil.Max(0, Player.Body.Water - Player.Body.MinimumViableWater - 0.5));
+        if (give < 0.05) return "not_enough_water";
+        double spent = Player.Body.SpendWater(give);
+        if (spent <= 0.01) return "not_enough_water";
+        a.Body.AddWater(spent);
+        prof.Memory.Record(MemoryEventKind.HelpedBy, Player.Id, Clock.TickIndex);
+        LifeAssists++;
+        RecordEvent("player_assisted", "player -> ai_" + aiActorId + " " + spent.ToString("0.###"));
+        SoulGrowth.Apply(Soul, SoulGrowth.ActAssist, SoulGrowth.RewardFor(CountOf(SoulGrowth.ActAssist)));
+        Player.LastSignificantAt = Clock.WorldTime;
+        return null;
+    }
+    /// <summary>Полный демо-цикл: добыча поглощена и форма жука открыта (DEMO_SCOPE, вертикальный сценарий).</summary>
+    private void CheckDemoCycle() {
+        if (_demoCycleRecorded) return;
+        if (LifeBeetles > 0 && Unlocked.Has("n_beetle_form")) {
+            _demoCycleRecorded = true;
+            RecordEvent("demo_cycle_complete", "beetle_form");
+        }
     }
 
     // ---------- Захват (T09) ----------
@@ -90,6 +146,8 @@ public sealed partial class GameSim {
             if (!added) target.Phase = PreyPhase.Weakened; // нет места — добыча снова снаружи
             else {
                 Player.Body.AddCargo(target.Mass); // груз физически переносится телом
+                LifeBeetles++;
+                CheckDemoCycle();
                 RecordEvent("beetle_internalized", target.Id.ToString());
                 SoulGrowth.Apply(Soul, SoulGrowth.ActCapture, SoulGrowth.RewardFor(CountOf(SoulGrowth.ActCapture)));
                 Player.LastSignificantAt = Clock.WorldTime;
@@ -126,6 +184,8 @@ public sealed partial class GameSim {
             bool ok = GeneNetworkService.TryUnlock(n, Unlocked, Genome, Stock);
             if (!ok) return "cannot_unlock";
             ApplyNodeEffects(n);
+            LifeNodes++;
+            CheckDemoCycle();
             RecordEvent("node_unlocked", nodeId);
             return null;
         }

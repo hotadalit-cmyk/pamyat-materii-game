@@ -25,3 +25,22 @@ NOT STARTED / IN PROGRESS / CODE COMPLETE / TESTED LOCAL / TESTED UNITY / TESTED
 
 ## Отчёт теста
 Дата; версия Unity; git SHA; устройство; build type; команды; сценарии; PASS/FAIL/NOT RUN; скриншоты и логи; известные ограничения.
+
+## Статус v0.3.0-demo-complete (2026-10-26)
+
+- T02–T12 (движение/материя/поглощение/гены/форма): Domain TESTED LOCAL (harness 450/450);
+  Unity-слой TESTED UNITY владельцем на v0.2.0 (Play/Android, фиксы a33dbb5..9069d9b).
+- T14 химическое чутьё: Domain TESTED LOCAL (4 новых теста); Unity CODE COMPLETE
+  (зелёная стрелка при открытом узле n_chem_sense, радиус 6, только наблюдаемые факты).
+- T15/T16 ИИ и соцразвилка: Domain TESTED LOCAL (PlayerAssistAi, Trust); Unity CODE COMPLETE
+  (кнопка «ПОМОЧЬ союзнику», память об ударах → бегство/месть, метки «(ИИ)»).
+- T17 душа/реинкарнация: Domain TESTED LOCAL; Unity CODE COMPLETE + финальный экран демо
+  после первой реинкарнации (критерий «очевидное завершение»).
+- T18 HUD/обучение: цепочка подсказок по событиям мира CODE COMPLETE; КРИТИЧЕСКИЙ ФИКС:
+  code-added onClick-слушатели не переживают сохранение сцены, Awake/Start неактивных панелей
+  не запускаются — все кнопки навешиваются идемпотентным Wire()/RewireRuntime() в runtime.
+- T19-минимум звук: процедурные сигналы + громкость в паузе (PlayerPrefs) CODE COMPLETE.
+- Критерии релиза DEMO_SCOPE: сохранения восстанавливают добычу/воду/душу/карту (TESTED LOCAL);
+  ИИ явно обозначен (CODE COMPLETE); очевидное завершение (CODE COMPLETE);
+  APK и тесты на устройстве — за владельцем (PM/Setup/04).
+- Обязательный прогон владельцем: README «Быстрый старт» шаги 3–11; отчёт — в раздел «Отчёт теста».

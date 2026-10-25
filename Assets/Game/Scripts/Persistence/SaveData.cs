@@ -25,6 +25,8 @@ public sealed class SaveData {
     public string[] KnowledgeGenes;
     public long LastSignificantAt;
     public Dictionary<string, int> GrowthCounts = new Dictionary<string, int>();
+    // статистика текущей жизни (v1 расширение: отсутствующие поля в старых файлах = 0)
+    public int LifePellets, LifeBeetles, LifeNodes, LifeAssists;
     // ресурсы и гены
     public double StockWater, StockOrganic, StockChitin, StockMineral;
     public string[] UnlockedNodes;

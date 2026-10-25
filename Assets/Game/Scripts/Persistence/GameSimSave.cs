@@ -31,6 +31,8 @@ public static class GameSimSave {
         d.SoulKarma = sim.Soul.Karma;
         d.LivesLived = sim.Soul.LivesLived;
         d.LastSignificantAt = (long)p.LastSignificantAt;
+        d.LifePellets = sim.LifePellets; d.LifeBeetles = sim.LifeBeetles;
+        d.LifeNodes = sim.LifeNodes; d.LifeAssists = sim.LifeAssists;
         var kg = new List<string>(sim.Soul.KnowledgeGenes);
         d.KnowledgeGenes = kg.ToArray();
         d.GrowthCounts = new Dictionary<string, int>(sim.Soul.GrowthCounts);
@@ -147,6 +149,8 @@ public static class GameSimSave {
         sim.Soul.Karma = d.SoulKarma;
         sim.Soul.LivesLived = d.LivesLived;
         p.LastSignificantAt = d.LastSignificantAt;
+        sim.LifePellets = d.LifePellets; sim.LifeBeetles = d.LifeBeetles;
+        sim.LifeNodes = d.LifeNodes; sim.LifeAssists = d.LifeAssists;
         sim.Soul.KnowledgeGenes.Clear();
         if (d.KnowledgeGenes != null)
             for (int i = 0; i < d.KnowledgeGenes.Length; i++) sim.Soul.LearnGene(d.KnowledgeGenes[i]);

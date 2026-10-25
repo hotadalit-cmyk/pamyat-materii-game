@@ -31,3 +31,5 @@ apianalyzer/
 .DS_Store
 Thumbs.db
 build/
+# Unity 6 build pipeline cache
+.utmp/

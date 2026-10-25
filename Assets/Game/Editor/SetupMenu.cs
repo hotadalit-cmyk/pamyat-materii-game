@@ -63,8 +63,9 @@ public static class SetupMenu {
         PlayerSettings.allowedAutorotateToLandscapeLeft = true;
         PlayerSettings.allowedAutorotateToLandscapeRight = true;
         Application.targetFrameRate = 60;
+        PlayerSettings.bundleVersion = "0.3.0";
         AssetDatabase.SaveAssets();
-        Debug.Log("PM/Setup 02: Android-настройки применены (IL2CPP, ARM64, minSdk 24, Linear, landscape).");
+        Debug.Log("PM/Setup 02: Android-настройки применены (IL2CPP, ARM64, minSdk 24, Linear, landscape, v0.3.0).");
     }
 
     [MenuItem("PM/Setup/03 Verify Project Wiring", priority = 3)]
@@ -76,6 +77,12 @@ public static class SetupMenu {
         Debug.Log(string.Format(
             "PM/Setup 03: bootstrap={0}, camera+rig={1}, hud={2}. Проверьте Game View 16:9/20:9 (PM/Dev).",
             boot != null, camOk, Object.FindFirstObjectByType<HudPresenter>() != null));
+    }
+
+    [MenuItem("PM/Setup/04 Build APK", priority = 4)]
+    public static void BuildApk() {
+        Debug.Log("PM/Setup 04: сборка APK (build/PamyatMaterii.apk)...");
+        BuildScript.BuildAndroidApk();
     }
 }
 }

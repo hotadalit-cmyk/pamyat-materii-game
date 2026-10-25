@@ -99,7 +99,6 @@ public sealed class HudBuilder : MonoBehaviour {
         var reGo = MakeButton(deathGo.transform, "reincarnate_btn", "РЕИНКАРНИРОВАТЬСЯ",
             new Vector2(0, -220), new Vector2(560, 90), GameBootstrap.CFood);
         death.ReincarnateButton = reGo.GetComponent<Button>();
-        reGo.GetComponent<Button>().onClick.AddListener(death.OnReincarnate);
         deathGo.SetActive(false);
 
         // --- пауза-панель ---
@@ -115,7 +114,6 @@ public sealed class HudBuilder : MonoBehaviour {
         var resume = MakeButton(panelGo.transform, "resume_btn", "ПРОДОЛЖИТЬ",
             new Vector2(0, 240), new Vector2(600, 84), GameBootstrap.CFood);
         pause.ResumeButton = resume.GetComponent<Button>();
-        resume.GetComponent<Button>().onClick.AddListener(() => pause.SetPaused(false));
         pause.SaveSlot0 = MakeButton(panelGo.transform, "save0", "Сохранить слот 1",
             new Vector2(-190, 80), new Vector2(380, 74), GameBootstrap.CSlime).GetComponent<Button>();
         pause.SaveSlot1 = MakeButton(panelGo.transform, "save1", "Сохранить слот 2",
@@ -127,6 +125,8 @@ public sealed class HudBuilder : MonoBehaviour {
         var status = UiUtil.AddText(panelGo.transform, "", 24, TextAnchor.MiddleCenter);
         status.rectTransform.anchoredPosition = new Vector2(0, -120);
         pause.StatusText = status;
+        // слушатели вешает RewireRuntime() — code-added listeners не переживают запекание сцены
+        panelGo.SetActive(false);
 
         // --- экран генов ---
         var geneGo = new GameObject("gene_screen");
@@ -137,8 +137,7 @@ public sealed class HudBuilder : MonoBehaviour {
         geneImg.color = new Color(0.04f, 0.09f, 0.14f, 0.96f);
         var gene = geneGo.AddComponent<GeneScreenUI>();
         gene.Panel = geneGo;
-        gene.OpenButton = genesBtn.GetComponent<Button>();
-        genesBtn.GetComponent<Button>().onClick.AddListener(gene.Toggle);
+        gene.OpenButton = genesBtn.GetComponent<Button>();// слушатель — в Wire() (RewireRuntime)
         var listGo = new GameObject("node_list");
         listGo.transform.SetParent(geneGo.transform, false);
         var listRt = listGo.AddComponent<RectTransform>();
@@ -154,6 +153,27 @@ public sealed class HudBuilder : MonoBehaviour {
         // биндинг выполнится в GameBootstrap.Awake → HudPresenter.Bind
         var boot = Object.FindFirstObjectByType<GameBootstrap>();
         if (boot != null) hud.Bind(boot);
+    }
+
+    /// <summary>
+    /// Повторная навеска слушателей для УЖЕ запечённой сцены: code-added listeners
+    /// не переживают сохранение сцены, а Awake/Start неактивных панелей не запускаются.
+    /// Вызывается из GameBootstrap.Awake; идемпотентна (Wire() защищён флагом).
+    /// </summary>
+    public static void RewireRuntime() {
+        var canvas = Object.FindFirstObjectByType<Canvas>();
+        if (canvas == null) return;
+        var root = canvas.transform;
+        var geneT = root.Find("gene_screen");
+        if (geneT != null) { var c = geneT.GetComponent<GeneScreenUI>(); if (c != null) c.Wire(); }
+        var deathT = root.Find("death_screen");
+        if (deathT != null) { var c = deathT.GetComponent<DeathScreenUI>(); if (c != null) c.Wire(); }
+        var demoT = root.Find("demo_end_panel");
+        if (demoT != null) { var c = demoT.GetComponent<DemoEndUI>(); if (c != null) c.Wire(); }
+        var helpT = root.Find("help_btn");
+        if (helpT != null) { var c = helpT.GetComponent<HelpAssistButton>(); if (c != null) c.Wire(); }
+        var pauseT = root.Find("pause_panel");
+        if (pauseT != null) { var c = pauseT.GetComponent<PauseMenuUI>(); if (c != null) c.Wire(); }
     }
 
     private static RectTransform MakePanel(Transform parent, string name, Vector2 pos,
@@ -188,6 +208,77 @@ public sealed class HudBuilder : MonoBehaviour {
         txt.rectTransform.sizeDelta = size;
         return go;
     }
+
+    /// <summary>
+    /// Достройка новых HUD-частей поверх уже запечённой Boot-сцены (v0.3.0):
+    /// кнопка «ПОМОЧЬ», финальный экран демо, громкость в паузе. Идемпотентно —
+    /// ищет существующие узлы по имени, ничего не дублирует.
+    /// </summary>
+    public static void EnsureRuntimeParts() {
+        var canvas = Object.FindFirstObjectByType<Canvas>();
+        if (canvas == null) return;
+        var root = canvas.transform;
+
+        // --- кнопка помощи союзнику (T16) ---
+        if (root.Find("help_btn") == null) {
+            var helpGo = MakeButton(root, "help_btn", "ПОМОЧЬ союзнику",
+                new Vector2(-70, -150), new Vector2(260, 76), GameBootstrap.CFood, new Vector2(1, 0));
+            helpGo.AddComponent<HelpAssistButton>();
+            helpGo.GetComponent<HelpAssistButton>().Wire();
+            helpGo.SetActive(false);
+        }
+
+        // --- финальный экран демо ---
+        if (root.Find("demo_end_panel") == null) {
+            var go = new GameObject("demo_end_panel");
+            go.transform.SetParent(root, false);
+            var rt = go.AddComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(1100, 720);
+            var img = go.AddComponent<Image>();
+            img.color = new Color(0.04f, 0.09f, 0.14f, 0.96f);
+            var end = go.AddComponent<DemoEndUI>();
+            end.Panel = go;
+            var body = UiUtil.AddText(go.transform, "", 28, TextAnchor.UpperCenter);
+            body.rectTransform.sizeDelta = new Vector2(1020, 500);
+            body.rectTransform.anchoredPosition = new Vector2(0, 60);
+            end.BodyText = body;
+            var cont = MakeButton(go.transform, "continue_btn", "ПРОДОЛЖИТЬ",
+                new Vector2(0, -270), new Vector2(480, 90), GameBootstrap.CFood);
+            end.ContinueButton = cont.GetComponent<Button>();
+            end.Wire();
+            go.SetActive(false);
+        }
+
+        // --- громкость в пауза-панели (DEMO_SCOPE п.10) ---
+        var pausePanel = root.Find("pause_panel");
+        if (pausePanel != null && pausePanel.Find("volume_row") == null) {
+            var row = new GameObject("volume_row");
+            row.transform.SetParent(pausePanel, false);
+            var rt = row.AddComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(0, -190);
+            rt.sizeDelta = new Vector2(620, 60);
+            var minus = MakeButton(row.transform, "vol_down", "Звук −",
+                new Vector2(-210, 0), new Vector2(190, 58), GameBootstrap.COutline);
+            var plus = MakeButton(row.transform, "vol_up", "Звук +",
+                new Vector2(210, 0), new Vector2(190, 58), GameBootstrap.COutline);
+            var label = UiUtil.AddText(row.transform, VolumeLabel(), 26, TextAnchor.MiddleCenter);
+            label.rectTransform.anchoredPosition = new Vector2(0, 0);
+            label.rectTransform.sizeDelta = new Vector2(200, 40);
+            Text lbl = label;
+            minus.GetComponent<Button>().onClick.AddListener(() => {
+                ProceduralSfx.ChangeVolume(-0.1f);
+                lbl.text = VolumeLabel();
+            });
+            plus.GetComponent<Button>().onClick.AddListener(() => {
+                ProceduralSfx.ChangeVolume(0.1f);
+                lbl.text = VolumeLabel();
+            });
+        }
+    }
+
+    private static string VolumeLabel() =>
+        "Звук " + Mathf.RoundToInt(Gameplay.ProceduralSfx.CurrentVolume() * 100f) + "%";
 }
 /// <summary>Заглушка-заметка: удерживает ссылку на след для инспектора (без логики).</summary>
 public sealed class TrailDebugNote : MonoBehaviour {

@@ -23,6 +23,8 @@ public sealed class GameBootstrap : MonoBehaviour {
     public GameSim Sim { get; private set; }
 
     private SimEntityView2D _playerView;
+    private string _lastFormId;
+    private float _formScale = 1f;
     private readonly System.Collections.Generic.List<SimEntityView2D> _aiViews =
         new System.Collections.Generic.List<SimEntityView2D>();
     private readonly System.Collections.Generic.List<SimEntityView2D> _beetleViews =
@@ -54,11 +56,18 @@ public sealed class GameBootstrap : MonoBehaviour {
         var hudCanvas = FindFirstObjectByType<Canvas>();
         if (hudCanvas != null && hudCanvas.GetComponent<UnityEngine.UI.GraphicRaycaster>() == null)
             hudCanvas.gameObject.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+        // достройка новых HUD-частей v0.3.0 (кнопка помощи, финал, громкость) — идемпотентно
+        HudBuilder.EnsureRuntimeParts();
         BuildSim();
         BuildArena();
         BuildEntities();
         BuildSystems();
+        // повторная навеска слушателей: в запечённой сцене code-added listeners
+        // не переживают пересохранение, Awake/Start неактивных панелей не запускаются
+        HudBuilder.RewireRuntime();
         HudPresenter.Instance?.Bind(this);
+        // стартовая подсказка (обучение, T18): раньше статичный текст скрывался в первый кадр
+        HudPresenter.Instance?.ShowHint("Тяните ПРОТИВ движения и отпустите — будет рывок", 8f);
     }
 
     private void BuildSim() {
@@ -116,6 +125,8 @@ public sealed class GameBootstrap : MonoBehaviour {
                 SimEntityKind.Ai, a.Id, (float)a.Radius, prof.Ally ? CFood : CDanger);
             v.Body.sortingOrder = 6;
             v.gameObject.AddComponent<ContactDamageRelay2D>();
+            // релиз-критерий: другая душа явно обозначена как ИИ-персонаж
+            AddAiLabel(v.transform, (float)a.Radius, prof.Ally ? "Союзник (ИИ)" : "Соперник (ИИ)");
             _aiViews.Add(v);
         }
         // жуки
@@ -141,6 +152,22 @@ public sealed class GameBootstrap : MonoBehaviour {
         trailGo.AddComponent<TrailEmitter2D>();
     }
 
+    private static void AddAiLabel(Transform parent, float radius, string text) {
+        var go = new GameObject("ai_label");
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = new Vector3(0, radius + 0.55f, 0);
+        var tm = go.AddComponent<TextMesh>();
+        tm.text = text;
+        tm.fontSize = 48;
+        tm.characterSize = 0.08f;
+        tm.anchor = TextAnchor.LowerCenter;
+        tm.color = new Color(0.75f, 0.85f, 0.95f, 0.9f);
+        var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        tm.font = font;
+        go.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+        go.GetComponent<MeshRenderer>().sortingOrder = 20;
+    }
+
     private void BuildSystems() {
         var runnerGo = new GameObject("sim_runner");
         runnerGo.transform.SetParent(transform, false);
@@ -164,6 +191,17 @@ public sealed class GameBootstrap : MonoBehaviour {
             if (cam.GetComponent<FollowCamera>() == null) cam.gameObject.AddComponent<FollowCamera>();
             cam.GetComponent<FollowCamera>().Target = _playerView.transform;
         }
+        // v0.3.0: звук, хаб событий, химическое чутьё
+        var sfxGo = new GameObject("procedural_sfx");
+        sfxGo.transform.SetParent(transform, false);
+        sfxGo.AddComponent<ProceduralSfx>();
+        var hubGo = new GameObject("sim_event_hub");
+        hubGo.transform.SetParent(transform, false);
+        hubGo.AddComponent<SimEventHub>();
+        var chemGo = new GameObject("chem_sense_indicator");
+        chemGo.transform.SetParent(_playerView.transform, false);
+        chemGo.AddComponent<LineRenderer>();
+        chemGo.AddComponent<ChemSenseIndicator>();
     }
 
     void Update() {
@@ -193,13 +231,29 @@ public sealed class GameBootstrap : MonoBehaviour {
             if (p.Consumed) { if (v.gameObject.activeSelf) v.gameObject.SetActive(false); continue; }
             v.transform.position = new Vector3((float)p.Pos.X, (float)p.Pos.Y, 0);
         }
-        // масштаб игрока от массы (структура+вода+запас+груз)
+        // масштаб игрока от массы (структура+вода+запас+груз) и формы (T12)
         if (_playerView != null) {
             double m = Sim.Player.Body.Total;
-            float s = Mathf.Clamp((float)(0.7 + m * 0.05), 0.7f, 2.2f);
+            float s = Mathf.Clamp((float)(0.7 + m * 0.05), 0.7f, 2.2f) * _formScale;
             var root = _playerView.Body.transform.parent;
             root.localScale = new Vector3(s, s, 1f);
         }
+        // визуальная смена формы (T12): цвет/масштаб — читаемость без ассетов
+        if (_lastFormId != Sim.CurrentFormId) {
+            _lastFormId = Sim.CurrentFormId;
+            ApplyFormVisual(Sim.CurrentFormId);
+        }
+    }
+
+    private void ApplyFormVisual(string formId) {
+        if (_playerView == null) return;
+        Color c;
+        switch (formId) {
+            case "form_chitin_slime": c = new Color(0.62f, 0.70f, 0.68f); _formScale = 1.06f; break;
+            case "form_beetle":       c = new Color(0.48f, 0.32f, 0.25f); _formScale = 1.25f; break;
+            default:                  c = CSlime;                         _formScale = 1f;    break;
+        }
+        _playerView.Body.color = c;
     }
 
     // ---------- Реинкарнация (T17) ----------
@@ -213,6 +267,7 @@ public sealed class GameBootstrap : MonoBehaviour {
         Sim.Player.Vel = new Vec2(0, 0);
         Sim.CurrentFormId = "form_slime";
         Sim.Player.FormId = "form_slime";
+        Sim.ResetLifeStats();
         Sim.ReapplyNodeEffects();
         Sim.RecordEvent("reincarnated", "life #" + Sim.Soul.LivesLived);
         if (HudPresenter.Instance != null) HudPresenter.Instance.HideDeath();
