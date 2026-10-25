@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using PM.Domain.Genetics;
 using PM.Systems.Bootstrap;
+using PM.Systems.Gameplay;
 
 namespace PM.Systems.UI {
 /// <summary>Экран генетической сети (T11): узлы с требованиями и стоимостью; разблокировка кнопкой.</summary>
@@ -118,16 +119,20 @@ public sealed class GeneScreenUI : MonoBehaviour {
             var rt = go.AddComponent<RectTransform>();
             rt.sizeDelta = new Vector2(860, 68); // 8 узлов × 68 = 544 — входит в список без наложений
             var img = go.AddComponent<Image>();
+            img.sprite = SpriteUtil.UiRoundedSprite;
+            img.type = Image.Type.Sliced;
             string reason = GeneNetworkService.CanUnlock(node, sim.Unlocked, sim.Genome, sim.Stock);
             Color c;
             if (sim.Unlocked.Has(node.Id)) c = GameBootstrap.CFood;
             else if (reason == "prerequisite_missing") c = new Color(0.25f, 0.28f, 0.32f);
             else if (reason == "gene_missing") c = GameBootstrap.CSoul * 0.7f;
             else c = GameBootstrap.CSlime * 0.8f;
+            c.a = sim.Unlocked.Has(node.Id) ? 0.5f : 0.35f;
             img.color = c;
             var txt = UiUtil.AddText(go.transform, node.Title + "  |  " + DescribeCost(node.Cost),
                 28, TextAnchor.MiddleLeft);
             txt.rectTransform.sizeDelta = new Vector2(840, 62);
+            txt.rectTransform.anchoredPosition = new Vector2(10, 0);
             var btn = go.AddComponent<Button>();
             string id = node.Id;
             btn.onClick.AddListener(() => {
@@ -154,14 +159,15 @@ public sealed class GeneScreenUI : MonoBehaviour {
 }
 /// <summary>Помощник создания uGUI-элементов кодом.</summary>
 public static class UiUtil {
-    public static Text AddText(Transform parent, string content, int size, TextAnchor anchor) {
+    public static Text AddText(Transform parent, string content, int size, TextAnchor anchor,
+                               Color? color = null) {
         var go = new GameObject("text");
         go.transform.SetParent(parent, false);
         var t = go.AddComponent<Text>();
         t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         t.fontSize = size;
         t.alignment = anchor;
-        t.color = new Color(0.92f, 0.96f, 1f);
+        t.color = color ?? new Color(0.92f, 0.96f, 1f);
         t.text = content;
         t.rectTransform.sizeDelta = new Vector2(400, 40);
         return t;

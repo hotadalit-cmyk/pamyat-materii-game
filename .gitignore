@@ -33,3 +33,6 @@ Thumbs.db
 build/
 # Unity 6 build pipeline cache
 .utmp/
+# .NET harness build output
+tools/dotnet-tests/bin/
+tools/dotnet-tests/obj/

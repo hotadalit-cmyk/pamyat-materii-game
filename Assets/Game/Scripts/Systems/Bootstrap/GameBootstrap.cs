@@ -40,6 +40,8 @@ public sealed class GameBootstrap : MonoBehaviour {
     public static readonly Color CFood = ColorFromHex(0x5FCE95);
     public static readonly Color CSoul = ColorFromHex(0xAE86E7);
     public static readonly Color CDanger = ColorFromHex(0xE67C5F);
+    public static readonly Color CGlow = ColorFromHex(0x14314A);  // фоновое свечение
+    public static readonly Color CCore = ColorFromHex(0x1C7FA8);  // ядро слайма
 
     public static Color ColorFromHex(int hex) {
         float r = ((hex >> 16) & 0xFF) / 255f;
@@ -86,17 +88,23 @@ public sealed class GameBootstrap : MonoBehaviour {
     }
 
     private void BuildArena() {
-        // визуальный фон арены
-        var floor = new GameObject("arena_floor");
-        floor.transform.SetParent(transform, false);
-        var sr = SpriteUtil.AddCircle(floor.transform, 1f, CStone);
-        sr.transform.localScale = new Vector3(19.5f, 11.5f, 1f);
-        sr.sortingOrder = 0;
-        // физические стены (каркасный бокс по краям арены)
+        // фоновое свечение за ареной (глубина, читается и на 16:9, и на 20:9)
+        var glow = SpriteUtil.AddSprite(transform, SpriteUtil.GlowSprite, 30f, 20f, CGlow, -1);
+        glow.gameObject.name = "bg_glow";
+        glow.transform.localPosition = Vector3.zero;
+        // пол арены: мягкий скруглённый прямоугольник чуть темнее прежнего круга
+        var floor = SpriteUtil.AddSprite(transform, SpriteUtil.SoftRectSprite, 20.1f, 12.1f, CStone, 0);
+        floor.gameObject.name = "arena_floor";
+        floor.transform.localPosition = Vector3.zero;
+        // физические стены (каркасный бокс по краям арены) + световые кромки
         MakeWall("wall_top", new Vector3(0, (float)Sim.Cfg.HalfHeight + 0.25f, 0), new Vector2(19f, 0.5f));
         MakeWall("wall_bottom", new Vector3(0, -(float)Sim.Cfg.HalfHeight - 0.25f, 0), new Vector2(19f, 0.5f));
         MakeWall("wall_left", new Vector3(-(float)Sim.Cfg.HalfWidth - 0.25f, 0, 0), new Vector2(0.5f, 12f));
         MakeWall("wall_right", new Vector3((float)Sim.Cfg.HalfWidth + 0.25f, 0, 0), new Vector2(0.5f, 12f));
+        MakeEdge("edge_top", new Vector3(0, (float)Sim.Cfg.HalfHeight - 0.14f, 0), new Vector2(17.9f, 0.10f));
+        MakeEdge("edge_bottom", new Vector3(0, -(float)Sim.Cfg.HalfHeight + 0.14f, 0), new Vector2(17.9f, 0.10f));
+        MakeEdge("edge_left", new Vector3(-(float)Sim.Cfg.HalfWidth + 0.14f, 0, 0), new Vector2(0.10f, 9.7f));
+        MakeEdge("edge_right", new Vector3((float)Sim.Cfg.HalfWidth - 0.14f, 0, 0), new Vector2(0.10f, 9.7f));
     }
 
     private void MakeWall(string name, Vector3 pos, Vector2 size) {
@@ -105,9 +113,17 @@ public sealed class GameBootstrap : MonoBehaviour {
         go.transform.position = pos;
         var col = go.AddComponent<BoxCollider2D>();
         col.size = size;
-        var sr = SpriteUtil.AddCircle(go.transform, 1f, CStone);
-        sr.transform.localScale = new Vector3(size.x, size.y, 1f);
-        sr.sortingOrder = 1;
+        var sr = SpriteUtil.AddSprite(go.transform, SpriteUtil.SoftRectSprite, size.x, size.y, CStone * 0.72f, 1);
+        sr.transform.localPosition = Vector3.zero;
+    }
+
+    private void MakeEdge(string name, Vector3 pos, Vector2 size) {
+        var go = new GameObject(name);
+        go.transform.SetParent(transform, false);
+        go.transform.position = pos;
+        var c = COutline; c.a = 0.16f;
+        var sr = SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, size.x, size.y, c, 1);
+        sr.transform.localPosition = Vector3.zero;
     }
 
     private void BuildEntities() {
@@ -115,7 +131,11 @@ public sealed class GameBootstrap : MonoBehaviour {
         _playerView = SimEntityView2D.Create(transform, "player_slime", SimEntityKind.Player,
             Sim.Player.Id, (float)Sim.Player.Radius, CSlime);
         _playerView.Body.sortingOrder = 8;
-        _playerView.gameObject.AddComponent<SlimeVisual>().BodyRoot = _playerView.Body.transform;
+        VisualFactory.DecorateSlime(_playerView);
+        var slime = _playerView.gameObject.AddComponent<SlimeVisual>();
+        slime.BodyRoot = _playerView.Body.transform;
+        slime.Membrane = _playerView.Membrane;
+        slime.Core = _playerView.Core;
         _playerView.gameObject.AddComponent<ContactDamageRelay2D>();
         // ИИ-души
         for (int i = 0; i < Sim.AiActors.Count; i++) {
@@ -124,6 +144,7 @@ public sealed class GameBootstrap : MonoBehaviour {
             var v = SimEntityView2D.Create(transform, prof.Ally ? "ai_ally" : "ai_rival",
                 SimEntityKind.Ai, a.Id, (float)a.Radius, prof.Ally ? CFood : CDanger);
             v.Body.sortingOrder = 6;
+            VisualFactory.DecorateAi(v);
             v.gameObject.AddComponent<ContactDamageRelay2D>();
             // релиз-критерий: другая душа явно обозначена как ИИ-персонаж
             AddAiLabel(v.transform, (float)a.Radius, prof.Ally ? "Союзник (ИИ)" : "Соперник (ИИ)");
@@ -135,6 +156,7 @@ public sealed class GameBootstrap : MonoBehaviour {
             var v = SimEntityView2D.Create(transform, "beetle_" + b.Id, SimEntityKind.Beetle,
                 b.Id, (float)b.Radius, CDanger);
             v.Body.sortingOrder = 6;
+            VisualFactory.DecorateBeetle(v);
             v.gameObject.AddComponent<ContactDamageRelay2D>();
             _beetleViews.Add(v);
         }
@@ -144,12 +166,17 @@ public sealed class GameBootstrap : MonoBehaviour {
             var v = SimEntityView2D.Create(transform, "pellet_" + p.Id, SimEntityKind.Beetle,
                 p.Id, 0.22f, CFood);
             v.Body.sortingOrder = 4;
+            VisualFactory.DecoratePellet(v);
             _pelletViews.Add(v);
         }
         // след
         var trailGo = new GameObject("trail_emitter");
         trailGo.transform.SetParent(transform, false);
         trailGo.AddComponent<TrailEmitter2D>();
+        // пул брызг
+        var splashGo = new GameObject("splash_burst");
+        splashGo.transform.SetParent(transform, false);
+        splashGo.AddComponent<SplashBurst2D>();
     }
 
     private static void AddAiLabel(Transform parent, float radius, string text) {

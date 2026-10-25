@@ -4,15 +4,21 @@ using PM.Domain.Core;
 using PM.Domain.Trail;
 using PM.Persistence;
 using PM.Systems.Bootstrap;
+using PM.Systems.Gameplay;
 
 namespace PM.Systems.UI {
 /// <summary>
-/// Построитель HUD-канвы кодом (создаётся в Boot-сцене редакторским меню PM/Setup/01,
-/// но также умеет достроить себя при отсутствии — устойчивость к ручным правкам).
+/// Мобильный HUD (VISUAL_UI): строится кодом, без ассетов.
+/// Сетка под большой палец: safe-area уже применён на канве (SafeAreaFitter),
+/// статусы — верхний левый угол, кнопки — верхний правый (тач-зона ≥ 100px при 1920×1080),
+/// удержание — над нижней кромкой, подсказка — тянется на всю ширину.
 /// CanvasScaler 1920×1080 по ширине + SafeAreaFitter (T01).
 /// </summary>
 [RequireComponent(typeof(Canvas))]
 public sealed class HudBuilder : MonoBehaviour {
+    private static readonly Color PanelColor = new Color(0.016f, 0.05f, 0.09f, 0.62f);
+    private static readonly Color ScreenColor = new Color(0.02f, 0.06f, 0.11f, 0.96f);
+
     public static void BuildIfMissing(Transform sceneRoot) {
         if (Object.FindFirstObjectByType<HudPresenter>() != null) return;
         var canvasGo = new GameObject("hud_canvas");
@@ -25,32 +31,32 @@ public sealed class HudBuilder : MonoBehaviour {
         scaler.matchWidthOrHeight = 1f; // по ширине (landscape)
         canvasGo.AddComponent<SafeAreaFitter>();
 
-        // --- верх слева: статусы ---
-        var top = MakePanel(canvasGo.transform, "top_left", new Vector2(24, -24),
-            new Vector2(560, 220), new Color(0, 0, 0, 0.25f), new Vector2(0, 1));
-        var integrity = UiUtil.AddText(top, "Целостность: 100%", 30, TextAnchor.UpperLeft);
-        integrity.rectTransform.anchoredPosition = new Vector2(0, -32);
-        var water = UiUtil.AddText(top, "Вода: 5.00 кг", 30, TextAnchor.UpperLeft);
-        water.rectTransform.anchoredPosition = new Vector2(0, -74);
-        var energy = UiUtil.AddText(top, "Духовная энергия: 10/10", 30, TextAnchor.UpperLeft);
-        energy.rectTransform.anchoredPosition = new Vector2(0, -116);
-        var digestion = UiUtil.AddText(top, "Пищеварение...", 26, TextAnchor.UpperLeft);
-        digestion.rectTransform.anchoredPosition = new Vector2(0, -158);
+        // --- верх слева: статусы (скруглённая панель + цветные маркеры) ---
+        var top = MakePanelRounded(canvasGo.transform, "top_left", new Vector2(28, -28),
+            new Vector2(620, 244), PanelColor, new Vector2(0, 1));
+        var integrity = AddRow(top, "Целостность: 100%", 30, GameBootstrap.CFood, -34);
+        var water = AddRow(top, "Вода: 5.00 кг", 30, GameBootstrap.CSlime, -90);
+        var energy = AddRow(top, "Духовная энергия: 10/10", 30, GameBootstrap.CSoul, -146);
+        var digestion = AddRow(top, "Пищеварение...", 26, GameBootstrap.CFood, -196);
         digestion.gameObject.SetActive(false);
 
-        // --- верх справа: пауза + гены ---
-        var pauseBtn = MakeButton(canvasGo.transform, "pause_btn", "II",
-            new Vector2(-70, -40), new Vector2(90, 70), GameBootstrap.COutline, new Vector2(1, 1));
-        var genesBtn = MakeButton(canvasGo.transform, "genes_btn", "ГЕНЫ",
-            new Vector2(-200, -40), new Vector2(180, 70), GameBootstrap.CSoul, new Vector2(1, 1));
+        // --- верх справа: пауза + гены (крупные тач-зоны) ---
+        var pauseBtn = MakeButtonRounded(canvasGo.transform, "pause_btn", "II",
+            new Vector2(-28, -28), new Vector2(116, 116), GameBootstrap.COutline,
+            new Vector2(1, 1), 36, Color.white, 0.28f);
+        var genesBtn = MakeButtonRounded(canvasGo.transform, "genes_btn", "ГЕНЫ",
+            new Vector2(-162, -28), new Vector2(260, 116), GameBootstrap.CSoul,
+            new Vector2(1, 1), 30, Color.white, 0.88f);
 
-        // --- низ: удержание + подсказка ---
-        var captureBar = MakePanel(canvasGo.transform, "capture_bar", new Vector2(0, 70),
-            new Vector2(760, 64), new Color(0, 0, 0, 0.35f), new Vector2(0.5f, 0));
+        // --- низ по центру: удержание (над нижней кромкой, вне зоны большого пальца) ---
+        var captureBar = MakePanelRounded(canvasGo.transform, "capture_bar", new Vector2(0, 232),
+            new Vector2(920, 80), PanelColor, new Vector2(0.5f, 0));
         captureBar.gameObject.SetActive(false);
         var captureText = UiUtil.AddText(captureBar, "Удержание...", 26, TextAnchor.MiddleLeft);
-        captureText.rectTransform.anchoredPosition = new Vector2(-360, 0);
-        captureText.alignment = TextAnchor.MiddleLeft;
+        captureText.rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+        captureText.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+        captureText.rectTransform.anchoredPosition = new Vector2(-140, 0);
+        captureText.rectTransform.sizeDelta = new Vector2(620, 44);
         var captureFillGo = new GameObject("capture_fill");
         captureFillGo.transform.SetParent(captureBar, false);
         var fillImg = captureFillGo.AddComponent<Image>();
@@ -60,15 +66,19 @@ public sealed class HudBuilder : MonoBehaviour {
         var fillRt = fillImg.rectTransform;
         fillRt.anchorMin = new Vector2(0.5f, 0.5f);
         fillRt.anchorMax = new Vector2(0.5f, 0.5f);
-        fillRt.anchoredPosition = new Vector2(120, 0);
-        fillRt.sizeDelta = new Vector2(440, 30);
+        fillRt.anchoredPosition = new Vector2(285, 0);
+        fillRt.sizeDelta = new Vector2(300, 28);
 
+        // --- подсказка: тянется на всю ширину, не обрезается ---
         var hint = UiUtil.AddText(canvasGo.transform,
-            "Оттяните палец ПРОТИВ направления движения и отпустите", 28, TextAnchor.LowerCenter);
+            "Оттяните палец ПРОТИВ направления движения и отпустите", 27, TextAnchor.MiddleCenter,
+            new Color(0.92f, 0.96f, 1f, 0.88f));
         var hintRt = hint.rectTransform;
-        hintRt.anchorMin = new Vector2(0.5f, 0);
-        hintRt.anchorMax = new Vector2(0.5f, 0);
-        hintRt.anchoredPosition = new Vector2(0, 140);
+        hintRt.anchorMin = new Vector2(0f, 0f);
+        hintRt.anchorMax = new Vector2(1f, 0f);
+        hintRt.pivot = new Vector2(0.5f, 0f);
+        hintRt.anchoredPosition = new Vector2(0, 96);
+        hintRt.sizeDelta = new Vector2(-96, 48);
 
         // --- presenter ---
         var presenterGo = new GameObject("hud_presenter");
@@ -84,69 +94,65 @@ public sealed class HudBuilder : MonoBehaviour {
         presenterGo.AddComponent<TrailDebugNote>();
 
         // --- экран смерти ---
-        var deathGo = new GameObject("death_screen");
-        deathGo.transform.SetParent(canvasGo.transform, false);
-        var deathRt = deathGo.AddComponent<RectTransform>();
-        deathRt.sizeDelta = new Vector2(1100, 640);
-        var deathImg = deathGo.AddComponent<Image>();
-        deathImg.color = new Color(0.04f, 0.09f, 0.14f, 0.95f);
+        var deathGo = MakePanelRounded(canvasGo.transform, "death_screen", Vector2.zero,
+            new Vector2(1180, 680), ScreenColor, new Vector2(0.5f, 0.5f)).gameObject;
         var death = deathGo.AddComponent<DeathScreenUI>();
-        var summary = UiUtil.AddText(deathGo.transform, "Отпечаток жизни", 34, TextAnchor.UpperCenter);
-        summary.rectTransform.sizeDelta = new Vector2(1040, 380);
-        summary.rectTransform.anchoredPosition = new Vector2(0, 80);
+        var summary = UiUtil.AddText(deathGo.transform, "Отпечаток жизни", 32, TextAnchor.UpperCenter);
+        summary.rectTransform.sizeDelta = new Vector2(1080, 420);
+        summary.rectTransform.anchoredPosition = new Vector2(0, 96);
         death.SummaryText = summary;
         death.Panel = deathGo;
-        var reGo = MakeButton(deathGo.transform, "reincarnate_btn", "РЕИНКАРНИРОВАТЬСЯ",
-            new Vector2(0, -220), new Vector2(560, 90), GameBootstrap.CFood);
+        var reGo = MakeButtonRounded(deathGo.transform, "reincarnate_btn", "РЕИНКАРНИРОВАТЬСЯ",
+            new Vector2(0, -256), new Vector2(640, 104), GameBootstrap.CFood,
+            new Vector2(0.5f, 0.5f), 32, HudTextColor(), 0.92f);
         death.ReincarnateButton = reGo.GetComponent<Button>();
         deathGo.SetActive(false);
 
         // --- пауза-панель ---
-        var panelGo = new GameObject("pause_panel");
-        panelGo.transform.SetParent(canvasGo.transform, false);
-        var panelRt = panelGo.AddComponent<RectTransform>();
-        panelRt.sizeDelta = new Vector2(900, 700);
-        var panelImg = panelGo.AddComponent<Image>();
-        panelImg.color = new Color(0.04f, 0.09f, 0.14f, 0.95f);
+        var panelGo = MakePanelRounded(canvasGo.transform, "pause_panel", Vector2.zero,
+            new Vector2(960, 760), ScreenColor, new Vector2(0.5f, 0.5f)).gameObject;
         var pause = panelGo.AddComponent<PauseMenuUI>();
         pause.Panel = panelGo;
         pause.PauseButton = pauseBtn.GetComponent<Button>();
-        var resume = MakeButton(panelGo.transform, "resume_btn", "ПРОДОЛЖИТЬ",
-            new Vector2(0, 240), new Vector2(600, 84), GameBootstrap.CFood);
+        var resume = MakeButtonRounded(panelGo.transform, "resume_btn", "ПРОДОЛЖИТЬ",
+            new Vector2(0, 262), new Vector2(660, 100), GameBootstrap.CFood,
+            new Vector2(0.5f, 0.5f), 30, HudTextColor(), 0.92f);
         pause.ResumeButton = resume.GetComponent<Button>();
-        pause.SaveSlot0 = MakeButton(panelGo.transform, "save0", "Сохранить слот 1",
-            new Vector2(-190, 80), new Vector2(380, 74), GameBootstrap.CSlime).GetComponent<Button>();
-        pause.SaveSlot1 = MakeButton(panelGo.transform, "save1", "Сохранить слот 2",
-            new Vector2(190, 80), new Vector2(380, 74), GameBootstrap.CSlime).GetComponent<Button>();
-        pause.LoadSlot0 = MakeButton(panelGo.transform, "load0", "Загрузить слот 1",
-            new Vector2(-190, -10), new Vector2(380, 74), GameBootstrap.CSlime).GetComponent<Button>();
-        pause.LoadSlot1 = MakeButton(panelGo.transform, "load1", "Загрузить слот 2",
-            new Vector2(190, -10), new Vector2(380, 74), GameBootstrap.CSlime).GetComponent<Button>();
-        var status = UiUtil.AddText(panelGo.transform, "", 24, TextAnchor.MiddleCenter);
-        status.rectTransform.anchoredPosition = new Vector2(0, -120);
+        pause.SaveSlot0 = MakeButtonRounded(panelGo.transform, "save0", "Сохранить слот 1",
+            new Vector2(-240, 100), new Vector2(436, 88), GameBootstrap.CSlime,
+            new Vector2(0.5f, 0.5f), 26, HudTextColor(), 0.8f).GetComponent<Button>();
+        pause.SaveSlot1 = MakeButtonRounded(panelGo.transform, "save1", "Сохранить слот 2",
+            new Vector2(240, 100), new Vector2(436, 88), GameBootstrap.CSlime,
+            new Vector2(0.5f, 0.5f), 26, HudTextColor(), 0.8f).GetComponent<Button>();
+        pause.LoadSlot0 = MakeButtonRounded(panelGo.transform, "load0", "Загрузить слот 1",
+            new Vector2(-240, -8), new Vector2(436, 88), GameBootstrap.CSlime,
+            new Vector2(0.5f, 0.5f), 26, HudTextColor(), 0.8f).GetComponent<Button>();
+        pause.LoadSlot1 = MakeButtonRounded(panelGo.transform, "load1", "Загрузить слот 2",
+            new Vector2(240, -8), new Vector2(436, 88), GameBootstrap.CSlime,
+            new Vector2(0.5f, 0.5f), 26, HudTextColor(), 0.8f).GetComponent<Button>();
+        var status = UiUtil.AddText(panelGo.transform, "", 26, TextAnchor.MiddleCenter);
+        status.rectTransform.anchoredPosition = new Vector2(0, -156);
+        status.rectTransform.sizeDelta = new Vector2(860, 44);
         pause.StatusText = status;
         // слушатели вешает RewireRuntime() — code-added listeners не переживают запекание сцены
-        panelGo.SetActive(false);
+        panelGo.SetActive(false); // Awake не успел скрыть (Panel присваивается после AddComponent)
 
         // --- экран генов ---
-        var geneGo = new GameObject("gene_screen");
-        geneGo.transform.SetParent(canvasGo.transform, false);
-        var geneRt = geneGo.AddComponent<RectTransform>();
-        geneRt.sizeDelta = new Vector2(1000, 800);
-        var geneImg = geneGo.AddComponent<Image>();
-        geneImg.color = new Color(0.04f, 0.09f, 0.14f, 0.96f);
+        var geneGo = MakePanelRounded(canvasGo.transform, "gene_screen", Vector2.zero,
+            new Vector2(1080, 840), ScreenColor, new Vector2(0.5f, 0.5f)).gameObject;
         var gene = geneGo.AddComponent<GeneScreenUI>();
         gene.Panel = geneGo;
         gene.OpenButton = genesBtn.GetComponent<Button>();// слушатель — в Wire() (RewireRuntime)
         var listGo = new GameObject("node_list");
         listGo.transform.SetParent(geneGo.transform, false);
         var listRt = listGo.AddComponent<RectTransform>();
-        listRt.sizeDelta = new Vector2(900, 560);
-        listRt.anchoredPosition = new Vector2(0, 40);
+        listRt.sizeDelta = new Vector2(960, 600);
+        listRt.anchoredPosition = new Vector2(0, 66);
         listGo.AddComponent<VerticalLayoutGroup>();
         gene.ListRoot = (RectTransform)listGo.transform;
         var geneStatus = UiUtil.AddText(geneGo.transform, "Генетическая сеть", 26, TextAnchor.MiddleCenter);
-        geneStatus.rectTransform.anchoredPosition = new Vector2(0, -330);
+        geneStatus.rectTransform.anchoredPosition = new Vector2(0, -356);
+        geneStatus.rectTransform.sizeDelta = new Vector2(960, 44);
         gene.StatusText = geneStatus;
         geneGo.SetActive(false);
 
@@ -176,37 +182,79 @@ public sealed class HudBuilder : MonoBehaviour {
         if (pauseT != null) { var c = pauseT.GetComponent<PauseMenuUI>(); if (c != null) c.Wire(); }
     }
 
-    private static RectTransform MakePanel(Transform parent, string name, Vector2 pos,
-                                          Vector2 size, Color color,
-                                          Vector2? anchor = null) {
+    private static Color HudTextColor() {
+        return new Color(0.92f, 0.96f, 1f);
+    }
+
+    /// <summary>Строка статуса: цветной маркер + текст. Возвращает Text для биндинга.</summary>
+    private static Text AddRow(Transform parent, string content, int size, Color dotColor, float y) {
+        var dotGo = new GameObject("dot");
+        dotGo.transform.SetParent(parent, false);
+        var dotRt = dotGo.AddComponent<RectTransform>();
+        dotRt.anchorMin = new Vector2(0, 1);
+        dotRt.anchorMax = new Vector2(0, 1);
+        dotRt.pivot = new Vector2(0, 1);
+        dotRt.anchoredPosition = new Vector2(34, y - 3);
+        dotRt.sizeDelta = new Vector2(26, 26);
+        var dotImg = dotGo.AddComponent<Image>();
+        dotImg.sprite = SpriteUtil.UiCircleSprite;
+        dotImg.color = dotColor;
+        var txt = UiUtil.AddText(parent, content, size, TextAnchor.MiddleLeft);
+        txt.rectTransform.anchorMin = new Vector2(0, 1);
+        txt.rectTransform.anchorMax = new Vector2(0, 1);
+        txt.rectTransform.pivot = new Vector2(0, 1);
+        txt.rectTransform.anchoredPosition = new Vector2(76, y);
+        txt.rectTransform.sizeDelta = new Vector2(510, 36);
+        return txt;
+    }
+
+    private static RectTransform MakePanelRounded(Transform parent, string name, Vector2 pos,
+                                                  Vector2 size, Color color, Vector2 anchor) {
         var go = new GameObject(name);
         go.transform.SetParent(parent, false);
         var rt = go.AddComponent<RectTransform>();
-        var a = anchor ?? new Vector2(0.5f, 0.5f);
-        rt.anchorMin = a; rt.anchorMax = a; rt.pivot = a;
+        rt.anchorMin = anchor;
+        rt.anchorMax = anchor;
+        rt.pivot = anchor;
         rt.sizeDelta = size;
         rt.anchoredPosition = pos;
         var img = go.AddComponent<Image>();
+        img.sprite = SpriteUtil.UiRoundedSprite;
+        img.type = Image.Type.Sliced;
         img.color = color;
         return rt;
     }
 
-    private static GameObject MakeButton(Transform parent, string name, string label,
-                                         Vector2 pos, Vector2 size, Color color,
-                                         Vector2? anchor = null) {
+    private static GameObject MakeButtonRounded(Transform parent, string name, string label,
+                                                Vector2 pos, Vector2 size, Color color,
+                                                Vector2 anchor, int labelSize,
+                                                Color? labelColor = null, float bgAlpha = 0.35f) {
         var go = new GameObject(name);
         go.transform.SetParent(parent, false);
         var rt = go.AddComponent<RectTransform>();
-        var a = anchor ?? new Vector2(0.5f, 0.5f);
-        rt.anchorMin = a; rt.anchorMax = a; rt.pivot = a;
+        rt.anchorMin = anchor;
+        rt.anchorMax = anchor;
+        rt.pivot = anchor;
         rt.sizeDelta = size;
         rt.anchoredPosition = pos;
         var img = go.AddComponent<Image>();
-        img.color = new Color(color.r, color.g, color.b, 0.35f);
+        img.sprite = SpriteUtil.UiRoundedSprite;
+        img.type = Image.Type.Sliced;
+        img.color = new Color(color.r, color.g, color.b, bgAlpha);
         var btn = go.AddComponent<Button>();
-        var txt = UiUtil.AddText(go.transform, label, 28, TextAnchor.MiddleCenter);
+        btn.targetGraphic = img;
+        var txt = UiUtil.AddText(go.transform, label, labelSize, TextAnchor.MiddleCenter,
+            labelColor ?? new Color(0.92f, 0.96f, 1f));
         txt.rectTransform.sizeDelta = size;
         return go;
+    }
+
+    /// <summary>Кнопка в общем мобильном стиле для частей, достраиваемых в рантайме.</summary>
+    private static GameObject MakeButton(Transform parent, string name, string label,
+                                         Vector2 pos, Vector2 size, Color color,
+                                         Vector2? anchor = null) {
+        return MakeButtonRounded(parent, name, label, pos, size, color,
+            anchor ?? new Vector2(0.5f, 0.5f), 26, HudTextColor(), 0.85f);
     }
 
     /// <summary>
@@ -221,8 +269,9 @@ public sealed class HudBuilder : MonoBehaviour {
 
         // --- кнопка помощи союзнику (T16) ---
         if (root.Find("help_btn") == null) {
+            // pivot = якорь (1,0): положительный y — вверх от нижней кромки, над зоной большого пальца
             var helpGo = MakeButton(root, "help_btn", "ПОМОЧЬ союзнику",
-                new Vector2(-70, -150), new Vector2(260, 76), GameBootstrap.CFood, new Vector2(1, 0));
+                new Vector2(-28, 200), new Vector2(340, 104), GameBootstrap.CFood, new Vector2(1, 0));
             helpGo.AddComponent<HelpAssistButton>();
             helpGo.GetComponent<HelpAssistButton>().Wire();
             helpGo.SetActive(false);
@@ -230,12 +279,8 @@ public sealed class HudBuilder : MonoBehaviour {
 
         // --- финальный экран демо ---
         if (root.Find("demo_end_panel") == null) {
-            var go = new GameObject("demo_end_panel");
-            go.transform.SetParent(root, false);
-            var rt = go.AddComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(1100, 720);
-            var img = go.AddComponent<Image>();
-            img.color = new Color(0.04f, 0.09f, 0.14f, 0.96f);
+            var go = MakePanelRounded(root, "demo_end_panel", Vector2.zero,
+                new Vector2(1100, 720), ScreenColor, new Vector2(0.5f, 0.5f)).gameObject;
             var end = go.AddComponent<DemoEndUI>();
             end.Panel = go;
             var body = UiUtil.AddText(go.transform, "", 28, TextAnchor.UpperCenter);
@@ -256,12 +301,12 @@ public sealed class HudBuilder : MonoBehaviour {
             row.transform.SetParent(pausePanel, false);
             var rt = row.AddComponent<RectTransform>();
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = new Vector2(0, -190);
-            rt.sizeDelta = new Vector2(620, 60);
+            rt.anchoredPosition = new Vector2(0, -262); // ниже строки статуса (-156)
+            rt.sizeDelta = new Vector2(700, 88);
             var minus = MakeButton(row.transform, "vol_down", "Звук −",
-                new Vector2(-210, 0), new Vector2(190, 58), GameBootstrap.COutline);
+                new Vector2(-240, 0), new Vector2(220, 88), GameBootstrap.COutline);
             var plus = MakeButton(row.transform, "vol_up", "Звук +",
-                new Vector2(210, 0), new Vector2(190, 58), GameBootstrap.COutline);
+                new Vector2(240, 0), new Vector2(220, 88), GameBootstrap.COutline);
             var label = UiUtil.AddText(row.transform, VolumeLabel(), 26, TextAnchor.MiddleCenter);
             label.rectTransform.anchoredPosition = new Vector2(0, 0);
             label.rectTransform.sizeDelta = new Vector2(200, 40);
