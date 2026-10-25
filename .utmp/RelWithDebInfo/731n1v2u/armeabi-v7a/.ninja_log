@@ -1,0 +1,12 @@
+# ninja log v5
+109	480	8146510695063526	FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o	24478f0f3beae204
+482	931	8146510699057529	C:/Dev/PM/pamyat-materii-game/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/731n1v2u/obj/armeabi-v7a/libswappywrapper.so	4b2210b1e6edff55
+22	2243	8146510712937044	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	faa028dd48555bf0
+74	2282	8146510713057900	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	926642c077d47d6e
+0	2312	8146510713704735	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	9437add727297984
+87	2417	8146510714744651	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	1878c0360d456466
+47	2442	8146510714984543	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	de7cc5acd6af2141
+59	2661	8146510717219058	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	3412446662078d5b
+33	2771	8146510718321231	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	79bdf5b6589b1cc8
+10	2963	8146510720255083	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	c24c600806a08235
+2964	3103	8146510721652577	C:/Dev/PM/pamyat-materii-game/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/731n1v2u/obj/armeabi-v7a/libgame.so	f98d5fbe1e7d42be
