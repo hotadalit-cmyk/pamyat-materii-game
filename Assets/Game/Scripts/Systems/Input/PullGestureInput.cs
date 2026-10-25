@@ -12,6 +12,10 @@ namespace PM.Systems.Input {
 /// </summary>
 public sealed class PullGestureInput : MonoBehaviour {
     public static PullGestureInput Instance { get; private set; }
+    /// <summary>v0.4: режим забега принимает рывок сам (направление, заряд 0..1) — без GameSim.</summary>
+    public static System.Action<Vec2, double> ReleaseHandler;
+    /// <summary>Модальные экраны забега блокируют жест (выбор мутации, отпечаток жизни).</summary>
+    public static bool Blocked;
     public float DragMaxWorld = 3.2f;
     public float MinDragWorld = 0.35f;
 
@@ -27,7 +31,9 @@ public sealed class PullGestureInput : MonoBehaviour {
     void Awake() { Instance = this; _cam = Camera.main; }
 
     void Update() {
-        if (SimRunner.Instance == null || SimRunner.Instance.Sim == null) return;
+        bool hasSim = SimRunner.Instance != null && SimRunner.Instance.Sim != null;
+        if (!hasSim && ReleaseHandler == null) return;
+        if (Blocked) { if (_dragging) Cancel("blocked"); return; }
         if (_cam == null) _cam = Camera.main;
         bool blockedByUi = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
         if (Application.isMobilePlatform) TouchUpdate(blockedByUi);
@@ -75,7 +81,9 @@ public sealed class PullGestureInput : MonoBehaviour {
     }
 
     private void Release(bool blockedByUi) {
-        if (!blockedByUi && Active && Charge01 > 0) {
+        if (!blockedByUi && Active && Charge01 > 0 && ReleaseHandler != null) {
+            ReleaseHandler(AimDir, Charge01);
+        } else if (!blockedByUi && Active && Charge01 > 0) {
             SimRunner.Instance.Sim.EnqueueCommand(1, new ActorCommand {
                 Kind = CommandKind.Jet,
                 Direction = AimDir,

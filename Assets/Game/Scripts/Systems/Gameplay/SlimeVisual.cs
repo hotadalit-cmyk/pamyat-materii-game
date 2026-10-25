@@ -17,6 +17,7 @@ public sealed class SlimeVisual : MonoBehaviour {
     private bool _baseCaptured;
     private float _deformTimer;
     private float _time;
+    private Rigidbody2D _rb;
     private float _prevSpeed;
     private bool _prevSpeedValid;
 
@@ -41,6 +42,15 @@ public sealed class SlimeVisual : MonoBehaviour {
             var vel = runner.Sim.Player.Vel;
             if (vel.Length > 0.01) velDir = new Vector2((float)(vel.X / vel.Length), (float)(vel.Y / vel.Length));
             speedStretch = Mathf.Min(0.15f, speed * 0.012f);
+        } else {
+            // v0.4 (режим забега): скорость берём прямо из своего тела
+            if (_rb == null) _rb = GetComponent<Rigidbody2D>();
+            if (_rb != null) {
+                var vel = _rb.linearVelocity;
+                speed = vel.magnitude;
+                if (speed > 0.01f) velDir = vel / speed;
+                speedStretch = Mathf.Min(0.15f, speed * 0.012f);
+            }
         }
         float stretch = 1f + charge * 0.10f + speedStretch;
         // «дыхание» в покое: ±3.5% медленный пульс

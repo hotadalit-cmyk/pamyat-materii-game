@@ -49,6 +49,36 @@ public static class SetupMenu {
         Debug.Log("PM/Setup 01: Boot-сцена создана и добавлена в Build Settings: " + path);
     }
 
+    /// <summary>
+    /// v0.4: сцена забега (Docs/CONCEPT_v4.md). Содержит только камеру и RunGame — всё остальное
+    /// строится в рантайме. Ставится первой в Build Settings; прототип Boot.unity остаётся вторым.
+    /// </summary>
+    [MenuItem("PM/Setup/05 Create Run Scene (v0.4)", priority = 5)]
+    public static void CreateRunScene() {
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        var camGo = new GameObject("main_camera");
+        var cam = camGo.AddComponent<Camera>();
+        cam.tag = "MainCamera";
+        cam.orthographic = true;
+        cam.orthographicSize = 5f;
+        cam.clearFlags = CameraClearFlags.SolidColor;
+        cam.backgroundColor = new Color(0.01f, 0.015f, 0.03f);
+        camGo.transform.position = new Vector3(0, 0, -10);
+        camGo.AddComponent<FollowCamera>();
+        var esGo = new GameObject("event_system");
+        esGo.AddComponent<EventSystem>();
+        esGo.AddComponent<StandaloneInputModule>();
+        new GameObject("run_game").AddComponent<PM.Systems.Run.RunGame>();
+        System.IO.Directory.CreateDirectory("Assets/Game/Scenes");
+        const string path = "Assets/Game/Scenes/Run.unity";
+        EditorSceneManager.SaveScene(scene, path);
+        var scenes = new System.Collections.Generic.List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+        scenes.RemoveAll(s => s.path == path);
+        scenes.Insert(0, new EditorBuildSettingsScene(path, true));
+        EditorBuildSettings.scenes = scenes.ToArray();
+        Debug.Log("PM/Setup 05: сцена забега создана и стоит первой в Build Settings: " + path);
+    }
+
     [MenuItem("PM/Setup/02 Apply Android Settings", priority = 2)]
     public static void ApplyAndroidSettings() {
         // D-02/D-18: Android, landscape, IL2CPP, Linear, пакет com.pamyatmaterii.game
