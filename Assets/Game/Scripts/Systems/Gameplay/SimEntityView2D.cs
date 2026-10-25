@@ -164,8 +164,9 @@ public static class SpriteUtil {
     }
 
     /// <summary>
-    /// Форма для uGUI: ppu = 1 (1px текстуры = 1px канваса), 9-slice border для скруглений,
-    /// чтобы панели любого размера держали одинаковый радиус углов.
+    /// Форма для uGUI: 9-slice border для скруглений, чтобы панели любого размера держали
+    /// одинаковый радиус углов. ppu = 100 = Canvas.referencePixelsPerUnit → 1px текстуры = 1px
+    /// канваса. При ppu = 1 бордеры раздуваются ×100 и Unity ужимает их в эллипс.
     /// </summary>
     public static Sprite MakeUiShape(int size, float radius01, bool circle) {
         var tex = NewTex(size);
@@ -185,7 +186,7 @@ public static class SpriteUtil {
         tex.Apply(false, true);
         float b = circle ? size * 0.5f : rad + 2f;
         var border = new Vector4(b, b, b, b);
-        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 1f, 0,
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f, 0,
             SpriteMeshType.FullRect, border, true);
     }
 

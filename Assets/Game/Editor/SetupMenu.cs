@@ -52,9 +52,11 @@ public static class SetupMenu {
         // D-02/D-18: Android, landscape, IL2CPP, Linear, пакет com.pamyatmaterii.game
         PlayerSettings.companyName = "PamyatMaterii";
         PlayerSettings.productName = "Память Материи";
-        PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "com.pamyatmaterii.game");
-        PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel24;
-        PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
+        var android = UnityEditor.Build.NamedBuildTarget.Android;
+        PlayerSettings.SetApplicationIdentifier(android, "com.pamyatmaterii.game");
+        // Unity 6.3: минимально поддерживаемый уровень — API 25 (Android 7.1)
+        PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel25;
+        PlayerSettings.SetScriptingBackend(android, ScriptingImplementation.IL2CPP);
         PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARMv7 | AndroidArchitecture.ARM64;
         PlayerSettings.colorSpace = ColorSpace.Linear;
         PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
@@ -63,9 +65,9 @@ public static class SetupMenu {
         PlayerSettings.allowedAutorotateToLandscapeLeft = true;
         PlayerSettings.allowedAutorotateToLandscapeRight = true;
         Application.targetFrameRate = 60;
-        PlayerSettings.bundleVersion = "0.3.0";
+        PlayerSettings.bundleVersion = "0.3.1";
         AssetDatabase.SaveAssets();
-        Debug.Log("PM/Setup 02: Android-настройки применены (IL2CPP, ARM64, minSdk 24, Linear, landscape, v0.3.0).");
+        Debug.Log("PM/Setup 02: Android-настройки применены (IL2CPP, ARM64, minSdk 25, Linear, landscape, v0.3.1).");
     }
 
     [MenuItem("PM/Setup/03 Verify Project Wiring", priority = 3)]

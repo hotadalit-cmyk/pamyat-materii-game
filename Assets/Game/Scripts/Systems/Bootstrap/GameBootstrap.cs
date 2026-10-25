@@ -130,6 +130,7 @@ public sealed class GameBootstrap : MonoBehaviour {
         // игрок
         _playerView = SimEntityView2D.Create(transform, "player_slime", SimEntityKind.Player,
             Sim.Player.Id, (float)Sim.Player.Radius, CSlime);
+        PlaceAt(_playerView, Sim.Player.Pos);
         _playerView.Body.sortingOrder = 8;
         VisualFactory.DecorateSlime(_playerView);
         var slime = _playerView.gameObject.AddComponent<SlimeVisual>();
@@ -143,6 +144,7 @@ public sealed class GameBootstrap : MonoBehaviour {
             var prof = Sim.ProfileOf(a.Id);
             var v = SimEntityView2D.Create(transform, prof.Ally ? "ai_ally" : "ai_rival",
                 SimEntityKind.Ai, a.Id, (float)a.Radius, prof.Ally ? CFood : CDanger);
+            PlaceAt(v, a.Pos);
             v.Body.sortingOrder = 6;
             VisualFactory.DecorateAi(v);
             v.gameObject.AddComponent<ContactDamageRelay2D>();
@@ -155,6 +157,7 @@ public sealed class GameBootstrap : MonoBehaviour {
             var b = Sim.Beetles[i];
             var v = SimEntityView2D.Create(transform, "beetle_" + b.Id, SimEntityKind.Beetle,
                 b.Id, (float)b.Radius, CDanger);
+            PlaceAt(v, b.Pos);
             v.Body.sortingOrder = 6;
             VisualFactory.DecorateBeetle(v);
             v.gameObject.AddComponent<ContactDamageRelay2D>();
@@ -165,6 +168,7 @@ public sealed class GameBootstrap : MonoBehaviour {
             var p = Sim.Food[i];
             var v = SimEntityView2D.Create(transform, "pellet_" + p.Id, SimEntityKind.Beetle,
                 p.Id, 0.22f, CFood);
+            PlaceAt(v, p.Pos);
             v.Body.sortingOrder = 4;
             VisualFactory.DecoratePellet(v);
             _pelletViews.Add(v);
@@ -177,6 +181,16 @@ public sealed class GameBootstrap : MonoBehaviour {
         var splashGo = new GameObject("splash_burst");
         splashGo.transform.SetParent(transform, false);
         splashGo.AddComponent<SplashBurst2D>();
+    }
+
+    /// <summary>
+    /// Стартовая точка тела = позиция в модели. В UnityDriven источник правды — Rigidbody:
+    /// без этого все тела рождаются в (0,0), расталкиваются в кучу, а гранулы съедаются в 1-й кадр.
+    /// </summary>
+    private static void PlaceAt(SimEntityView2D v, Vec2 pos) {
+        var p = new Vector2((float)pos.X, (float)pos.Y);
+        v.transform.position = new Vector3(p.x, p.y, 0);
+        v.Rb.position = p;
     }
 
     private static void AddAiLabel(Transform parent, float radius, string text) {

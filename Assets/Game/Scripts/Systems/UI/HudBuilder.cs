@@ -188,23 +188,24 @@ public sealed class HudBuilder : MonoBehaviour {
 
     /// <summary>Строка статуса: цветной маркер + текст. Возвращает Text для биндинга.</summary>
     private static Text AddRow(Transform parent, string content, int size, Color dotColor, float y) {
-        var dotGo = new GameObject("dot");
-        dotGo.transform.SetParent(parent, false);
-        var dotRt = dotGo.AddComponent<RectTransform>();
-        dotRt.anchorMin = new Vector2(0, 1);
-        dotRt.anchorMax = new Vector2(0, 1);
-        dotRt.pivot = new Vector2(0, 1);
-        dotRt.anchoredPosition = new Vector2(34, y - 3);
-        dotRt.sizeDelta = new Vector2(26, 26);
-        var dotImg = dotGo.AddComponent<Image>();
-        dotImg.sprite = SpriteUtil.UiCircleSprite;
-        dotImg.color = dotColor;
         var txt = UiUtil.AddText(parent, content, size, TextAnchor.MiddleLeft);
         txt.rectTransform.anchorMin = new Vector2(0, 1);
         txt.rectTransform.anchorMax = new Vector2(0, 1);
         txt.rectTransform.pivot = new Vector2(0, 1);
         txt.rectTransform.anchoredPosition = new Vector2(76, y);
         txt.rectTransform.sizeDelta = new Vector2(510, 36);
+        // маркер — дочерний к тексту: скрытая строка (пищеварение) прячется вместе с ним
+        var dotGo = new GameObject("dot");
+        dotGo.transform.SetParent(txt.transform, false);
+        var dotRt = dotGo.AddComponent<RectTransform>();
+        dotRt.anchorMin = new Vector2(0, 1);
+        dotRt.anchorMax = new Vector2(0, 1);
+        dotRt.pivot = new Vector2(0, 1);
+        dotRt.anchoredPosition = new Vector2(-42, -5);
+        dotRt.sizeDelta = new Vector2(26, 26);
+        var dotImg = dotGo.AddComponent<Image>();
+        dotImg.sprite = SpriteUtil.UiCircleSprite;
+        dotImg.color = dotColor;
         return txt;
     }
 
