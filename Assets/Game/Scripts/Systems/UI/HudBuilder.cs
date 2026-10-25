@@ -27,7 +27,7 @@ public sealed class HudBuilder : MonoBehaviour {
 
         // --- верх слева: статусы ---
         var top = MakePanel(canvasGo.transform, "top_left", new Vector2(24, -24),
-            new Vector2(560, 220), new Color(0, 0, 0, 0.25f));
+            new Vector2(560, 220), new Color(0, 0, 0, 0.25f), new Vector2(0, 1));
         var integrity = UiUtil.AddText(top, "Целостность: 100%", 30, TextAnchor.UpperLeft);
         integrity.rectTransform.anchoredPosition = new Vector2(0, -32);
         var water = UiUtil.AddText(top, "Вода: 5.00 кг", 30, TextAnchor.UpperLeft);
@@ -40,13 +40,13 @@ public sealed class HudBuilder : MonoBehaviour {
 
         // --- верх справа: пауза + гены ---
         var pauseBtn = MakeButton(canvasGo.transform, "pause_btn", "II",
-            new Vector2(-70, -40), new Vector2(90, 70), GameBootstrap.COutline);
+            new Vector2(-70, -40), new Vector2(90, 70), GameBootstrap.COutline, new Vector2(1, 1));
         var genesBtn = MakeButton(canvasGo.transform, "genes_btn", "ГЕНЫ",
-            new Vector2(-200, -40), new Vector2(180, 70), GameBootstrap.CSoul);
+            new Vector2(-200, -40), new Vector2(180, 70), GameBootstrap.CSoul, new Vector2(1, 1));
 
         // --- низ: удержание + подсказка ---
         var captureBar = MakePanel(canvasGo.transform, "capture_bar", new Vector2(0, 70),
-            new Vector2(760, 64), new Color(0, 0, 0, 0.35f));
+            new Vector2(760, 64), new Color(0, 0, 0, 0.35f), new Vector2(0.5f, 0));
         captureBar.gameObject.SetActive(false);
         var captureText = UiUtil.AddText(captureBar, "Удержание...", 26, TextAnchor.MiddleLeft);
         captureText.rectTransform.anchoredPosition = new Vector2(-360, 0);
@@ -157,10 +157,13 @@ public sealed class HudBuilder : MonoBehaviour {
     }
 
     private static RectTransform MakePanel(Transform parent, string name, Vector2 pos,
-                                          Vector2 size, Color color) {
+                                          Vector2 size, Color color,
+                                          Vector2? anchor = null) {
         var go = new GameObject(name);
         go.transform.SetParent(parent, false);
         var rt = go.AddComponent<RectTransform>();
+        var a = anchor ?? new Vector2(0.5f, 0.5f);
+        rt.anchorMin = a; rt.anchorMax = a; rt.pivot = a;
         rt.sizeDelta = size;
         rt.anchoredPosition = pos;
         var img = go.AddComponent<Image>();
@@ -169,10 +172,13 @@ public sealed class HudBuilder : MonoBehaviour {
     }
 
     private static GameObject MakeButton(Transform parent, string name, string label,
-                                         Vector2 pos, Vector2 size, Color color) {
+                                         Vector2 pos, Vector2 size, Color color,
+                                         Vector2? anchor = null) {
         var go = new GameObject(name);
         go.transform.SetParent(parent, false);
         var rt = go.AddComponent<RectTransform>();
+        var a = anchor ?? new Vector2(0.5f, 0.5f);
+        rt.anchorMin = a; rt.anchorMax = a; rt.pivot = a;
         rt.sizeDelta = size;
         rt.anchoredPosition = pos;
         var img = go.AddComponent<Image>();
