@@ -1,6 +1,8 @@
 using UnityEngine;
 using PM.Domain.Core;
 using PM.Domain.World;
+using PM.Domain.Absorption;
+using PM.Domain.Body;
 using PM.Domain.AI;
 using PM.Domain.Soul;
 using PM.Persistence;

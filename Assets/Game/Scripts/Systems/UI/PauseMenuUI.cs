@@ -32,7 +32,7 @@ public sealed class PauseMenuUI : MonoBehaviour {
         if (b != null) b.onClick.AddListener(() => a());
     }
 
-    private void SetPaused(bool paused) {
+    public void SetPaused(bool paused) {
         Time.timeScale = paused ? 0f : 1f;
         if (Panel != null) Panel.SetActive(paused);
     }

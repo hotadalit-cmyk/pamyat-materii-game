@@ -35,8 +35,8 @@ public sealed class PullGestureInput : MonoBehaviour {
     }
 
     private void TouchUpdate(bool blockedByUi) {
-        if (Input.touchCount != 1) { if (_dragging) Cancel("multitouch"); return; }
-        var t = Input.GetTouch(0);
+        if (UnityEngine.Input.touchCount != 1) { if (_dragging) Cancel("multitouch"); return; }
+        var t = UnityEngine.Input.GetTouch(0);
         if (!_dragging) {
             if (t.phase == TouchPhase.Began && !blockedByUi) Begin(t.position, t.fingerId);
             return;
@@ -50,13 +50,13 @@ public sealed class PullGestureInput : MonoBehaviour {
     }
 
     private void MouseUpdate(bool blockedByUi) {
-        if (Input.GetMouseButtonDown(0) && !_dragging && !blockedByUi)
-            Begin(Input.mousePosition, -1);
-        else if (_dragging && Input.GetMouseButton(0))
-            Drag(Input.mousePosition, blockedByUi);
-        else if (_dragging && Input.GetMouseButtonUp(0))
+        if (UnityEngine.Input.GetMouseButtonDown(0) && !_dragging && !blockedByUi)
+            Begin(UnityEngine.Input.mousePosition, -1);
+        else if (_dragging && UnityEngine.Input.GetMouseButton(0))
+            Drag(UnityEngine.Input.mousePosition, blockedByUi);
+        else if (_dragging && UnityEngine.Input.GetMouseButtonUp(0))
             Release(blockedByUi);
-        else if (_dragging && Input.GetKeyDown(KeyCode.Escape))
+        else if (_dragging && UnityEngine.Input.GetKeyDown(KeyCode.Escape))
             Cancel("esc");
     }
 

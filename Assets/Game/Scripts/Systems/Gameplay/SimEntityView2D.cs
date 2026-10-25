@@ -63,7 +63,7 @@ public static class SpriteUtil {
             for (int x = 0; x < size; x++) {
                 float dx = x - size / 2f + 0.5f, dy = y - size / 2f + 0.5f;
                 float d = Mathf.Sqrt(dx * dx + dy * dy);
-                byte a = (byte)Mathf.Clamp01((r - d) / 3f + 1f) * 255;
+                byte a = (byte)(Mathf.Clamp01((r - d) / 3f + 1f) * 255);
                 px[y * size + x] = new Color32(255, 255, 255, a);
             }
         tex.SetPixels32(px);

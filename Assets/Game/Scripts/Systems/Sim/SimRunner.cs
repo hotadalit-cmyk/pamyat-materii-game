@@ -2,6 +2,7 @@ using UnityEngine;
 using PM.Domain;
 using PM.Domain.Core;
 using PM.Domain.World;
+using PM.Domain.Absorption;
 
 namespace PM.Systems.Sim {
 /// <summary>

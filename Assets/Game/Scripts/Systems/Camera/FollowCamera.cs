@@ -1,6 +1,7 @@
 using UnityEngine;
 using PM.Domain.Core;
 using PM.Systems.Sim;
+using PM.Systems.Input;
 
 namespace PM.Systems.CameraRig {
 /// <summary>Топ-даун камера: ортографическое взятие по аспекту (T01) + смещение в прицеливании.</summary>

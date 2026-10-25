@@ -1,5 +1,6 @@
 using UnityEngine;
 using PM.Systems.Sim;
+using PM.Systems.Input;
 
 namespace PM.Systems.Gameplay {
 /// <summary>Сжатие/растяжение героя: заряд сжимает, рывок растягивает (VISUAL_UI «Состояния героя»).</summary>
