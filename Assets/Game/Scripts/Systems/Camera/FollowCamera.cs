@@ -9,10 +9,16 @@ namespace PM.Systems.CameraRig {
 public sealed class FollowCamera : MonoBehaviour {
     public Transform Target;
     public float AimBias = 1.6f;
+    public const float BackDistance = -10f; // мир живёт на z=0, камера обязана отойти
 
     private Camera _cam;
 
-    void Awake() { _cam = GetComponent<Camera>(); _cam.orthographic = true; }
+    void Awake() {
+        _cam = GetComponent<Camera>();
+        _cam.orthographic = true;
+        var p = transform.position;
+        if (p.z > BackDistance + 0.3f) transform.position = new Vector3(p.x, p.y, BackDistance);
+    }
 
     void LateUpdate() {
         if (_cam == null) return;
@@ -27,7 +33,7 @@ public sealed class FollowCamera : MonoBehaviour {
                    AimBias * (float)input.Charge01;
         }
         var p = Target.position + bias;
-        transform.position = new Vector3(p.x, p.y, transform.position.z);
+        transform.position = new Vector3(p.x, p.y, BackDistance);
     }
 }
 }

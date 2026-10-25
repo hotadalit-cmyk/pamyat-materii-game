@@ -50,6 +50,10 @@ public sealed class GameBootstrap : MonoBehaviour {
         Instance = this;
         Application.targetFrameRate = 60;
         Camera.main.backgroundColor = CBackground;
+        // HUD-канва запечена в сцене без GraphicRaycaster (HudBuilder в билде не запускается)
+        var hudCanvas = FindFirstObjectByType<Canvas>();
+        if (hudCanvas != null && hudCanvas.GetComponent<UnityEngine.UI.GraphicRaycaster>() == null)
+            hudCanvas.gameObject.AddComponent<UnityEngine.UI.GraphicRaycaster>();
         BuildSim();
         BuildArena();
         BuildEntities();
