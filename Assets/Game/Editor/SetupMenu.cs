@@ -62,7 +62,7 @@ public static class SetupMenu {
         PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
         PlayerSettings.allowedAutorotateToLandscapeLeft = true;
         PlayerSettings.allowedAutorotateToLandscapeRight = true;
-        PlayerSettings.targetFrameRate = 60;
+        Application.targetFrameRate = 60;
         AssetDatabase.SaveAssets();
         Debug.Log("PM/Setup 02: Android-настройки применены (IL2CPP, ARM64, minSdk 24, Linear, landscape).");
     }
