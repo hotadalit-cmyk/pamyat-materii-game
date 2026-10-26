@@ -526,9 +526,17 @@ public sealed class RunState {
     }
 
     /// <summary>Поглощение конкретным фрагментом: масса и бонус цепочки достаются ему.</summary>
-    public double OnAbsorbAt(int fragmentId, string speciesId, double mass) {
+    public double OnAbsorbAt(int fragmentId, string speciesId, double mass) =>
+        OnAbsorbAt(fragmentId, speciesId, mass, SpawnVariant.None);
+
+    /// <summary>Поглощение конкретным фрагментом с вариантом (мерцание даёт ×1.5 ресурсов).</summary>
+    public double OnAbsorbAt(int fragmentId, string speciesId, double mass, SpawnVariant variant) {
         _creditId = Fragments.IndexOf(fragmentId) >= 0 ? fragmentId : -1;
-        try { return OnAbsorbEx(speciesId, mass); } finally { _creditId = -1; }
+        double saved = _shimmeringYieldMult;
+        if (variant == SpawnVariant.Shimmering) _shimmeringYieldMult = 1.5;
+        LastAbsorbVariant = variant;
+        try { return OnAbsorbEx(speciesId, mass); }
+        finally { _shimmeringYieldMult = saved; _creditId = -1; }
     }
 
     /// <summary>Удар по конкретному фрагменту. Возвращает true, если фрагмент растворился.</summary>

@@ -404,6 +404,11 @@ public sealed partial class RunGame : MonoBehaviour {
         c.Ring = pendingRing;
         c.IsNemesis = spec.IsNemesis;
         c.SoulName = spec.SoulName;
+        c.Variant = spec.Variant;  // v0.10: мерцание — визуальная подсказка и ×1.5 ресурсов
+        if (c.IsShimmering && c.Ring != null) {
+            // Лёгкий циан-оттенок кольца — игрок сразу видит «ценную» добычу.
+            var rc = c.Ring.color; rc.r = 0.55f; rc.g = 1f; rc.b = 1f; rc.a = 0.6f; c.Ring.color = rc;
+        }
         c.Traits = traits;
         c.Init(sp, spec.Mass, new CreatureBrain(_seed + (ulong)(index * 7919 + 1)), view, r);
         if (!food) c.EchoDot = SpriteUtil.AddSprite(view.transform, SpriteUtil.RingSprite, r * 2.6f, r * 2.6f,
@@ -743,13 +748,27 @@ public sealed partial class RunGame : MonoBehaviour {
     private float _codexTimer;
 
     private void Absorb(RunCreature c) {
-        double bonus = _hitFrag >= 0 ? Run.OnAbsorbAt(_hitFrag, c.Species.Id, c.Mass) : Run.OnAbsorbEx(c.Species.Id, c.Mass);
+        // v0.10: передаём вариант (мерцание ×1.5 ресурсов) в зависимости от того, кто поглощает.
+        double bonus = _hitFrag >= 0
+            ? Run.OnAbsorbAt(_hitFrag, c.Species.Id, c.Mass, c.Variant)
+            : Run.OnAbsorbVariant(c.Species.Id, c.Mass, c.Variant);
         var pos = c.transform.position;
         if (c.IsNemesis) {
             Meta.Nemeses.OnSoulAbsorbed(c.SoulName);
             _ui.Banner(c.SoulName + " поглощена — её память теперь ваша", 3f);
-        } else if (!c.IsFood) _ui.Flash("Поглощено: " + c.Species.Name);
-        if (!c.IsFood && Run.LastYield != null) {
+        } else if (!c.IsFood) _ui.Flash("Поглощено: " + c.Species.Name + (c.IsShimmering ? " (мерцание!)" : ""));
+        if (!c.IsFood && Run.LastReclaimedMutation != null) {
+            // v0.10: возвращённая из немезиды мутация — показать игроку.
+            var mut = MutationCatalog.Get(Run.LastReclaimedMutation);
+            GameFeel.Text(pos + Vector3.up * 1.2f, "Возвращено: " + (mut != null ? mut.Name : Run.LastReclaimedMutation),
+                new Color(0.9f, 0.6f, 1f), 1.6f);
+        }
+        if (Run.LastComboMilestone > 0) {
+            // v0.10: порог цепочки 3/5/8 — флеш «Цепочка 3!» отдельным текстом.
+            GameFeel.Text(pos + Vector3.up * 1.6f, "Цепочка " + Run.LastComboMilestone + "!",
+                new Color(1f, 0.85f, 0.3f), 1.3f);
+        }
+        if (!c.IsFood) {
             // добыча в хранилище — цветом ресурса; у двойника — «в ноше», до слияния
             bool twin = _hitFrag >= 0 && _hitFrag != Run.Fragments.LeadId;
             for (int y = 0; y < Run.LastYield.Length; y++) {

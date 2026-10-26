@@ -20,6 +20,8 @@ public sealed class RunCreature : MonoBehaviour {
     public SpriteRenderer EchoDot;    // метка эхолокации поверх тьмы (m_echo)
     public MonsterModel Model;        // 3D-модель (Quaternius, CC0), если есть
     public SpriteRenderer Ring;       // кольцо: зелёное — можно съесть, красное — опасен
+    public SpawnVariant Variant;      // v0.10: мерцание — даёт ×1.5 ресурсов при поглощении
+    public bool IsShimmering => Variant == SpawnVariant.Shimmering;
     public bool IsFood => Species == null || Species.Behavior == CreatureBehavior.Food;
     /// <summary>Источник урона для «Отпечатка жизни»: имя души или id вида.</summary>
     public string SourceId => IsNemesis || !string.IsNullOrEmpty(SoulName) ? SoulName : Species?.Id;
