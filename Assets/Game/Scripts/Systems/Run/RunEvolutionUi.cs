@@ -37,6 +37,9 @@ public sealed class RunEvolutionUi : MonoBehaviour {
     // показатели
     private GameObject _statsModal;
     private Transform _statsList;
+    private int _statsTab;                 // 0 — прокачка, 1 — итоги с разбором источников
+    private Text _statsHint, _statsStore, _statsBadge;
+    private Image _tabTrain, _tabSum, _statsBtnImg;
     private string _expanded;
     private float _hudTimer;
 
@@ -80,6 +83,16 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         _evoBadge.color = new Color(1f, 0.9f, 0.4f);
         var stats = MakeButton(_root, "stats_btn", new Vector2(318, -362), new Vector2(270, 96), GameBootstrap.CSlime, 0.75f, "Показатели", 30, new Vector2(0, 1));
         stats.GetComponent<Button>().onClick.AddListener(OpenStats);
+        _statsBtnImg = stats.GetComponent<Image>();
+        _statsBadge = Label(stats.transform, "", 24, TextAnchor.MiddleCenter, new Vector2(-6, -6), new Vector2(60, 40), new Vector2(1, 1));
+        _statsBadge.color = new Color(1f, 0.9f, 0.4f);
+    }
+
+    /// <summary>Сколько показателей можно поднять прямо сейчас.</summary>
+    private static int CountTrainable(RunState run) {
+        int n = 0;
+        foreach (var d in TrainCatalog.All()) if (run.CanTrain(d.Key) == TrainBlock.Ok) n++;
+        return n;
     }
 
     void Update() {
@@ -97,6 +110,10 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         float pulse = avail > 0 || run.Evolution.FreeTokens > 0 ? 0.75f + 0.25f * Mathf.Sin(Time.unscaledTime * 5f) : 0.55f;
         _evoBtnImg.color = new Color(GameBootstrap.CSoul.r, GameBootstrap.CSoul.g, GameBootstrap.CSoul.b, pulse);
         if (_evoModal.activeSelf) RefreshStore();
+        int train = CountTrainable(run);
+        _statsBadge.text = train > 0 ? train.ToString() : "";
+        float sp = train > 0 ? 0.6f + 0.25f * Mathf.Sin(Time.unscaledTime * 5f + 1f) : 0.75f;
+        _statsBtnImg.color = new Color(GameBootstrap.CSlime.r, GameBootstrap.CSlime.g, GameBootstrap.CSlime.b, sp);
     }
 
     private static int CountAvailable(RunState run) {
@@ -299,6 +316,12 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         var sb = new System.Text.StringBuilder(n.Description);
         if (!string.IsNullOrEmpty(n.ExclusiveGroup)) sb.Append("\n\nРазвилка: в этой группе можно выбрать только один путь.");
         if (!string.IsNullOrEmpty(n.RequiredGene)) sb.Append("\nГен: ").Append(GeneName(n.RequiredGene));
+        var opens = TrainCatalog.UnlockedByNode(n.Id);
+        if (opens.Count > 0) {
+            sb.Append("\n\n<color=#7FE0FF>Открывает прокачку: ");
+            for (int i = 0; i < opens.Count; i++) sb.Append(i > 0 ? ", «" : "«").Append(opens[i].Name).Append('»');
+            sb.Append("</color>");
+        }
         _detBody.text = sb.ToString();
         _detCost.supportRichText = true;
         _detCost.text = owned ? "Уже развито" : "Цена:\n" + CostLong(n.Cost, run.Resources);
@@ -403,8 +426,16 @@ public sealed class RunEvolutionUi : MonoBehaviour {
     private void BuildStats() {
         _statsModal = FullScreen("stats_modal", new Color(0f, 0f, 0f, 0.8f));
         var box = Box(_statsModal.transform, "stats_box", Vector2.zero, new Vector2(1400, 1000), Modal, new Vector2(0.5f, 0.5f));
-        Label(box, "ПОКАЗАТЕЛИ", 46, TextAnchor.MiddleLeft, new Vector2(40, -20), new Vector2(600, 60), new Vector2(0, 1)).color = GameBootstrap.COutline;
-        Label(box, "Коснитесь строки — увидите, откуда взялось значение", 24, TextAnchor.MiddleLeft, new Vector2(40, -80), new Vector2(900, 40), new Vector2(0, 1)).color = new Color(0.7f, 0.8f, 0.9f);
+        Label(box, "ПОКАЗАТЕЛИ", 46, TextAnchor.MiddleLeft, new Vector2(40, -20), new Vector2(420, 60), new Vector2(0, 1)).color = GameBootstrap.COutline;
+        var tTrain = MakeButton(box, "tab_train", new Vector2(470, -18), new Vector2(250, 70), GameBootstrap.CSlime, 0.9f, "Прокачка", 28, new Vector2(0, 1));
+        tTrain.GetComponent<Button>().onClick.AddListener(() => { _statsTab = 0; RefreshStats(); });
+        _tabTrain = tTrain.GetComponent<Image>();
+        var tSum = MakeButton(box, "tab_sum", new Vector2(735, -18), new Vector2(250, 70), GameBootstrap.CSlime, 0.9f, "Итоги", 28, new Vector2(0, 1));
+        tSum.GetComponent<Button>().onClick.AddListener(() => { _statsTab = 1; RefreshStats(); });
+        _tabSum = tSum.GetComponent<Image>();
+        _statsHint = Label(box, "", 24, TextAnchor.MiddleLeft, new Vector2(40, -88), new Vector2(760, 40), new Vector2(0, 1));
+        _statsHint.color = new Color(0.7f, 0.8f, 0.9f);
+        _statsStore = Label(box, "", 24, TextAnchor.MiddleRight, new Vector2(-40, -88), new Vector2(560, 40), new Vector2(1, 1));
         var close = MakeButton(box, "close", new Vector2(-22, -18), new Vector2(170, 74), GameBootstrap.CSlime, 0.6f, "Закрыть", 28, new Vector2(1, 1));
         close.GetComponent<Button>().onClick.AddListener(() => { _statsModal.SetActive(false); _game.SetPaused(false); });
         var list = new GameObject("list");
@@ -428,6 +459,19 @@ public sealed class RunEvolutionUi : MonoBehaviour {
 
     private void RefreshStats() {
         for (int i = _statsList.childCount - 1; i >= 0; i--) Destroy(_statsList.GetChild(i).gameObject);
+        var on = new Color(0.35f, 0.75f, 1f, 0.95f); var off = new Color(0.12f, 0.18f, 0.24f, 0.95f);
+        _tabTrain.color = _statsTab == 0 ? on : off;
+        _tabSum.color = _statsTab == 1 ? on : off;
+        var run = _game.Run;
+        var sbs = new System.Text.StringBuilder();
+        for (int i = 0; i < ResourceInfo.Count; i++) {
+            var k = (ResourceKind)i;
+            sbs.Append("<color=#").Append(ColorUtility.ToHtmlStringRGB(Hex(ResourceInfo.Color(k)))).Append(">●</color>")
+               .Append(Mathf.FloorToInt((float)run.Resources.Get(k))).Append("  ");
+        }
+        _statsStore.text = sbs.ToString();
+        if (_statsTab == 0) { RefreshTraining(); return; }
+        _statsHint.text = "Коснитесь строки — увидите, откуда взялось значение";
         var lines = _game.Run.Stats();
         float y = 0f;
         // две колонки строк; раскрытая строка занимает всю ширину под собой
@@ -454,6 +498,78 @@ public sealed class RunEvolutionUi : MonoBehaviour {
             if (y < -840f) break;
         }
     }
+
+    /// <summary>
+    /// Вкладка «Прокачка»: каждый показатель поднимается за ресурсы, цена растёт с уровнем.
+    /// Закрытые показатели видны тусклыми — с подсказкой, какой узел эволюции их откроет.
+    /// </summary>
+    private void RefreshTraining() {
+        var run = _game.Run;
+        _statsHint.text = "Ресурсы → уровни. Новые показатели открывает эволюция";
+        float y = 0f;
+        foreach (var d in TrainCatalog.All()) {
+            var block = run.CanTrain(d.Key);
+            bool locked = block == TrainBlock.Locked;
+            int lv = run.Training.Level(d.Key);
+            var row = Box(_statsList, "train_" + d.Key, new Vector2(0, y), new Vector2(1320, 86),
+                locked ? new Color(0.06f, 0.08f, 0.11f, 0.9f) : new Color(0.08f, 0.13f, 0.18f, 0.95f), new Vector2(0, 1));
+            var name = Label(row, d.Name, 30, TextAnchor.MiddleLeft, new Vector2(24, -4), new Vector2(300, 44), new Vector2(0, 1));
+            var desc = Label(row, d.Description, 21, TextAnchor.MiddleLeft, new Vector2(24, -46), new Vector2(560, 34), new Vector2(0, 1));
+            desc.color = new Color(0.65f, 0.75f, 0.85f);
+            if (locked) {
+                name.color = new Color(0.55f, 0.6f, 0.65f);
+                var by = new System.Text.StringBuilder("Откроется эволюцией: ");
+                for (int i = 0; i < d.UnlockedBy.Length; i++) {
+                    var node = EvolutionTree.Get(d.UnlockedBy[i]);
+                    by.Append(i > 0 ? " или «" : "«").Append(node != null ? node.Name : d.UnlockedBy[i]).Append('»');
+                }
+                var lk = Label(row, by.ToString(), 24, TextAnchor.MiddleRight, new Vector2(-24, 0), new Vector2(700, 86), new Vector2(1, 1));
+                lk.color = new Color(0.75f, 0.65f, 1f, 0.9f);
+                y -= 92f;
+                continue;
+            }
+            // уровень полосками
+            for (int i = 0; i < d.MaxLevel; i++) {
+                var pip = Box(row, "pip" + i, new Vector2(330 + i * 22, -16), new Vector2(16, 16),
+                    i < lv ? GameBootstrap.CSlime : new Color(1f, 1f, 1f, 0.12f), new Vector2(0, 1));
+                pip.GetComponent<Image>().sprite = SpriteUtil.UiCircleSprite;
+                pip.GetComponent<Image>().type = Image.Type.Simple;
+            }
+            string now = lv > 0 ? string.Format(d.UnitFormat, Mathf.Abs((float)StatTraining.Effect(d, lv)) * Pct(d)) : "—";
+            string next = lv < d.MaxLevel ? string.Format(d.UnitFormat, Mathf.Abs((float)StatTraining.Effect(d, lv + 1)) * Pct(d)) : "";
+            var eff = Label(row, "Сейчас: " + now + (next != "" ? "   →   " + next : ""), 23, TextAnchor.MiddleLeft,
+                new Vector2(600, -44), new Vector2(430, 40), new Vector2(0, 1));
+            eff.color = new Color(0.85f, 0.95f, 1f);
+            if (block == TrainBlock.Maxed) {
+                Label(row, "Максимум", 26, TextAnchor.MiddleRight, new Vector2(-24, 0), new Vector2(260, 86), new Vector2(1, 1)).color = GameBootstrap.COutline;
+            } else {
+                var cost = StatTraining.CostFor(d, lv);
+                var cs = new System.Text.StringBuilder();
+                foreach (var it in cost.Items) {
+                    bool enough = run.Resources.Get(it.Kind) >= it.Amount;
+                    cs.Append("<color=#").Append(ColorUtility.ToHtmlStringRGB(Hex(ResourceInfo.Color(it.Kind)))).Append(">●</color>")
+                      .Append(enough ? "" : "<color=#FF7A7A>").Append(it.Amount.ToString("0")).Append(enough ? "" : "</color>").Append(' ')
+                      .Append(ResourceInfo.Name(it.Kind)).Append("  ");
+                }
+                Label(row, cs.ToString(), 22, TextAnchor.MiddleLeft, new Vector2(600, -6), new Vector2(430, 40), new Vector2(0, 1));
+                bool ok = block == TrainBlock.Ok;
+                var up = MakeButton(row, "up", new Vector2(-14, -10), new Vector2(240, 66), ok ? GameBootstrap.CFood : new Color(0.3f, 0.35f, 0.4f),
+                    ok ? 0.95f : 0.6f, ok ? "Улучшить" : "Мало ресурсов", ok ? 28 : 22, new Vector2(1, 1));
+                if (ok) up.AddComponent<UiPulse>().Base = new Color(GameBootstrap.CFood.r, GameBootstrap.CFood.g, GameBootstrap.CFood.b, 0.95f);
+                string key = d.Key;
+                up.GetComponent<Button>().onClick.AddListener(() => {
+                    if (_game.Run.TryTrain(key)) {
+                        ProceduralSfx.Instance?.Play("evolve");
+                    } else ProceduralSfx.Instance?.Play("deny");
+                    RefreshStats();
+                });
+            }
+            y -= 92f;
+        }
+    }
+
+    /// <summary>Доли (0.08) показываем процентами, плоские величины — как есть.</summary>
+    private static float Pct(TrainDef d) => d.UnitFormat.Contains("%") ? 100f : 1f;
 
     // ================= Строители =================
     public static Color Hex(uint rgb) => new Color(((rgb >> 16) & 0xFF) / 255f, ((rgb >> 8) & 0xFF) / 255f, (rgb & 0xFF) / 255f, 1f);

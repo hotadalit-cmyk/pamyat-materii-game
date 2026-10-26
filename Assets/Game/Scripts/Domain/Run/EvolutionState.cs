@@ -57,8 +57,12 @@ namespace PM.Domain.Run {
             return true;
         }
 
+        /// <summary>Прокачка показателей (v0.9): её уровни складываются с бонусами эволюции в Sum.</summary>
+        public StatTraining Training { get; set; }
+
+        /// <summary>Итог бонусов вида k: открытые узлы эволюции + прокачанные показатели.</summary>
         public double Sum(EvoEffectKind k) {
-            double total = 0;
+            double total = Training != null ? Training.Sum(k) : 0;
             foreach (var id in _unlocked) {
                 var node = EvolutionTree.Get(id);
                 if (node == null || node.Effects == null) continue;

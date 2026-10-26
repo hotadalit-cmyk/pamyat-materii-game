@@ -5,7 +5,7 @@ namespace PM.Domain.Run {
     public enum EvoEffectKind {
         Mutation = 0, MaxDash = 1, MaxFragments = 2, StorageCap = 3, LightFlat = 4,
         MassGainMult = 5, YieldMult = 6, SplitMinMass = 7, DashSpeedMult = 8,
-        RegenFlat = 9, DamageTakenMult = 10, PullFlat = 11
+        RegenFlat = 9, DamageTakenMult = 10, PullFlat = 11, DamageDealtMult = 12
     }
 
     public struct EvoEffect {

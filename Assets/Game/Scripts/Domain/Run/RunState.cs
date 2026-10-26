@@ -83,6 +83,8 @@ public sealed class RunState {
     // ---------- v0.8: ресурсы, хранилище, дерево эволюции ----------
     public ResourceStore Resources { get; private set; }
     public EvolutionState Evolution { get; private set; }
+    /// <summary>Прокачка показателей за ресурсы (v0.9).</summary>
+    public StatTraining Training { get; private set; }
     private readonly HashSet<string> _known = new HashSet<string>();
     /// <summary>Виды, чьи гены известны (поглощены в этой жизни или раньше) — открывают генные узлы.</summary>
     public ICollection<string> KnownSpecies => _known;
@@ -125,6 +127,8 @@ public sealed class RunState {
         Fragments = new FragmentSet(StartMass + _meta.StartMassBonus);
         Resources = new ResourceStore { Capacity = ResourceStore.BaseCapacity };
         Evolution = new EvolutionState();
+        Training = new StatTraining();
+        Evolution.Training = Training;
         if (_meta.SeenSpecies != null) foreach (var sp in _meta.SeenSpecies) _known.Add(sp);
         if (OpenWorld) Fragments.MaxCount = 2; // делиться на большее число частей учит ветвь «Деление»
         PeakMass = Mass;
@@ -360,7 +364,18 @@ public sealed class RunState {
         return true;
     }
 
+    /// <summary>Поднять показатель на уровень за ресурсы из хранилища.</summary>
+    public bool TryTrain(string key) {
+        if (IsDead || IsVictory || Training == null) return false;
+        if (!Training.TryTrain(key, Resources, Evolution)) return false;
+        RecomputeLimits();
+        return true;
+    }
+
+    public TrainBlock CanTrain(string key) => Training == null ? TrainBlock.Unknown : Training.CanTrain(key, Resources, Evolution);
+
     private void RecomputeLimits() {
+        Mutations.ExtraDamageMult = 1.0 + Evolution.Sum(EvoEffectKind.DamageDealtMult);
         int maxDash = Mutations.DashCharges + _meta.BonusDashCharges + (int)System.Math.Round(Evolution.Sum(EvoEffectKind.MaxDash));
         if (maxDash > MaxDashCharges) DashCharges += maxDash - MaxDashCharges;
         MaxDashCharges = maxDash;

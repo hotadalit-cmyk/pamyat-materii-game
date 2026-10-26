@@ -34,7 +34,9 @@ public sealed class MutationSet {
     }
 
     /// <summary>Шипы: урон, наносимый ударом ×1.5 за стак.</summary>
-    public double DamageDealtMult => Pow(1.5, Stacks("m_spikes"));
+    public double DamageDealtMult => Pow(1.5, Stacks("m_spikes")) * ExtraDamageMult;
+    /// <summary>Множитель урона извне мутаций — прокачка «Сила» и бонусы эволюции (v0.9).</summary>
+    public double ExtraDamageMult { get; set; } = 1.0;
 
     /// <summary>Панцирь: получаемый урон ×0.7 за стак.</summary>
     public double DamageTakenMult => Pow(0.7, Stacks("m_shell"));

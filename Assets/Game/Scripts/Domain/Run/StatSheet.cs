@@ -66,7 +66,7 @@ namespace PM.Domain.Run {
                 Value = "×" + Fmt(damage, 2),
                 Raw = damage,
                 Tooltip = "Множитель урона, наносимого при контакте и во время рывка.",
-                Sources = SrcDamage(m)
+                Sources = SrcDamage(m, e)
             });
 
             // defense
@@ -209,13 +209,14 @@ namespace PM.Domain.Run {
             return l.ToArray();
         }
 
-        private static string[] SrcDamage(MutationSet m) {
+        private static string[] SrcDamage(MutationSet m, EvolutionState e) {
             var l = new System.Collections.Generic.List<string>();
             l.Add("База ×1.00");
             if (m != null) {
                 int spikes = m.Stacks("m_spikes");
                 if (spikes > 0) l.Add("Шипы ×" + Fmt(System.Math.Pow(1.5, spikes), 2));
             }
+            AddEvoSources(l, e, EvoEffectKind.DamageDealtMult, "+");
             return l.ToArray();
         }
 
@@ -308,6 +309,12 @@ namespace PM.Domain.Run {
 
         private static void AddEvoSources(System.Collections.Generic.List<string> src, EvolutionState e, EvoEffectKind k, string prefix) {
             if (e == null) return;
+            if (e.Training != null) {
+                foreach (var d in TrainCatalog.All()) {
+                    int lv = e.Training.Level(d.Key);
+                    if (d.Kind == k && lv > 0) src.Add("Прокачка «" + d.Name + "» ур." + lv + " " + prefix + Fmt(d.PerLevel * lv, 3));
+                }
+            }
             foreach (var id in e.Unlocked) {
                 var node = EvolutionTree.Get(id);
                 if (node == null || node.Effects == null) continue;
