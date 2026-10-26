@@ -83,7 +83,10 @@ public sealed class RunMinimap : MonoBehaviour, IPointerClickHandler {
 
     public void Hide() { if (_big) SetBig(false); gameObject.SetActive(false); }
 
-    public void OnPointerClick(PointerEventData e) => SetBig(!_big);
+    public void OnPointerClick(PointerEventData e) {
+        if (!_big && _game != null && _game.UiModalOpen) return; // под другим окном карта не раскрывается
+        SetBig(!_big);
+    }
 
     private void SetBig(bool big) {
         _big = big;

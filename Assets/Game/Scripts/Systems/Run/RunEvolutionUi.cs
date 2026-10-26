@@ -165,6 +165,7 @@ public sealed class RunEvolutionUi : MonoBehaviour {
     public void OpenEvolution() {
         if (_game == null || !_game.InRun || _game.UiModalOpen) return;
         _evoModal.SetActive(true);
+        _root.SetAsLastSibling();                // поверх миникарты и HUD
         _evoModal.transform.SetAsLastSibling();
         _game.SetPaused(true);
         RefreshEvolution();
@@ -322,6 +323,7 @@ public sealed class RunEvolutionUi : MonoBehaviour {
     public void OpenStats() {
         if (_game == null || !_game.InRun || _game.UiModalOpen) return;
         _statsModal.SetActive(true);
+        _root.SetAsLastSibling();
         _statsModal.transform.SetAsLastSibling();
         _game.SetPaused(true);
         RefreshStats();
