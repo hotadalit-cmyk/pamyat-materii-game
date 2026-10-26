@@ -124,7 +124,7 @@ public static class ThirdPartyArt {
             if (tinted) foreach (var m in r.materials) m.color = Color.Lerp(m.color, tint, 0.55f);
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             r.receiveShadows = false;
-            if (r is SkinnedMeshRenderer smr) smr.updateWhenOffscreen = false;
+            if (r is SkinnedMeshRenderer smr) smr.updateWhenOffscreen = true; // рамка скин-меша в см — без этого телефон отсекает модель
         }
         float fp = _footprint[model];
         float scale = diameter * 1.5f / fp;
