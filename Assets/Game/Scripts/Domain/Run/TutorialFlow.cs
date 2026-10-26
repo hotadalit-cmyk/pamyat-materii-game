@@ -84,7 +84,7 @@ namespace PM.Domain.Run {
                 case TutorialStep.Evolve: return "Есть жетон эволюции! Откройте «Эволюцию» — круглая кнопка слева";
                 case TutorialStep.Split: return "В ветке «Деление» откройте «Деление», затем нажмите кнопку «Деление» справа";
                 case TutorialStep.Gather: return "Клоны охотятся сами и несут добычу. Нажмите «Собраться», чтобы сдать её";
-                case TutorialStep.Goal: return "Цель: наберите массу — откроется шахта вниз. Удачи, капля!";
+                case TutorialStep.Goal: return "Цель: наберите массу — у шахты проснётся страж. Победите его и спускайтесь!";
             }
             return "";
         }
