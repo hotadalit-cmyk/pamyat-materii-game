@@ -27,9 +27,17 @@ public sealed class RunUi : MonoBehaviour {
     private Text _imprintBody;
     private readonly Text[] _upgradeLabels = new Text[3];
     private Text _essenceText;
+    private Text _combo, _mutations, _biomeTitle, _biomeSub, _bossLabel;
+    private RectTransform _bossFill;
+    private GameObject _bossBar;
+    private float _biomeTimer;
+    private GameObject _titleModal, _infoModal;
+    private Text _titleSoul, _infoTitle, _infoBody;
 
     public bool ModalOpen => (_offerModal != null && _offerModal.activeSelf) ||
-                             (_imprintModal != null && _imprintModal.activeSelf);
+                             (_imprintModal != null && _imprintModal.activeSelf) ||
+                             (_titleModal != null && _titleModal.activeSelf) ||
+                             (_infoModal != null && _infoModal.activeSelf);
 
     public static RunUi Build(RunGame game) {
         var canvasGo = new GameObject("run_ui");
@@ -49,6 +57,8 @@ public sealed class RunUi : MonoBehaviour {
         ui.BuildHud();
         ui.BuildOffer();
         ui.BuildImprint();
+        ui.BuildTitle();
+        ui.BuildInfo();
         return ui;
     }
 
@@ -64,6 +74,19 @@ public sealed class RunUi : MonoBehaviour {
             _dashDots.Add(img);
         }
         _depth = Label(top, "Глубина 1 · 1/3", 28, TextAnchor.MiddleLeft, new Vector2(30, -140), new Vector2(500, 40), new Vector2(0, 1));
+        _combo = Label(top, "", 34, TextAnchor.MiddleRight, new Vector2(-30, -22), new Vector2(260, 52), new Vector2(1, 1));
+        _combo.color = new Color(1f, 0.9f, 0.4f);
+        _mutations = Label(_root, "", 24, TextAnchor.UpperLeft, new Vector2(40, -236), new Vector2(700, 120), new Vector2(0, 1));
+        _mutations.color = new Color(0.75f, 0.65f, 1f, 0.9f);
+
+        _bossBar = Box(_root, "boss_bar", new Vector2(0, 40), new Vector2(1000, 84), Panel, new Vector2(0.5f, 0)).gameObject;
+        var bossBg = Box(_bossBar.transform, "boss_bg", new Vector2(0, 14), new Vector2(940, 18), new Color(1, 1, 1, 0.08f), new Vector2(0.5f, 0));
+        _bossFill = Box(bossBg, "boss_fill", Vector2.zero, new Vector2(940, 18), GameBootstrap.CDanger, new Vector2(0, 0.5f));
+        _bossLabel = Label(_bossBar.transform, "Страж глубины", 28, TextAnchor.MiddleCenter, new Vector2(0, -6), new Vector2(940, 40), new Vector2(0.5f, 1));
+        _bossBar.SetActive(false);
+
+        _biomeTitle = Label(_root, "", 72, TextAnchor.MiddleCenter, new Vector2(0, 120), new Vector2(1600, 100), new Vector2(0.5f, 0.5f));
+        _biomeSub = Label(_root, "", 32, TextAnchor.MiddleCenter, new Vector2(0, 40), new Vector2(1600, 60), new Vector2(0.5f, 0.5f));
 
         var goal = Box(_root, "goal", new Vector2(0, -28), new Vector2(720, 92), Panel, new Vector2(0.5f, 1));
         var fillBg = Box(goal, "goal_bg", new Vector2(0, 18), new Vector2(660, 16), new Color(1, 1, 1, 0.08f), new Vector2(0.5f, 0));
@@ -73,6 +96,26 @@ public sealed class RunUi : MonoBehaviour {
 
         _banner = Label(_root, "", 52, TextAnchor.MiddleCenter, new Vector2(0, 160), new Vector2(1400, 80), new Vector2(0.5f, 0.5f));
         _flash = Label(_root, "", 30, TextAnchor.MiddleCenter, new Vector2(0, 150), new Vector2(1400, 50), new Vector2(0.5f, 0));
+    }
+
+    private static string PhaseName(BossPhase p) {
+        switch (p) {
+            case BossPhase.Dormant: return "дремлет";
+            case BossPhase.Charge: return "таранит";
+            case BossPhase.Brood: return "выводок";
+            case BossPhase.Frenzy: return "ярость";
+            case BossPhase.Exposed: return "обнажён — поглотите!";
+            default: return "";
+        }
+    }
+
+    /// <summary>Карточка новой глубины: «Глубина 2 · Тёплые тоннели» + подзаголовок.</summary>
+    public void BiomeCard(int depth, string name, string subtitle, Color accent) {
+        _biomeTitle.text = "Глубина " + depth + " · " + name;
+        _biomeTitle.color = new Color(accent.r, accent.g, accent.b, 1f);
+        _biomeSub.text = subtitle;
+        _biomeSub.color = new Color(0.9f, 0.93f, 1f, 1f);
+        _biomeTimer = 3.2f;
     }
 
     public void Banner(string text, float seconds = 2.2f) { _banner.text = text; _bannerTimer = seconds; }
@@ -90,9 +133,29 @@ public sealed class RunUi : MonoBehaviour {
                 c.a = i < run.DashCharges ? 1f : 0.22f;
                 _dashDots[i].color = c;
             }
+            _combo.text = run.Combo != null && run.Combo.Chain >= 2 ? "Цепочка ×" + run.Combo.Chain : "";
+            var ids = run.Mutations.ToArray();
+            if (ids.Length > 0) {
+                var sbm = new System.Text.StringBuilder();
+                for (int i = 0; i < ids.Length; i++) {
+                    var d = MutationCatalog.Get(ids[i]);
+                    if (i > 0) sbm.Append(" · ");
+                    sbm.Append(d != null ? d.Name : ids[i]);
+                }
+                _mutations.text = sbm.ToString();
+            } else _mutations.text = "";
+            var boss = run.Boss;
+            _bossBar.SetActive(boss != null && !run.ExitOpen);
+            if (boss != null) {
+                float f = Mathf.Clamp01((float)(boss.Mass / System.Math.Max(0.01, boss.StartMass)));
+                _bossFill.sizeDelta = new Vector2(Mathf.Max(18f, 940f * f), 18f);
+                _bossLabel.text = "Страж глубины — " + PhaseName(boss.Phase);
+            }
             if (run.Room != null) {
-                _depth.text = string.Format("Глубина {0} · комната {1}/{2}", run.Depth,
-                    Mathf.Clamp(run.RoomIndex + 1, 1, RunState.RoomsPerDepth), RunState.RoomsPerDepth);
+                bool evap = run.Layout != null && run.Layout.Biome != null && run.Layout.Biome.EvaporationPerSec > 0;
+                _depth.text = string.Format("Глубина {0} · комната {1}/{2}{3}", run.Depth,
+                    Mathf.Clamp(run.RoomIndex + 1, 1, RunState.RoomsPerDepth), RunState.RoomsPerDepth,
+                    evap ? " · жар" : "");
                 float goal = (float)System.Math.Max(0.01, run.Room.GoalMass);
                 float frac = Mathf.Clamp01((float)run.RoomAbsorbed / goal);
                 _goalFill.rectTransform.sizeDelta = new Vector2(Mathf.Max(16f, 660f * frac), 16f);
@@ -103,6 +166,8 @@ public sealed class RunUi : MonoBehaviour {
             }
         }
         Fade(_banner, ref _bannerTimer);
+        Fade(_biomeTitle, ref _biomeTimer);
+        var bc = _biomeSub.color; bc.a = _biomeTitle.color.a; _biomeSub.color = bc;
         Fade(_flash, ref _flashTimer);
     }
 
@@ -175,6 +240,8 @@ public sealed class RunUi : MonoBehaviour {
         sb.AppendLine(string.Format("Глубина: {0}   Комнат пройдено: {1}", im.DepthReached, im.RoomsCleared));
         sb.AppendLine(string.Format("Поглощено существ: {0}   Новых видов: {1}", im.Absorbed, im.NewSpecies));
         sb.AppendLine(string.Format("Пик массы: {0:0.0}   Лучший удар: {1:0.00}", im.PeakMass, im.BestHit));
+        sb.AppendLine(string.Format("Биом: {0}   Лучшая цепочка: ×{1}", im.BiomeReached ?? "—", im.BestCombo));
+        if (im.WardenSlain) sb.AppendLine("Страж глубины повержен!");
         if (im.Mutations != null && im.Mutations.Length > 0) {
             var names = new List<string>();
             foreach (var id in im.Mutations) { var d = MutationCatalog.Get(id); names.Add(d != null ? d.Name : id); }
@@ -201,6 +268,86 @@ public sealed class RunUi : MonoBehaviour {
                 ? string.Format("{0}\nур. {1} (макс.)", names[i], lvl)
                 : string.Format("{0}\nур. {1} → {2}   цена {3:0}", names[i], lvl, lvl + 1, SoulMeta.UpgradeCost(lvl));
         }
+    }
+
+    // ---------- Титул ----------
+    private void BuildTitle() {
+        _titleModal = FullScreen("title_modal");
+        _titleModal.GetComponent<Image>().color = new Color(0f, 0.01f, 0.03f, 0.72f);
+        var t = Label(_titleModal.transform, "ПАМЯТЬ МАТЕРИИ", 110, TextAnchor.MiddleCenter, new Vector2(0, 280), new Vector2(1800, 140), new Vector2(0.5f, 0.5f));
+        t.color = GameBootstrap.COutline;
+        Label(_titleModal.transform, "Ты — капля живой материи на дне тёмной пещеры.\nЕшь меньших. Бойся больших. Умри — и вернись сильнее.",
+            34, TextAnchor.MiddleCenter, new Vector2(0, 150), new Vector2(1600, 110), new Vector2(0.5f, 0.5f));
+        _titleSoul = Label(_titleModal.transform, "", 28, TextAnchor.MiddleCenter, new Vector2(0, 60), new Vector2(1600, 50), new Vector2(0.5f, 0.5f));
+        _titleSoul.color = GameBootstrap.CSoul;
+        var play = Button(_titleModal.transform, "play", new Vector2(0, -70), new Vector2(620, 130), GameBootstrap.CFood, 0.92f, "НАЧАТЬ ЖИЗНЬ", 44);
+        play.GetComponent<Button>().onClick.AddListener(() => {
+            _titleModal.SetActive(false);
+            PM.Systems.Input.PullGestureInput.Blocked = false;
+            Banner("Тяните ПРОТИВ движения и отпустите", 3f);
+        });
+        var how = Button(_titleModal.transform, "how", new Vector2(-330, -230), new Vector2(560, 100), GameBootstrap.CSlime, 0.55f, "Как играть", 34);
+        how.GetComponent<Button>().onClick.AddListener(() => ShowInfo("Как играть", HowToPlay()));
+        var best = Button(_titleModal.transform, "bestiary", new Vector2(330, -230), new Vector2(560, 100), GameBootstrap.CSoul, 0.55f, "Бестиарий", 34);
+        best.GetComponent<Button>().onClick.AddListener(() => ShowInfo("Бестиарий", BestiaryText()));
+        _titleModal.SetActive(false);
+    }
+
+    public void ShowTitle() {
+        var m = _game.Meta;
+        _titleSoul.text = m.Runs > 0
+            ? string.Format("Прожито жизней: {0}   Глубочайшая: {1}   Эссенция души: {2:0}", m.Runs, m.BestDepth, m.Essence)
+            : "Первая жизнь. Душа ещё ничего не помнит.";
+        _titleModal.SetActive(true);
+        PM.Systems.Input.PullGestureInput.Blocked = true;
+    }
+
+    private void BuildInfo() {
+        _infoModal = FullScreen("info_modal");
+        var box = Box(_infoModal.transform, "info", Vector2.zero, new Vector2(1500, 900), Modal, new Vector2(0.5f, 0.5f));
+        _infoTitle = Label(box, "", 48, TextAnchor.MiddleCenter, new Vector2(0, 390), new Vector2(1400, 70), new Vector2(0.5f, 0.5f));
+        _infoTitle.color = GameBootstrap.COutline;
+        _infoBody = Label(box, "", 27, TextAnchor.UpperLeft, new Vector2(0, -20), new Vector2(1380, 690), new Vector2(0.5f, 0.5f));
+        var back = Button(box, "back", new Vector2(0, -390), new Vector2(420, 90), GameBootstrap.CSlime, 0.7f, "Назад", 34);
+        back.GetComponent<Button>().onClick.AddListener(() => _infoModal.SetActive(false));
+        _infoModal.SetActive(false);
+    }
+
+    private void ShowInfo(string title, string body) {
+        _infoTitle.text = title;
+        _infoBody.text = body;
+        _infoModal.SetActive(true);
+        _infoModal.transform.SetAsLastSibling();
+    }
+
+    private static string HowToPlay() {
+        return "• Коснитесь экрана, оттяните палец ПРОТИВ нужного направления и отпустите — рывок.\n" +
+               "• Кто меньше вас — поглощается касанием. Кто больше — ранит. Сильный удар отрывает массу.\n" +
+               "• Масса — это всё: здоровье, размер, сила удара. Рывок стоит капли массы.\n" +
+               "• Поглотите достаточно — откроется светящийся выход. 5 глубин по 3 комнаты, на дне — Страж.\n" +
+               "• Рост массы даёт мутацию: выберите одну из трёх. Гены съеденных видов попадают в выбор.\n" +
+               "• Отскакивайте от колонн и грибов: рикошет разгоняет, а броню пробивает только скорость.\n" +
+               "• Несколько поглощений за один рывок — цепочка: каждое следующее даёт больше массы.\n" +
+               "• Святилище дарит мутацию, родник восстанавливает массу. Шипы и жар — берегитесь.\n" +
+               "• После смерти эссенция души усиливает следующие жизни. Душа, что убила вас, — запомнит.";
+    }
+
+    private string BestiaryText() {
+        var seen = _game.Meta.SeenSpecies;
+        var sb = new System.Text.StringBuilder();
+        int known = 0;
+        foreach (var sp in SpeciesCatalog.All()) {
+            if (sp.Id == "spore") continue;
+            if (seen != null && seen.Contains(sp.Id)) {
+                known++;
+                var gene = string.IsNullOrEmpty(sp.GeneMutationId) ? null : MutationCatalog.Get(sp.GeneMutationId);
+                sb.Append("• ").Append(sp.Name);
+                if (gene != null) sb.Append(" (ген: ").Append(gene.Name).Append(")");
+                sb.Append(" — ").AppendLine(Bestiary.Describe(sp.Id));
+            } else sb.AppendLine("• ??? — ещё не поглощён");
+        }
+        sb.Insert(0, string.Format("Изучено видов: {0}\n\n", known));
+        return sb.ToString();
     }
 
     // ---------- Строители ----------

@@ -15,6 +15,9 @@ public sealed class RunCreature : MonoBehaviour {
     public CreatureBrain Brain;
     public readonly MutationSet Mutations = new MutationSet();
     public SimEntityView2D View;
+    public SpeciesTraits Traits;      // броня, деление, пиявка, свечение (v0.5)
+    public bool IsBoss;               // Страж глубины: масса и фазы — в RunState.Boss
+    public SpriteRenderer EchoDot;    // метка эхолокации поверх тьмы (m_echo)
     public bool IsFood => Species == null || Species.Behavior == CreatureBehavior.Food;
     /// <summary>Источник урона для «Отпечатка жизни»: имя души или id вида.</summary>
     public string SourceId => IsNemesis || !string.IsNullOrEmpty(SoulName) ? SoulName : Species?.Id;

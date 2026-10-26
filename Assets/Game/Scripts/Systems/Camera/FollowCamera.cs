@@ -9,6 +9,13 @@ namespace PM.Systems.CameraRig {
 public sealed class FollowCamera : MonoBehaviour {
     public Transform Target;
     public float AimBias = 1.6f;
+    /// <summary>v0.5: множитель кадрирования (растёт с массой героя) и смещение тряски — задаёт GameFeel.</summary>
+    public static float ZoomMult = 1f;
+    public static Vector2 ShakeOffset;
+    /// <summary>Мгновенно перенести камеру к цели (смена комнаты — без «проезда» через полкарты).</summary>
+    public static bool Snap;
+    private Vector3 _smoothPos;
+    private bool _hasPos;
     public const float BackDistance = -10f; // мир живёт на z=0, камера обязана отойти
 
     private Camera _cam;
@@ -23,7 +30,8 @@ public sealed class FollowCamera : MonoBehaviour {
     void LateUpdate() {
         if (_cam == null) return;
         float aspect = (float)Screen.width / (float)System.Math.Max(1, Screen.height);
-        _cam.orthographicSize = (float)PM.Domain.Core.OrthoFraming.ComputeOrthoSize(aspect);
+        float target = (float)PM.Domain.Core.OrthoFraming.ComputeOrthoSize(aspect) * ZoomMult;
+        _cam.orthographicSize = Mathf.Lerp(_cam.orthographicSize, target, 1f - Mathf.Exp(-3f * Time.unscaledDeltaTime));
         if (Target == null) return;
         var bias = Vector3.zero;
         var input = PullGestureInput.Instance;
@@ -33,7 +41,10 @@ public sealed class FollowCamera : MonoBehaviour {
                    AimBias * (float)input.Charge01;
         }
         var p = Target.position + bias;
-        transform.position = new Vector3(p.x, p.y, BackDistance);
+        // мягкое следование: камера «плывёт» за героем, а не прилипает к нему
+        if (!_hasPos || Snap) { _smoothPos = p; _hasPos = true; Snap = false; }
+        _smoothPos = Vector3.Lerp(_smoothPos, p, 1f - Mathf.Exp(-9f * Time.unscaledDeltaTime));
+        transform.position = new Vector3(_smoothPos.x + ShakeOffset.x, _smoothPos.y + ShakeOffset.y, BackDistance);
     }
 }
 }
