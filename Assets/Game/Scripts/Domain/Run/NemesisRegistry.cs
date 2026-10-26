@@ -65,6 +65,24 @@ public sealed class NemesisRegistry {
         return playerMass * (1.1 + 0.15 * level);
     }
 
+    /// <summary>Запись немезиды по имени; null, если такой души нет. Для мести и возврата мутации.</summary>
+    public NemesisRecord FindRecord(string soulName) => Find(soulName);
+
+    /// <summary>
+    /// Эссенция мести: немезида убивала вас KillsOfPlayer раз — за её поглощение вы получаете
+    /// 5 × KillsOfPlayer эссенции (награда за реванш). 0, если душа вас не убивала.
+    /// </summary>
+    public static double VengeanceEssence(NemesisRecord r) {
+        if (r == null || r.KillsOfPlayer <= 0) return 0.0;
+        return 5.0 * r.KillsOfPlayer;
+    }
+
+    /// <summary>Мутация, украденная немезидой у игрока. При мести можно вернуть её (один стак на забег).</summary>
+    public static string ReclaimableMutation(NemesisRecord r) {
+        if (r == null || string.IsNullOrEmpty(r.StolenMutation)) return null;
+        return r.StolenMutation;
+    }
+
     private NemesisRecord Find(string soulName) {
         if (soulName == null) return null;
         for (int i = 0; i < Records.Count; i++)

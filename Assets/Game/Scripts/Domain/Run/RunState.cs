@@ -92,6 +92,8 @@ public sealed class RunState {
     public ICollection<string> KnownSpecies => _known;
     /// <summary>Что дало последнее поглощение (для всплывающих «+2 Хитин»).</summary>
     public CostItem[] LastYield { get; private set; } = new CostItem[0];
+    /// <summary>Мутация, возвращённая из немезиды при мести (для всплывающего «Возвращено: Шипы»); null, если не было.</summary>
+    public string LastReclaimedMutation { get; private set; }
     public double LightRadius => Mutations.LightRadius + (Evolution != null ? Evolution.Sum(EvoEffectKind.LightFlat) : 0);
     public double PullBonus => Evolution != null ? Evolution.Sum(EvoEffectKind.PullFlat) : 0;
     public double DashSpeedMult => Mutations.DashSpeedMult * (1.0 + (Evolution != null ? Evolution.Sum(EvoEffectKind.DashSpeedMult) : 0));
@@ -186,7 +188,22 @@ public sealed class RunState {
         } else if (IsNemesisName(speciesId)) {
             _absorbedCount++;
             _nemesisAbsorbedCount++;
-            if (_meta.Nemeses != null) _meta.Nemeses.OnSoulAbsorbed(speciesId);
+            LastReclaimedMutation = null;
+            if (_meta.Nemeses != null) {
+                // v0.10: Месть — за поглощение души, убивавшей вас, вы получаете бонус-эссенцию
+                // и возвращаете украденную мутацию (один стак на забег, если место есть).
+                var rec = _meta.Nemeses.FindRecord(speciesId);
+                double vengeance = NemesisRegistry.VengeanceEssence(rec);
+                if (vengeance > 0.0) {
+                    _bonusEssence += vengeance;
+                    string reclaim = NemesisRegistry.ReclaimableMutation(rec);
+                    if (!string.IsNullOrEmpty(reclaim) && Mutations.CanAdd(reclaim)) {
+                        Mutations.Add(reclaim);
+                        LastReclaimedMutation = reclaim;
+                    }
+                }
+                _meta.Nemeses.OnSoulAbsorbed(speciesId);
+            }
         }
         SyncOffers();
         return bonus;

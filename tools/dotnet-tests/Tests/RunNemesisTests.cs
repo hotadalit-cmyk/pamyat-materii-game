@@ -124,5 +124,83 @@ public static class RunNemesisTests {
         var stolen = new NemesisRecord { Level = 3, StolenMutation = "m_spikes" };
         Eq(6.2, NemesisRegistry.NemesisMass(stolen, 4.0), "lvl 3: 4.0 × 1.55 (кража не влияет)");
     }
+
+    // ---------- v0.10: Месть — за душу, убивавшую игрока ----------
+
+    public static void VengeanceEssence_ZeroForHarmlessNemesis() {
+        Eq(0.0, NemesisRegistry.VengeanceEssence(null), "null-запись безопасна");
+        Eq(0.0, NemesisRegistry.VengeanceEssence(new NemesisRecord { Level = 5, KillsOfPlayer = 0 }),
+            "душа, не убивавшая вас, мести не стоит");
+    }
+
+    public static void VengeanceEssence_ScalesWithKills() {
+        var k1 = new NemesisRecord { SoulName = "Тлен", Level = 1, KillsOfPlayer = 1 };
+        Eq(5.0, NemesisRegistry.VengeanceEssence(k1), "одно убийство → 5 эссенции");
+        var k2 = new NemesisRecord { SoulName = "Эхо", Level = 2, KillsOfPlayer = 2 };
+        Eq(10.0, NemesisRegistry.VengeanceEssence(k2), "два убийства → 10");
+        var k5 = new NemesisRecord { SoulName = "Искра", Level = 5, KillsOfPlayer = 5 };
+        Eq(25.0, NemesisRegistry.VengeanceEssence(k5), "пять убийств → 25");
+    }
+
+    public static void ReclaimableMutation_ReturnsStolenOrNull() {
+        True(NemesisRegistry.ReclaimableMutation(null) == null, "null-запись безопасна");
+        True(NemesisRegistry.ReclaimableMutation(new NemesisRecord { StolenMutation = null }) == null,
+            "пустая кража возвращает null");
+        Eq("m_eyes", NemesisRegistry.ReclaimableMutation(new NemesisRecord { StolenMutation = "m_eyes" }),
+            "украденная мутация возвращается");
+    }
+
+    public static void FindRecord_ReturnsRecordByName() {
+        var reg = new NemesisRegistry();
+        True(reg.FindRecord("Тлен") == null, "пустой реестр → null");
+        reg.Records.Add(new NemesisRecord { SoulName = "Тлен", Level = 2 });
+        var rec = reg.FindRecord("Тлен");
+        True(rec != null, "запись найдена");
+        Eq("Тлен", rec.SoulName, "имя совпадает");
+        True(reg.FindRecord("никто") == null, "неизвестное имя → null");
+    }
+
+    public static void RunState_Vengeance_NoBonusIfNemesisNeverKilled() {
+        var meta = new SoulMeta();
+        meta.Nemeses.Records.Add(new NemesisRecord { SoulName = "Тлен", Level = 3, KillsOfPlayer = 0 });
+        var st = new RunState(meta, 61UL);
+        st.OnAbsorb("Тлен", 3.0);
+        Eq(7.0, st.Mass, "масса немезиды усвоена (без бонус-массы мести)");
+        True(st.LastReclaimedMutation == null, "возвращать нечего — кражи не было");
+        var imprint = st.Finish();
+        Eq(15.5, imprint.EssenceEarned, "базовая награда 0.5 + 15 за душу, мести нет");
+    }
+
+    public static void RunState_Vengeance_BonusEssenceAndReclaim() {
+        var meta = new SoulMeta();
+        meta.Nemeses.Records.Add(new NemesisRecord {
+            SoulName = "Искра", Level = 2, KillsOfPlayer = 3, StolenMutation = "m_spikes"
+        });
+        var st = new RunState(meta, 71UL);
+        // Игрок ещё не имеет m_spikes — возвращаемое место есть.
+        st.OnAbsorb("Искра", 3.0);
+        Eq(1, st.Mutations.Stacks("m_spikes"), "мутация m_spikes возвращена из немезиды");
+        Eq("m_spikes", st.LastReclaimedMutation, "поле LastReclaimedMutation заполнено");
+        // Искра убивала 3 раза → 5×3 = 15 эссенции мести
+        var imprint = st.Finish();
+        Eq(30.5, imprint.EssenceEarned, "0.5 (поглощение) + 15 (душа) + 15 (месть за 3 убийства)");
+        True(meta.Nemeses.Records[0].Defeated, "душа повержена");
+    }
+
+    public static void RunState_Vengeance_NoReclaimIfStacksFull() {
+        var meta = new SoulMeta();
+        meta.Nemeses.Records.Add(new NemesisRecord {
+            SoulName = "Осколок", Level = 2, KillsOfPlayer = 2, StolenMutation = "m_eyes"
+        });
+        var st = new RunState(meta, 79UL);
+        // Заполняем m_eyes до предела (3 стака).
+        st.Mutations.Add("m_eyes"); st.Mutations.Add("m_eyes"); st.Mutations.Add("m_eyes");
+        int beforeStacks = st.Mutations.Stacks("m_eyes");
+        st.OnAbsorb("Осколок", 3.0);
+        Eq(beforeStacks, st.Mutations.Stacks("m_eyes"), "стаков больше нет — мутация не добавлена");
+        True(st.LastReclaimedMutation == null, "LastReclaimedMutation пусто: места не было");
+        // Бонус-эссенция мести всё равно зачисляется.
+        Eq(25.5, st.Finish().EssenceEarned, "0.5 + 15 (душа) + 10 (месть за 2 убийства)");
+    }
 }
 }
