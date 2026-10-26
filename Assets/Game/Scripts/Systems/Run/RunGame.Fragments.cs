@@ -60,6 +60,12 @@ public sealed partial class RunGame {
         relay.FragmentId = id;
         v.transform.position = new Vector3(pos.x, pos.y, 0);
         v.Rb.position = pos;
+        // v0.10: капля — объёмная модель как на заставке; плоское тело остаётся мягким ореолом
+        var hero = ThirdPartyArt.AttachLook(v.transform, "hero", baseR * 2f, default, 1.7f);
+        if (hero != null) {
+            var bc = v.Body.color; bc.a = 0.28f; v.Body.color = bc;
+            if (v.Core != null) v.Core.enabled = false;
+        }
         var fv = new FragView { Id = id, View = v, BaseRadius = baseR };
         // у каждого фрагмента свой огонёк — видно его и в темноте
         fv.Glow = SpriteUtil.AddSprite(v.transform, SpriteUtil.GlowSprite, baseR * 4.5f, baseR * 4.5f,

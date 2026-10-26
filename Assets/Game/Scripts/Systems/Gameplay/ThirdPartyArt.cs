@@ -75,10 +75,11 @@ public static class ThirdPartyArt {
 
     // ---------- 3D-монстры (Quaternius) ----------
     private static readonly Dictionary<string, string> MonsterFor = new Dictionary<string, string> {
-        { "mite", "Bee" }, { "beetle", "Crab" }, { "glowworm", "Ghost" }, { "spikeback", "Cactus" },
-        { "jelly", "Q_Slime" }, { "crystal_mite", "Cyclops" }, { "soul_slime", "Alien" }, { "ember_beetle", "Demon" },
-        { "salamander", "Q_Dragon" }, { "leech", "Skull" }, { "bubble_jelly", "Q_Slime" }, { "shard_crab", "Crab" },
-        { "wisp", "Ghost" }, { "warden", "Cthulhu" }, { "nemesis", "GreenDemon" },
+        // v0.10: подобраны под портреты энциклопедии (членистоногие — краб, светлячок — летун, души — призрак)
+        { "mite", "Crab" }, { "beetle", "Crab" }, { "glowworm", "Bee" }, { "spikeback", "Cactus" },
+        { "jelly", "Q_Slime" }, { "crystal_mite", "Cyclops" }, { "soul_slime", "Ghost" }, { "ember_beetle", "Demon" },
+        { "salamander", "Q_Dragon" }, { "leech", "Q_Slime" }, { "bubble_jelly", "Q_Slime" }, { "shard_crab", "Crab" },
+        { "wisp", "Ghost" }, { "warden", "Cthulhu" }, { "nemesis", "GreenDemon" }, { "hero", "Q_Slime" },
     };
     private static readonly Dictionary<string, GameObject> _prefabs = new Dictionary<string, GameObject>();
     private static readonly Dictionary<string, float> _footprint = new Dictionary<string, float>();
@@ -96,7 +97,33 @@ public static class ThirdPartyArt {
     /// Посадить 3D-модель на существо. Вид 3/4 сверху (наклон к камере), модель «смотрит» по движению.
     /// diameter — диаметр тела (мир. ед.); модель вписывается в ~2.1× этого диаметра.
     /// </summary>
-    public static MonsterModel Attach(Transform creature, string speciesId, float diameter, Color tint, bool tinted) {
+    /// <summary>Облик вида: цвет как на портрете и сила окраски (0 — родная текстура модели, 1 — сплошной цвет).</summary>
+    private static readonly Dictionary<string, (Color c, float k)> Look = new Dictionary<string, (Color, float)> {
+        { "mite", (new Color(1f, 0.7f, 0.25f), 0.55f) },          // янтарный пугливый клещ
+        { "beetle", (new Color(0.62f, 0.4f, 0.22f), 0.6f) },      // бронзовый жук
+        { "glowworm", (new Color(0.78f, 1f, 0.3f), 0.5f) },       // жёлто-зелёный светлячок
+        { "spikeback", (new Color(1f, 0.5f, 0.2f), 0.45f) },      // рыжий шипастик
+        { "jelly", (new Color(0.95f, 0.5f, 0.9f), 0.75f) },       // розово-фиолетовая медуза
+        { "crystal_mite", (new Color(0.3f, 0.95f, 0.9f), 0.55f) },// бирюзовые кристаллы
+        { "soul_slime", (new Color(0.65f, 0.45f, 1f), 0.6f) },    // фиолетовый призрак-двойник
+        { "ember_beetle", (new Color(1f, 0.45f, 0.15f), 0.4f) },  // раскалённый лоб
+        { "salamander", (new Color(1f, 0.35f, 0.15f), 0.6f) },    // огненная охотница
+        { "leech", (new Color(0.35f, 0.1f, 0.15f), 0.8f) },       // тёмная пиявка
+        { "bubble_jelly", (new Color(0.45f, 0.75f, 1f), 0.75f) }, // голубая пузыремедуза
+        { "shard_crab", (new Color(0.62f, 0.9f, 1f), 0.55f) },    // стеклянные осколки
+        { "wisp", (new Color(0.4f, 0.7f, 1f), 0.65f) },           // голубой огонёк
+        { "warden", (new Color(0.6f, 0.25f, 0.2f), 0.35f) },      // каменно-багровый страж
+        { "hero", (new Color(0.3f, 0.78f, 1f), 0.85f) },          // наша капля — как на заставке
+    };
+
+    /// <summary>Посадить модель вида с его обликом из таблицы (для души-немезиды — свой цвет).</summary>
+    public static MonsterModel AttachLook(Transform creature, string speciesId, float diameter, Color nemesisTint = default, float fit = 2.1f) {
+        if (Look.TryGetValue(speciesId, out var l)) return Attach(creature, speciesId, diameter, l.c, true, l.k, fit);
+        return Attach(creature, speciesId, diameter, nemesisTint, nemesisTint.a > 0f, 0.55f, fit);
+    }
+
+    public static MonsterModel Attach(Transform creature, string speciesId, float diameter, Color tint, bool tinted,
+                                      float tintStrength = 0.55f, float fit = 2.1f) {
         if (!MonsterFor.TryGetValue(speciesId, out var model)) return null;
         var prefab = Prefab(model);
         if (prefab == null) return null;
@@ -121,14 +148,14 @@ public static class ThirdPartyArt {
         var mat = Resources.Load<Material>("Monsters/Materials/" + model);
         foreach (var r in inst.GetComponentsInChildren<Renderer>()) {
             if (mat != null) { var arr = r.sharedMaterials; for (int i = 0; i < arr.Length; i++) arr[i] = mat; r.sharedMaterials = arr; }
-            if (tinted) foreach (var m in r.materials) m.color = Color.Lerp(m.color, tint, 0.55f);
+            if (tinted) foreach (var m in r.materials) m.color = Color.Lerp(m.color, tint, tintStrength);
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             r.receiveShadows = false;
             if (r is SkinnedMeshRenderer smr) smr.updateWhenOffscreen = true; // рамка скин-меша в см — без этого телефон отсекает модель
         }
         float fp = _footprint[model];
         // масштаб — на своём узле: клипы FBX анимируют корень модели (позиция/масштаб) и перезаписали бы его
-        float scale = diameter * 2.1f / fp;
+        float scale = diameter * fit / fp;
         yaw.localScale = new Vector3(scale, scale, scale);
         var animator = inst.GetComponentInChildren<Animator>();
         if (animator == null) animator = inst.AddComponent<Animator>();

@@ -40,6 +40,11 @@ public sealed class RunUi : MonoBehaviour {
     private RunSettingsUi _settings;
     private RunCodexUi _codex;
     public RunCodexUi Codex => _codex;
+    public RunEvolutionUi Evo => _evo;
+    public Transform Root => _root;
+    public RectTransform DashRt => _skDash != null ? _skDash.Rt : null;
+    public RectTransform SplitRt => _skSplit != null ? _skSplit.Rt : null;
+    public RectTransform GatherRt => _skGather != null ? _skGather.Rt : null;
     // умения справа внизу и круглые кнопки сверху (раскладка в духе MOBA, v0.9)
     private SkillButton _skDash, _skSplit, _skGather, _skSoul, _skMenu, _skBook;
     private GameObject _pauseModal;
@@ -282,7 +287,11 @@ public sealed class RunUi : MonoBehaviour {
     }
 
     /// <summary>Обучающая подсказка — показывается, только если подсказки включены в настройках.</summary>
-    public void Hint(string text, float seconds = 3f) { if (GameSettings.Hints) Flash(text, seconds); }
+    public void Hint(string text, float seconds = 3f) {
+        if (!GameSettings.Hints) return;
+        if (RunTutorial.Instance != null && RunTutorial.Instance.Active) return;   // обучение говорит само
+        Flash(text, seconds);
+    }
 
     /// <summary>Кнопки деления под большой палец: справа (по умолчанию) или слева.</summary>
     public void ApplyHandedness() {

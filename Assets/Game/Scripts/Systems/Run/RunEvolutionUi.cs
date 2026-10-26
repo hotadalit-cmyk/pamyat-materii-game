@@ -42,6 +42,8 @@ public sealed class RunEvolutionUi : MonoBehaviour {
     private string _expanded;
     private float _hudTimer;
 
+    public bool EvolutionOpen => _evoModal != null && _evoModal.activeSelf;
+    public RectTransform EvoButtonRt => _evoBtn != null ? _evoBtn.Rt : null;
     public bool ModalOpen => (_evoModal != null && _evoModal.activeSelf) || (_statsModal != null && _statsModal.activeSelf);
 
     public static RunEvolutionUi Build(Transform canvas, RunGame game) {

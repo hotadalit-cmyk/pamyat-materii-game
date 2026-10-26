@@ -137,6 +137,11 @@ public sealed class RunSettingsUi : MonoBehaviour {
         // служебное
         var defaults = Btn(_rows, "Сбросить настройки", new Vector2(0, y - 20), new Vector2(440, 84), GameBootstrap.CSlime, new Vector2(0, 1));
         defaults.onClick.AddListener(() => { GameSettings.ResetDefaults(); Rebuild(); });
+        var tut = Btn(_rows, "Обучение заново", new Vector2(1080, y - 20), new Vector2(340, 84), GameBootstrap.CSoul, new Vector2(0, 1));
+        tut.onClick.AddListener(() => {
+            RunTutorial.ResetProgress();
+            tut.GetComponentInChildren<Text>().text = "Со следующей жизни";
+        });
         var reset = Btn(_rows, "Сбросить прогресс души", new Vector2(480, y - 20), new Vector2(560, 84), GameBootstrap.CDanger, new Vector2(0, 1));
         _resetLabel = reset.GetComponentInChildren<Text>();
         reset.onClick.AddListener(() => {

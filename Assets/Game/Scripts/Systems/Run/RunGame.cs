@@ -28,7 +28,29 @@ public sealed partial class RunGame : MonoBehaviour {
     public RunState Run { get; private set; }
     public bool InRun => Run != null && !_ended;
     public bool UiModalOpen => _ui != null && _ui.ModalOpen;
+    // для обучения: где капля, где нужные кнопки, открыта ли эволюция
     public Vector2 PlayerPosition => _player != null ? (Vector2)_player.transform.position : Vector2.zero;
+    public bool UiEvolutionOpen => _ui != null && _ui.Evo != null && _ui.Evo.EvolutionOpen;
+    public RectTransform UiEvolutionButton => _ui != null && _ui.Evo != null ? _ui.Evo.EvoButtonRt : null;
+    public RectTransform UiDashButton => _ui != null ? _ui.DashRt : null;
+    public RectTransform UiSplitButton => _ui != null ? _ui.SplitRt : null;
+    public RectTransform UiGatherButton => _ui != null ? _ui.GatherRt : null;
+
+    /// <summary>Ближайшая к капле цель для стрелки обучения: спора (food) или существо, которое можно съесть.</summary>
+    public Vector3? TutorialTarget(bool food) {
+        if (_player == null || Run == null) return null;
+        Vector2 p = _player.Rb.position;
+        double m = Run.Fragments.Count > 0 ? Run.Fragments[0].Mass : Run.Mass;
+        RunCreature best = null; float bd = 14f;
+        for (int i = 0; i < _creatures.Count; i++) {
+            var c = _creatures[i];
+            if (c == null || c.IsBoss || !c.gameObject.activeSelf || c.IsFood != food) continue;
+            if (!food && m < c.Mass * Run.Mutations.AbsorbRatio) continue;
+            float d = Vector2.Distance(p, c.View.Rb.position);
+            if (d < bd) { bd = d; best = c; }
+        }
+        return best != null ? best.transform.position : (Vector3?)null;
+    }
 
     private SimEntityView2D _player;
     private PhysicsMaterial2D _playerMat;
@@ -83,6 +105,7 @@ public sealed partial class RunGame : MonoBehaviour {
         SetupLightAndMusic();
         _dark = DarknessMask.Create(transform);
         _ui = RunUi.Build(this);
+        RunTutorial.Build(_ui.Root, this);
         // первая комната строится сразу — за титулом видна живая пещера
         StartNewRun();
         _ui.ShowTitle();
@@ -151,6 +174,7 @@ public sealed partial class RunGame : MonoBehaviour {
 
     /// <summary>Титул закрыт — показать карточку биома (за титулом её бы никто не увидел).</summary>
     public void OnTitleClosed() {
+        RunTutorial.Instance?.BeginIfNeeded();
         if (Run == null || Run.Room == null) return;
         var biome = Run.Layout != null ? Run.Layout.Biome : BiomeCatalog.ForDepth(Run.Depth);
         _ui.BiomeCard(Run.Depth, biome.Name, biome.Subtitle, RunWorldBuilder.Hex(biome.AccentColor), biome.Id.ToString().ToLowerInvariant());
@@ -388,8 +412,7 @@ public sealed partial class RunGame : MonoBehaviour {
         if (!food) {
             // 3D-модель вместо круга: объёмное существо с анимацией (вид 3/4 сверху)
             string modelKey = spec.IsNemesis ? "nemesis" : sp.Id;
-            bool tint = spec.IsNemesis || sp.Id == "bubble_jelly" || sp.Id == "shard_crab" || sp.Id == "leech" || sp.Id == "wisp";
-            var mm = ThirdPartyArt.Attach(view.transform, modelKey, r * 2f, ColorFor(sp, spec.IsNemesis), tint);
+            var mm = ThirdPartyArt.AttachLook(view.transform, modelKey, r * 2f, spec.IsNemesis ? ColorFor(sp, true) : default);
             if (mm != null) {
                 view.Body.gameObject.SetActive(false);
                 pendingModel = mm;
@@ -534,7 +557,8 @@ public sealed partial class RunGame : MonoBehaviour {
         _sinceDash = 0f;
         float speed = DashSpeed * (float)Run.DashSpeedMult * (float)charge;
         var impulse = new Vector2((float)dir.X, (float)dir.Y) * speed;
-        _player.Rb.linearVelocity += impulse; // v0.9: рывок — только у души; клоны живут сами
+        _player.Rb.linearVelocity += impulse;
+        RunTutorial.Instance?.Flow.OnDash(); // v0.9: рывок — только у души; клоны живут сами
         ProceduralSfx.Instance?.Play("jet");
         GameFeel.Shake(0.08f * (float)charge);
         // капля влаги остаётся позади — видно, что рывок стоит массы
@@ -793,6 +817,7 @@ public sealed partial class RunGame : MonoBehaviour {
             SplashBurst2D.Instance?.Burst(pos, Vector2.up, 8);
         }
         ProceduralSfx.Instance?.Play(c.IsFood ? "eat" : "capture");
+        RunTutorial.Instance?.Flow.OnAbsorb(c.IsFood);
         if (!c.IsNemesis) CodexOnAbsorb(c.Species != null ? c.Species.Id : null);
         KillCreature(c);
     }
