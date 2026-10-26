@@ -167,7 +167,7 @@ public sealed partial class RunGame {
         var pairs = Run.TrySplit();
         if (pairs.Count == 0) {
             _ui.Flash(Run.Fragments.Count >= FragmentSet.MaxFragments ? "Больше делиться нельзя" : "Слишком мало массы, чтобы разделиться");
-            ProceduralSfx.Instance?.Play("hit");
+            ProceduralSfx.Instance?.Play("deny");
             return;
         }
         _gathering = false;
@@ -183,7 +183,7 @@ public sealed partial class RunGame {
         }
         BindLead();
         ApplyPlayerSize();
-        ProceduralSfx.Instance?.Play("assist");
+        ProceduralSfx.Instance?.Play("split");
         GameFeel.Shake(0.15f);
         SplashBurst2D.Instance?.Burst(_player.transform.position, Vector2.up, 8);
         _ui.Flash(string.Format("Разделились: {0} фрагмента(ов)", Run.Fragments.Count), 1.6f);
@@ -194,7 +194,7 @@ public sealed partial class RunGame {
         _gathering = !_gathering;
         _gatherTimer = 0f;
         _ui.Flash(_gathering ? "Собираемся в одно целое…" : "Сбор отменён", 1.4f);
-        ProceduralSfx.Instance?.Play(_gathering ? "capture" : "hit");
+        ProceduralSfx.Instance?.Play(_gathering ? "merge" : "deny");
     }
 
     // ---------- Физика стаи ----------
@@ -214,7 +214,7 @@ public sealed partial class RunGame {
                 // касание в режиме сбора — слияние в ведущего
                 int keep = Run.Fragments.LeadId;
                 if (Run.MergeFragments(keep, fv.Id)) {
-                    ProceduralSfx.Instance?.Play("eat");
+                    ProceduralSfx.Instance?.Play("merge");
                     GameFeel.Text(lead, "Слияние", new Color(0.6f, 0.9f, 1f), 0.8f);
                     ShowDeposit(lead);
                     SyncFragments();
@@ -302,7 +302,7 @@ public sealed partial class RunGame {
                 RunEvolutionUi.Hex(ResourceInfo.Color(dep[i].Kind)), 0.8f);
         }
         _ui.Flash("Ноша сдана в хранилище: +" + total.ToString("0"), 1.6f);
-        ProceduralSfx.Instance?.Play("unlock");
+        ProceduralSfx.Instance?.Play("deposit");
     }
 
     // ---------- Выпавшая ноша ----------
@@ -347,7 +347,7 @@ public sealed partial class RunGame {
             bool lead = fv.Id == Run.Fragments.LeadId;
             GameFeel.Text(l.Pos, "+" + l.Amount.ToString("0.#") + " " + ResourceInfo.Name(l.Kind) + (lead ? "" : " (в ноше)"),
                 RunEvolutionUi.Hex(ResourceInfo.Color(l.Kind)), 0.8f);
-            ProceduralSfx.Instance?.Play("eat");
+            ProceduralSfx.Instance?.Play("pickup");
             if (l.Go != null) Destroy(l.Go);
             _loot.RemoveAt(i);
         }

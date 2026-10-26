@@ -15,6 +15,8 @@ public static class GameSettings {
     private const string P = "pm_set_";
     public static event System.Action Changed;
 
+    /// <summary>Громкость музыки и тревоги (0..1), отдельно от общей.</summary>
+    public static float MusicVolume { get => PlayerPrefs.GetFloat(P + "music", 0.7f); set { PlayerPrefs.SetFloat(P + "music", Mathf.Clamp01(value)); Apply(); } }
     public static float Volume { get => ProceduralSfx.CurrentVolume(); set { PlayerPrefs.SetFloat(ProceduralSfx.PrefKey, Mathf.Clamp01(value)); Apply(); } }
     public static bool Vibration { get => PlayerPrefs.GetInt(P + "vibro", 1) == 1; set { PlayerPrefs.SetInt(P + "vibro", value ? 1 : 0); Apply(); } }
     public static float Shake { get => PlayerPrefs.GetFloat(P + "shake", 1f); set { PlayerPrefs.SetFloat(P + "shake", value); Apply(); } }
@@ -40,7 +42,7 @@ public static class GameSettings {
     }
 
     public static void ResetDefaults() {
-        foreach (var k in new[] { "vibro", "shake", "drag", "zoom", "fps", "hints", "left", "joy" }) PlayerPrefs.DeleteKey(P + k);
+        foreach (var k in new[] { "vibro", "shake", "drag", "zoom", "fps", "hints", "left", "joy", "music" }) PlayerPrefs.DeleteKey(P + k);
         PlayerPrefs.SetFloat(ProceduralSfx.PrefKey, 0.8f);
         Apply();
     }
@@ -80,7 +82,7 @@ public sealed class RunSettingsUi : MonoBehaviour {
         mrt.anchorMin = Vector2.zero; mrt.anchorMax = Vector2.one;
         mrt.offsetMin = new Vector2(-200, -200); mrt.offsetMax = new Vector2(200, 200);
         _modal.AddComponent<Image>().color = new Color(0, 0, 0, 0.82f);
-        var box = Box(_modal.transform, new Vector2(1500, 1010), Modal);
+        var box = Box(_modal.transform, new Vector2(1500, 1060), Modal);
         Text(box, "НАСТРОЙКИ", 46, TextAnchor.MiddleLeft, new Vector2(40, -20), new Vector2(600, 60)).color = GameBootstrap.COutline;
         var close = Btn(box, "Закрыть", new Vector2(-24, -18), new Vector2(190, 74), GameBootstrap.CSlime, new Vector2(1, 1));
         close.onClick.AddListener(Close);
@@ -114,6 +116,8 @@ public sealed class RunSettingsUi : MonoBehaviour {
         float y = 0;
         Row(ref y, "Громкость", new[] { "0", "25", "50", "75", "100" }, Mathf.RoundToInt(GameSettings.Volume * 4f),
             i => GameSettings.Volume = i / 4f);
+        Row(ref y, "Музыка", new[] { "0", "25", "50", "75", "100" }, Mathf.RoundToInt(GameSettings.MusicVolume * 4f),
+            i => GameSettings.MusicVolume = i / 4f);
         Row(ref y, "Управление", new[] { "Оттянуть и отпустить", "Джойстик + рывок" }, GameSettings.Joystick ? 1 : 0,
             i => GameSettings.Joystick = i == 1);
         Row(ref y, "Вибрация", new[] { "Выкл", "Вкл" }, GameSettings.Vibration ? 1 : 0, i => GameSettings.Vibration = i == 1);
@@ -150,10 +154,10 @@ public sealed class RunSettingsUi : MonoBehaviour {
         float x = 480f, w = (1420f - 480f) / options.Length;
         for (int i = 0; i < options.Length; i++) {
             int idx = i;
-            var b = Btn(_rows, options[i], new Vector2(x + i * w, y - 6), new Vector2(w - 12, 72), i == selected ? On : Off, new Vector2(0, 1));
-            b.onClick.AddListener(() => { onPick(idx); ProceduralSfx.Instance?.Play("eat"); Rebuild(); });
+            var b = Btn(_rows, options[i], new Vector2(x + i * w, y - 6), new Vector2(w - 12, 68), i == selected ? On : Off, new Vector2(0, 1));
+            b.onClick.AddListener(() => { onPick(idx); ProceduralSfx.Instance?.Play("click"); Rebuild(); });
         }
-        y -= 84f;
+        y -= 80f;
     }
 
     // ---------- строители ----------

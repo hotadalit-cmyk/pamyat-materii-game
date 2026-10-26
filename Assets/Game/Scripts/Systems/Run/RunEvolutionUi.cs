@@ -314,9 +314,9 @@ public sealed class RunEvolutionUi : MonoBehaviour {
     private void TryBuy(bool free) {
         if (_selected == null) return;
         if (_game.TryEvolve(_selected, free)) {
-            ProceduralSfx.Instance?.Play("unlock");
+            ProceduralSfx.Instance?.Play("evolve");
             RefreshEvolution();
-        } else ProceduralSfx.Instance?.Play("hit");
+        } else ProceduralSfx.Instance?.Play("deny");
     }
 
     /// <summary>Иконка ресурса (game-icons.net, CC BY 3.0 — Lorc).</summary>

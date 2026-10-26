@@ -175,8 +175,8 @@ public sealed partial class RunGame : MonoBehaviour {
     public void UpgradeSoul(SoulStat stat) {
         if (Meta.TryUpgrade(stat)) {
             SaveMeta();
-            ProceduralSfx.Instance?.Play("unlock");
-        } else ProceduralSfx.Instance?.Play("hit");
+            ProceduralSfx.Instance?.Play("evolve");
+        } else ProceduralSfx.Instance?.Play("deny");
         _ui.RefreshSoul();
     }
 
@@ -209,6 +209,7 @@ public sealed partial class RunGame : MonoBehaviour {
         var plan = Run.Room;
         var layout = Run.Layout;
         var biome = layout != null ? layout.Biome : BiomeCatalog.ForDepth(plan.Depth);
+        if (biome != null) _audio?.SetBiome(biome.Id, Run.Boss != null);
         _builtRoomKey = plan.Depth * 100 + plan.RoomIndex;
         bool elite = layout != null && layout.Kind == RoomKind.Elite;
 
@@ -265,7 +266,7 @@ public sealed partial class RunGame : MonoBehaviour {
         var biome = layout != null && layout.Biome != null ? layout.Biome : BiomeCatalog.ForDepth(plan.Depth);
         _builtRoomKey = plan.Depth * 100 + plan.RoomIndex;
         _world = new WorldView(map, _roomRoot, biome, WallMaterial);
-        PlayMusicForDepth(plan.Depth);
+        _audio?.SetBiome(biome.Id, Run.Boss != null);
         if (Camera.main != null) Camera.main.backgroundColor = RunWorldBuilder.Hex(biome.WallColor) * 0.3f;
         for (int i = 0; i < map.Obstacles.Count; i++)
             _obstacles.Add(RunWorldBuilder.BuildObstacle(_roomRoot, map.Obstacles[i], biome));
@@ -333,7 +334,7 @@ public sealed partial class RunGame : MonoBehaviour {
             if (Run.IsAltarUsed(i) || Vector2.Distance(pPos, ToV2(altars[i].Pos)) > pr + 0.8f) continue;
             double before = Run.Mass;
             Run.UseAltarAt(i);
-            ProceduralSfx.Instance?.Play("unlock");
+            ProceduralSfx.Instance?.Play("altar");
             GameFeel.Shake(0.25f);
             if (altars[i].Kind == AltarKind.Spring)
                 GameFeel.Text(_player.transform.position, "+" + (Run.Mass - before).ToString("0.0") + " родник", new Color(0.5f, 0.85f, 1f), 1.2f);
@@ -518,7 +519,7 @@ public sealed partial class RunGame : MonoBehaviour {
         if (!InRun || _ui.ModalOpen) return;
         if (!Run.TryDash()) {
             _ui.Flash("Нет зарядов рывка — подождите");
-            ProceduralSfx.Instance?.Play("hit");
+            ProceduralSfx.Instance?.Play("deny");
             return;
         }
         _ricochets = 0;
@@ -564,6 +565,7 @@ public sealed partial class RunGame : MonoBehaviour {
         Vector2 at = _frags.TryGetValue(id, out var hv) ? hv.View.Rb.position : (Vector2)_player.transform.position;
         if (Run.OnMassLostAt(id, amount, source)) {
             _ui.Flash("Фрагмент растворился", 1.4f);
+            ProceduralSfx.Instance?.Play("dissolve");
             DropCarry(at);
             SyncFragments();
         }
@@ -592,12 +594,12 @@ public sealed partial class RunGame : MonoBehaviour {
                     GameFeel.Shake(0.35f);
                     GameFeel.HitStop(0.05f);
                     GameFeel.Text(o.transform.position, "Кристалл расколот!", new Color(0.6f, 0.95f, 1f));
-                    ProceduralSfx.Instance?.Play("unlock");
+                    ProceduralSfx.Instance?.Play("crystal");
                     SplashBurst2D.Instance?.Burst(o.transform.position, Vector2.up, 10);
                     for (int i = 0; i < 3; i++) SpawnDroplet(o.transform.position, 0.4, i * 2.1f);
                     _obstacles.Remove(o);
                     Destroy(o.gameObject);
-                } else ProceduralSfx.Instance?.Play("weaken");
+                } else ProceduralSfx.Instance?.Play("glass", 0.8f, 0f, 0.7f);
                 break;
             default:
                 if (rel > 4f) GameFeel.Shake(0.06f);
@@ -688,7 +690,7 @@ public sealed partial class RunGame : MonoBehaviour {
             if (boss.IsExposed) _ui.Banner("Страж обнажён — поглотите его!", 3f);
         } else if (rel > 1.5f) {
             GameFeel.Text(point, "Броня! Нужна скорость и рикошеты", new Color(0.7f, 0.85f, 1f), 0.8f);
-            ProceduralSfx.Instance?.Play("hit");
+            ProceduralSfx.Instance?.Play("glass", 0.9f, 0f, 0.45f);
         }
         // страж бьёт в ответ своей массой
         var res = SizeRule.Resolve(fragMass, Run.Mutations, boss.Mass, new MutationSet(), rel);
@@ -821,7 +823,7 @@ public sealed partial class RunGame : MonoBehaviour {
         // выход
         if (Run.ExitOpen && Vector2.Distance(pPos, ToV2(Run.Room.ExitPos)) <= ExitRadius + pr) {
             if (Run.TryEnterExit()) {
-                ProceduralSfx.Instance?.Play("unlock");
+                ProceduralSfx.Instance?.Play("portal");
                 if (Run.IsVictory) { EndRun(); return; }
                 BuildRoom();
             }
@@ -850,7 +852,7 @@ public sealed partial class RunGame : MonoBehaviour {
             _shockT = 0f;
             _shockRing.transform.position = rb.position;
             GameFeel.Shake(0.5f);
-            ProceduralSfx.Instance?.Play("death");
+            ProceduralSfx.Instance?.Play("shock");
             for (int f = 0; f < _fragList.Count; f++) {
                 var frb = _fragList[f].View.Rb;
                 Vector2 away = frb.position - rb.position;
@@ -914,7 +916,7 @@ public sealed partial class RunGame : MonoBehaviour {
         if (Vector2.Distance(pPos, ToV2(layout.AltarPos)) > pr + 0.8f) return;
         double before = Run.Mass;
         Run.UseAltar();
-        ProceduralSfx.Instance?.Play("unlock");
+        ProceduralSfx.Instance?.Play("altar");
         GameFeel.Shake(0.2f);
         if (layout.Kind == RoomKind.Spring)
             GameFeel.Text(_player.transform.position, "+" + (Run.Mass - before).ToString("0.0") + " родник", new Color(0.5f, 0.85f, 1f), 1.2f);
@@ -922,6 +924,7 @@ public sealed partial class RunGame : MonoBehaviour {
     }
 
     void Update() {
+        AudioStep();
         if (!InRun) return;
         if (!_ui.ModalOpen) Run.Tick(Time.deltaTime);
         ApplyPlayerSize();
@@ -933,7 +936,7 @@ public sealed partial class RunGame : MonoBehaviour {
         if (InRun) TwinGlowStep();
         if (Run.Evolution != null && Run.Evolution.FreeTokens > _lastTokens) {
             _ui.Banner("Жетон эволюции! Откройте «Эволюцию» и выберите путь", 3f);
-            ProceduralSfx.Instance?.Play("unlock");
+            ProceduralSfx.Instance?.Play("evolve");
         }
         if (Run.Evolution != null) _lastTokens = Run.Evolution.FreeTokens;
         if (_world != null) {
@@ -949,7 +952,7 @@ public sealed partial class RunGame : MonoBehaviour {
             GameFeel.CancelHitStop();
             Time.timeScale = 0f;
             PullGestureInput.Blocked = true;
-            ProceduralSfx.Instance?.Play("unlock");
+            ProceduralSfx.Instance?.Play("evolve");
             _ui.ShowOffer(Run.PendingOffer.Options, id => {
                 Run.ChooseMutation(id);
                 _offerShown = false;
@@ -978,8 +981,7 @@ public sealed partial class RunGame : MonoBehaviour {
         }
     }
 
-    private AudioSource _music;
-    private string _musicName;
+    private RunAudio _audio;
 
     /// <summary>Свет для 3D-моделей (тёплый, сверху-сбоку) и фоновая музыка пещеры.</summary>
     private void SetupLightAndMusic() {
@@ -993,21 +995,28 @@ public sealed partial class RunGame : MonoBehaviour {
         lightGo.transform.rotation = Quaternion.LookRotation(new Vector3(0.35f, -0.55f, 1f));
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
         RenderSettings.ambientLight = new Color(0.68f, 0.68f, 0.78f);
-        _music = gameObject.AddComponent<AudioSource>();
-        _music.loop = true;
-        _music.playOnAwake = false;
-        _music.volume = 0.45f;
+        _audio = RunAudio.Create(transform);
     }
 
-    private void PlayMusicForDepth(int depth) {
-        if (_music == null) return;
-        string name = depth <= 2 ? "cavern" : "dungeon";
-        if (name == _musicName && _music.isPlaying) return;
-        var clip = ThirdPartyArt.Music(name);
-        if (clip == null) return;
-        _musicName = name;
-        _music.clip = clip;
-        _music.Play();
+    /// <summary>Слои атмосферы: насколько близко опасность и кто стрекочет рядом.</summary>
+    private void AudioStep() {
+        if (_audio == null) return;
+        if (!InRun || _player == null) { _audio.Tick(Vector2.zero, 0f, null, true); return; }
+        Vector2 lead = _player.Rb.position;
+        double leadMass = Run.Fragments.Count > 0 ? Run.Fragments[0].Mass : Run.Mass;
+        float danger = 0f;
+        for (int i = 0; i < _creatures.Count; i++) {
+            var c = _creatures[i];
+            if (c == null || c.IsFood || !c.gameObject.activeSelf || c.Mass <= leadMass) continue;
+            float d = Vector2.Distance(lead, c.View.Rb.position) - c.Radius - PlayerRadius;
+            danger = Mathf.Max(danger, 1f - d / 7f);
+        }
+        Vector2? near = null;
+        if (_creatures.Count > 0) {
+            var c = _creatures[Random.Range(0, _creatures.Count)];
+            if (c != null && !c.IsFood && c.gameObject.activeSelf) near = c.View.Rb.position;
+        }
+        _audio.Tick(lead, danger, near, _ui.ModalOpen);
     }
 
     private void UpdateEcho() {
