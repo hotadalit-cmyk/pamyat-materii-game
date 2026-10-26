@@ -14,7 +14,7 @@ namespace PM.Systems.Run {
 public sealed class RunUi : MonoBehaviour {
     private static readonly Color Panel = new Color(0.016f, 0.05f, 0.09f, 0.66f);
     private static readonly Color Modal = new Color(0.02f, 0.06f, 0.11f, 0.97f);
-    private static readonly Color Dim = new Color(0f, 0f, 0f, 0.55f);
+    private static readonly Color Dim = new Color(0f, 0f, 0f, 0.82f);
     private static readonly Color TextColor = new Color(0.92f, 0.96f, 1f);
 
     private RunGame _game;
@@ -130,8 +130,9 @@ public sealed class RunUi : MonoBehaviour {
             string id = options[i];
             var def = MutationCatalog.Get(id);
             float x = (i - (n - 1) * 0.5f) * 560f;
+            // плотная карточка: мир под модалкой не должен просвечивать сквозь текст
             var card = Button(_offerCards, "card_" + id, new Vector2(x, -40), new Vector2(520, 460),
-                GameBootstrap.CSoul, 0.30f, "", 30);
+                Color.Lerp(GameBootstrap.CSoul, Modal, 0.6f), 0.96f, "", 30);
             Label(card.transform, def != null ? def.Name : id, 40, TextAnchor.MiddleCenter,
                 new Vector2(0, 150), new Vector2(480, 70), new Vector2(0.5f, 0.5f)).color = GameBootstrap.COutline;
             Label(card.transform, def != null ? def.Description : "", 28, TextAnchor.UpperCenter,
