@@ -29,6 +29,15 @@ public sealed partial class RunGame {
     private float _twoFingerT = -1f;
 
     public bool Gathering => _gathering;
+    /// <summary>Сколько ресурсов несут двойники (не сдано в хранилище).</summary>
+    public double TwinCarry {
+        get {
+            if (Run == null) return 0;
+            double t = 0;
+            for (int i = 0; i < Run.Fragments.Count; i++) t += Run.CarryTotal(Run.Fragments[i].Id);
+            return t;
+        }
+    }
     public int FragmentCount => Run != null ? Run.Fragments.Count : 1;
     public bool CanSplit => Run != null && Run.Fragments.CanSplit && InRun;
 
@@ -64,6 +73,7 @@ public sealed partial class RunGame {
         _fragList.Clear();
         _gathering = false;
         _crackHinted.Clear();
+        ClearLoot();
         CreateFragmentView(Run.Fragments.LeadId, at);
         BindLead();
     }
@@ -89,6 +99,7 @@ public sealed partial class RunGame {
 
     /// <summary>Новая глубина: вся стая — у старта, ведущий в центре, остальные кольцом.</summary>
     private void PlaceFragmentsAt(Vector2 start) {
+        ClearLoot();
         for (int i = 0; i < _fragList.Count; i++) {
             var fv = _fragList[i];
             Vector2 p = start;
@@ -205,11 +216,13 @@ public sealed partial class RunGame {
                 if (Run.MergeFragments(keep, fv.Id)) {
                     ProceduralSfx.Instance?.Play("eat");
                     GameFeel.Text(lead, "Слияние", new Color(0.6f, 0.9f, 1f), 0.8f);
+                    ShowDeposit(lead);
                     SyncFragments();
                     if (Run.Fragments.Count == 1) { _gathering = false; _ui.Flash("Снова единое целое", 1.4f); }
                     return;
                 }
             }
+            if (!_gathering && TwinForage(fv, rb, lead, dist)) continue;
             if (gap <= 0.4f || dist < 0.001f) continue;
             // мягкая стая: тянутся к ведущему; в сборе — сильно (и сильнее со временем: застрявшие догоняют)
             float k = _gathering ? 14f + 10f * Mathf.Min(_gatherTimer, 3f) : (gap > 6f ? 7f : 2.5f);
@@ -229,6 +242,138 @@ public sealed partial class RunGame {
             }
     }
 
+    // ---------- Двойники-добытчики (v0.9) ----------
+    private const float TwinLeash = 12f;      // дальше от ведущего двойник не уходит за добычей
+    private const float TwinSight = 7f;       // радиус, в котором двойник замечает еду
+    private const float TwinFear = 4.5f;      // радиус, в котором двойник бежит от крупных
+    private const float TwinMaxSpeed = 6.5f;
+    private bool _carryHinted;
+
+    /// <summary>
+    /// Самостоятельный двойник: бежит от тех, кто его съест, охотится на тех, кого съест сам, подбирает
+    /// выпавшую ношу. Уходит не дальше поводка от ведущего. true — сила уже приложена, «стая» не нужна.
+    /// </summary>
+    private bool TwinForage(FragView fv, Rigidbody2D rb, Vector2 lead, float distToLead) {
+        if (distToLead > TwinLeash) return false;
+        Vector2 me = rb.position;
+        double m = Run.FragmentMass(fv.Id);
+        float r = FragRadius(fv);
+        Vector2 flee = Vector2.zero;
+        Vector2 target = Vector2.zero; float best = TwinSight; bool has = false;
+        for (int i = 0; i < _creatures.Count; i++) {
+            var c = _creatures[i];
+            if (c == null || c.IsBoss || !c.gameObject.activeSelf) continue;
+            Vector2 cp = c.View.Rb.position;
+            float d = Vector2.Distance(me, cp) - c.Radius - r;
+            bool edible = c.IsFood || m >= c.Mass * Run.Mutations.AbsorbRatio;
+            if (!edible) {
+                if (c.Mass > m * 0.9 && d < TwinFear) flee += (me - cp).normalized * (1f - Mathf.Max(0f, d) / TwinFear);
+                continue;
+            }
+            if (d < best && Vector2.Distance(lead, cp) < TwinLeash) { best = d; target = cp; has = true; }
+        }
+        for (int i = 0; i < _loot.Count; i++) {
+            float d = Vector2.Distance(me, _loot[i].Pos);
+            if (d < best) { best = d; target = _loot[i].Pos; has = true; }
+        }
+        bool fleeing = flee.sqrMagnitude > 0.01f;
+        if (!fleeing && !has) return false;
+        Vector2 dir = fleeing ? flee.normalized : (target - me).normalized;
+        float k = fleeing ? 18f : 11f;
+        if (Vector2.Dot(rb.linearVelocity, dir) < TwinMaxSpeed) rb.AddForce(dir * (k * rb.mass), ForceMode2D.Force);
+        return true;
+    }
+
+    /// <summary>Первая добыча двойника — одноразовое объяснение правила ноши.</summary>
+    private void OnTwinLoot() {
+        if (_carryHinted) return;
+        _carryHinted = true;
+        _ui.Hint("Двойник несёт добычу. Соберитесь, чтобы сдать её в хранилище: погибнет — она выпадет", 4.5f);
+    }
+
+    /// <summary>Что сдано в хранилище при слиянии — цветными цифрами над ведущим.</summary>
+    private void ShowDeposit(Vector2 at) {
+        var dep = Run.LastDeposit;
+        if (dep == null || dep.Length == 0) return;
+        double total = 0;
+        for (int i = 0; i < dep.Length; i++) {
+            total += dep[i].Amount;
+            GameFeel.Text(at + new Vector2(0.7f, -0.3f - 0.45f * i), "+" + dep[i].Amount.ToString("0.#") + " " + ResourceInfo.Name(dep[i].Kind),
+                RunEvolutionUi.Hex(ResourceInfo.Color(dep[i].Kind)), 0.8f);
+        }
+        _ui.Flash("Ноша сдана в хранилище: +" + total.ToString("0"), 1.6f);
+        ProceduralSfx.Instance?.Play("unlock");
+    }
+
+    // ---------- Выпавшая ноша ----------
+    private sealed class Loot {
+        public Vector2 Pos;
+        public ResourceKind Kind;
+        public double Amount;
+        public GameObject Go;
+        public SpriteRenderer Sr;
+        public float Phase;
+    }
+    private readonly List<Loot> _loot = new List<Loot>();
+
+    /// <summary>Двойник растворился: его ноша рассыпается светящимися сгустками.</summary>
+    private void DropCarry(Vector2 at) {
+        var drop = Run.LastDropped;
+        if (drop == null || drop.Length == 0) return;
+        for (int i = 0; i < drop.Length; i++) {
+            float a = i * 2.1f + Random.value;
+            var p = at + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 0.7f;
+            var go = new GameObject("loot_" + drop[i].Kind);
+            go.transform.SetParent(transform, false);
+            go.transform.position = new Vector3(p.x, p.y, 0);
+            var col = RunEvolutionUi.Hex(ResourceInfo.Color(drop[i].Kind));
+            var sr = SpriteUtil.AddSprite(go.transform, SpriteUtil.GlowSprite, 1.3f, 1.3f, new Color(col.r, col.g, col.b, 0.9f), DarknessMask.Order + 2);
+            SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, 0.32f, 0.32f, Color.Lerp(col, Color.white, 0.4f), DarknessMask.Order + 3);
+            _loot.Add(new Loot { Pos = p, Kind = drop[i].Kind, Amount = drop[i].Amount, Go = go, Sr = sr, Phase = Random.value * 6f });
+        }
+        _ui.Flash("Двойник погиб — его ноша выпала. Подберите её", 2.2f);
+    }
+
+    private void LootStep() {
+        for (int i = _loot.Count - 1; i >= 0; i--) {
+            var l = _loot[i];
+            if (l.Sr != null) {
+                float s = 1f + 0.18f * Mathf.Sin(Time.time * 4f + l.Phase);
+                l.Sr.transform.localScale = new Vector3(s * 1.3f, s * 1.3f, 1f);
+            }
+            var fv = NearestFragment(l.Pos, out float d);
+            if (fv == null || d > 0.35f) continue;
+            Run.PickupAt(fv.Id, l.Kind, l.Amount);
+            bool lead = fv.Id == Run.Fragments.LeadId;
+            GameFeel.Text(l.Pos, "+" + l.Amount.ToString("0.#") + " " + ResourceInfo.Name(l.Kind) + (lead ? "" : " (в ноше)"),
+                RunEvolutionUi.Hex(ResourceInfo.Color(l.Kind)), 0.8f);
+            ProceduralSfx.Instance?.Play("eat");
+            if (l.Go != null) Destroy(l.Go);
+            _loot.RemoveAt(i);
+        }
+    }
+
+    private void ClearLoot() {
+        for (int i = 0; i < _loot.Count; i++) if (_loot[i].Go != null) Destroy(_loot[i].Go);
+        _loot.Clear();
+    }
+
+    /// <summary>Огонёк двойника золотится, когда он несёт добычу.</summary>
+    private void TwinGlowStep() {
+        for (int i = 0; i < _fragList.Count; i++) {
+            var fv = _fragList[i];
+            if (fv.Glow == null || !fv.Glow.enabled) continue;
+            double carry = Run.CarryTotal(fv.Id);
+            var c = new Color(0.4f, 0.85f, 1f, 0.35f);
+            if (carry > 0) {
+                float k = 0.35f + 0.65f * Mathf.Clamp01((float)carry / 20f);
+                c = Color.Lerp(c, new Color(1f, 0.82f, 0.3f, 0.6f), k);
+                c.a *= 0.8f + 0.2f * Mathf.Sin(Time.time * 5f + fv.Id);
+            }
+            fv.Glow.color = c;
+        }
+    }
+
     /// <summary>Подсказка у входа в трещину: целым телом не пролезть.</summary>
     private void CrackHintStep() {
         if (Run.World == null || Run.World.CrackMouths == null) return;
@@ -245,6 +390,7 @@ public sealed partial class RunGame {
 
     /// <summary>Жест: касание двумя пальцами — разделиться (кнопки дублируют).</summary>
     private void TwoFingerStep() {
+        if (GameSettings.Joystick) return; // палец на джойстике + тап по кнопке — не жест деления
         if (UnityEngine.Input.touchCount == 2) {
             var a = UnityEngine.Input.GetTouch(0); var b = UnityEngine.Input.GetTouch(1);
             if (b.phase == TouchPhase.Began) _twoFingerT = Time.unscaledTime;

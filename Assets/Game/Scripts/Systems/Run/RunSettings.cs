@@ -24,18 +24,23 @@ public static class GameSettings {
     public static int Fps { get => PlayerPrefs.GetInt(P + "fps", 60); set { PlayerPrefs.SetInt(P + "fps", value); Apply(); } }
     public static bool Hints { get => PlayerPrefs.GetInt(P + "hints", 1) == 1; set { PlayerPrefs.SetInt(P + "hints", value ? 1 : 0); Apply(); } }
     public static bool LeftHanded { get => PlayerPrefs.GetInt(P + "left", 0) == 1; set { PlayerPrefs.SetInt(P + "left", value ? 1 : 0); Apply(); } }
+    /// <summary>Управление: false — оттянуть и отпустить (рывок жестом), true — джойстик + кнопка рывка.</summary>
+    public static bool Joystick { get => PlayerPrefs.GetInt(P + "joy", 0) == 1; set { PlayerPrefs.SetInt(P + "joy", value ? 1 : 0); Apply(); } }
 
     public static void Apply() {
         PlayerPrefs.Save();
         AudioListener.volume = Volume;
         Application.targetFrameRate = Fps;
-        if (PullGestureInput.Instance != null) PullGestureInput.Instance.DragMaxWorld = DragLength;
+        if (PullGestureInput.Instance != null) {
+            PullGestureInput.Instance.DragMaxWorld = DragLength;
+            PullGestureInput.Instance.enabled = !Joystick; // в режиме джойстика жест рывка выключен
+        }
         PM.Systems.CameraRig.FollowCamera.UserZoom = CameraZoom;
         Changed?.Invoke();
     }
 
     public static void ResetDefaults() {
-        foreach (var k in new[] { "vibro", "shake", "drag", "zoom", "fps", "hints", "left" }) PlayerPrefs.DeleteKey(P + k);
+        foreach (var k in new[] { "vibro", "shake", "drag", "zoom", "fps", "hints", "left", "joy" }) PlayerPrefs.DeleteKey(P + k);
         PlayerPrefs.SetFloat(ProceduralSfx.PrefKey, 0.8f);
         Apply();
     }
@@ -109,6 +114,8 @@ public sealed class RunSettingsUi : MonoBehaviour {
         float y = 0;
         Row(ref y, "Громкость", new[] { "0", "25", "50", "75", "100" }, Mathf.RoundToInt(GameSettings.Volume * 4f),
             i => GameSettings.Volume = i / 4f);
+        Row(ref y, "Управление", new[] { "Оттянуть и отпустить", "Джойстик + рывок" }, GameSettings.Joystick ? 1 : 0,
+            i => GameSettings.Joystick = i == 1);
         Row(ref y, "Вибрация", new[] { "Выкл", "Вкл" }, GameSettings.Vibration ? 1 : 0, i => GameSettings.Vibration = i == 1);
         Row(ref y, "Тряска экрана", new[] { "Нет", "Мягко", "Сильно" }, IndexOf(GameSettings.Shake, 0f, 0.5f, 1f),
             i => GameSettings.Shake = new[] { 0f, 0.5f, 1f }[i]);
@@ -143,10 +150,10 @@ public sealed class RunSettingsUi : MonoBehaviour {
         float x = 480f, w = (1420f - 480f) / options.Length;
         for (int i = 0; i < options.Length; i++) {
             int idx = i;
-            var b = Btn(_rows, options[i], new Vector2(x + i * w, y - 6), new Vector2(w - 12, 78), i == selected ? On : Off, new Vector2(0, 1));
+            var b = Btn(_rows, options[i], new Vector2(x + i * w, y - 6), new Vector2(w - 12, 72), i == selected ? On : Off, new Vector2(0, 1));
             b.onClick.AddListener(() => { onPick(idx); ProceduralSfx.Instance?.Play("eat"); Rebuild(); });
         }
-        y -= 92f;
+        y -= 84f;
     }
 
     // ---------- строители ----------

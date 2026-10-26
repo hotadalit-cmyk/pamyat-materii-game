@@ -39,6 +39,7 @@ public sealed class RunUi : MonoBehaviour {
     private RectTransform _splitRt, _gatherRt;
     private Image _splitBtn, _gatherBtn;
     private Text _splitLabel, _gatherLabel;
+    private RectTransform _dashRt;
 
     public bool ModalOpen => (_offerModal != null && _offerModal.activeSelf) ||
                              (_imprintModal != null && _imprintModal.activeSelf) ||
@@ -119,8 +120,18 @@ public sealed class RunUi : MonoBehaviour {
         gather.GetComponent<Button>().onClick.AddListener(() => _game.RequestGather());
         _gatherBtn = gather.GetComponent<Image>();
         _gatherRt = grt;
-        ApplyHandedness();
         _gatherLabel = gather.GetComponentInChildren<Text>();
+        // режим джойстика: круглая кнопка рывка рядом с кнопками деления, срабатывает при касании
+        var dash = Box(_root, "dash_btn", Vector2.zero, new Vector2(230, 230), new Color(GameBootstrap.CSlime.r, GameBootstrap.CSlime.g, GameBootstrap.CSlime.b, 0.55f), new Vector2(1, 0));
+        dash.GetComponent<Image>().sprite = SpriteUtil.UiCircleSprite;
+        dash.GetComponent<Image>().type = Image.Type.Simple;
+        var dl = UiUtil.AddText(dash, "РЫВОК", 34, TextAnchor.MiddleCenter, TextColor);
+        dl.rectTransform.sizeDelta = new Vector2(220, 80);
+        dl.raycastTarget = false;
+        dash.gameObject.AddComponent<PressButton>().OnPress = () => _game.JoystickDash();
+        _dashRt = dash;
+        RunJoystick.Build(_root);
+        ApplyHandedness();
 
         _biomeTitle = Label(_root, "", 72, TextAnchor.MiddleCenter, new Vector2(0, 120), new Vector2(1600, 100), new Vector2(0.5f, 0.5f));
         _biomeSub = Label(_root, "", 32, TextAnchor.MiddleCenter, new Vector2(0, 40), new Vector2(1600, 60), new Vector2(0.5f, 0.5f));
@@ -131,7 +142,8 @@ public sealed class RunUi : MonoBehaviour {
         _goalFill = fillGo.GetComponent<Image>(); // ширина = прогресс (Filled без спрайта не режется)
         _goal = Label(goal, "Поглощено 0 / 3", 28, TextAnchor.MiddleCenter, new Vector2(0, -8), new Vector2(700, 40), new Vector2(0.5f, 1));
 
-        _banner = Label(_root, "", 52, TextAnchor.MiddleCenter, new Vector2(0, 160), new Vector2(1400, 80), new Vector2(0.5f, 0.5f));
+        _banner = Label(_root, "", 52, TextAnchor.MiddleCenter, new Vector2(0, 160), new Vector2(1500, 140), new Vector2(0.5f, 0.5f));
+        _banner.horizontalOverflow = HorizontalWrapMode.Wrap; _banner.resizeTextForBestFit = true; _banner.resizeTextMinSize = 30; _banner.resizeTextMaxSize = 52; // длинный баннер — в две строки, не обрезается
         _flash = Label(_root, "", 30, TextAnchor.MiddleCenter, new Vector2(0, 150), new Vector2(1400, 50), new Vector2(0.5f, 0));
     }
 
@@ -174,6 +186,11 @@ public sealed class RunUi : MonoBehaviour {
         _gatherRt.anchorMin = _gatherRt.anchorMax = _gatherRt.pivot = anchor;
         _splitRt.anchoredPosition = new Vector2(x, 168);
         _gatherRt.anchoredPosition = new Vector2(x, 28);
+        if (_dashRt != null) {
+            _dashRt.anchorMin = _dashRt.anchorMax = _dashRt.pivot = anchor;
+            _dashRt.anchoredPosition = new Vector2(left ? 310 : -310, 30);   // между кнопками деления и центром
+            _dashRt.gameObject.SetActive(GameSettings.Joystick);
+        }
     }
 
     void OnDestroy() { GameSettings.Changed -= ApplyHandedness; }
@@ -200,7 +217,8 @@ public sealed class RunUi : MonoBehaviour {
             _gatherBtn.gameObject.SetActive(frags > 1);
             bool g = _game.Gathering;
             _gatherBtn.color = g ? new Color(1f, 0.85f, 0.4f, 0.9f) : new Color(GameBootstrap.CSoul.r, GameBootstrap.CSoul.g, GameBootstrap.CSoul.b, 0.8f);
-            _gatherLabel.text = g ? "Собираемся…" : "Собраться";
+            double carry = _game.TwinCarry;
+            _gatherLabel.text = g ? "Собираемся…" : carry >= 0.5 ? "Собраться\n(ноша " + carry.ToString("0") + ")" : "Собраться";
             _combo.text = run.Combo != null && run.Combo.Chain >= 2 ? "Цепочка ×" + run.Combo.Chain : "";
             var ids = run.Mutations.ToArray();
             if (ids.Length > 0) {

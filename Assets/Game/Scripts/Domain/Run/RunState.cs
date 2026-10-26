@@ -163,7 +163,7 @@ public sealed class RunState {
             double ym = 1.0 + Evolution.Sum(EvoEffectKind.YieldMult);
             var got = new List<CostItem>(items.Length);
             for (int i = 0; i < items.Length; i++) {
-                double added = Resources.Add(items[i].Kind, items[i].Amount * ym);
+                double added = AddLoot(_creditId, items[i].Kind, items[i].Amount * ym);
                 if (added > 0) got.Add(new CostItem { Kind = items[i].Kind, Amount = added });
             }
             LastYield = got.ToArray();
@@ -255,8 +255,65 @@ public sealed class RunState {
         return Fragments.SplitAll();
     }
 
-    /// <summary>Слияние двух фрагментов (касание в режиме сбора).</summary>
-    public bool MergeFragments(int keepId, int otherId) => !IsDead && Fragments.Merge(keepId, otherId);
+    /// <summary>Слияние двух фрагментов (касание в режиме сбора). Ноша объединяется; влилась в ведущего — сдана в хранилище.</summary>
+    public bool MergeFragments(int keepId, int otherId) {
+        LastDeposit = new CostItem[0];
+        if (IsDead || !Fragments.Merge(keepId, otherId)) return false;
+        if (_carry.TryGetValue(otherId, out var o)) {
+            _carry.Remove(otherId);
+            if (!_carry.TryGetValue(keepId, out var k)) { k = new double[ResourceInfo.Count]; _carry[keepId] = k; }
+            for (int i = 0; i < k.Length; i++) k[i] += o[i];
+        }
+        LastDeposit = DepositLead();
+        return true;
+    }
+
+    // ---------- Ноша двойников (v0.9) ----------
+    // Добыча не-ведущего фрагмента не идёт в хранилище сразу: он несёт её, пока не сольётся с ведущим.
+    // Растворился по дороге — ноша выпадает в мир (LastDropped) и её можно подобрать снова.
+    private readonly Dictionary<int, double[]> _carry = new Dictionary<int, double[]>();
+
+    /// <summary>Что сдано в хранилище при последнем слиянии.</summary>
+    public CostItem[] LastDeposit { get; private set; } = new CostItem[0];
+    /// <summary>Ноша растворившегося фрагмента — Unity рассыпает её по полу.</summary>
+    public CostItem[] LastDropped { get; private set; } = new CostItem[0];
+
+    /// <summary>Сколько всего ресурсов несёт фрагмент (0 — у ведущего: его добыча сразу в хранилище).</summary>
+    public double CarryTotal(int fragmentId) {
+        if (!_carry.TryGetValue(fragmentId, out var c)) return 0;
+        double t = 0; for (int i = 0; i < c.Length; i++) t += c[i];
+        return t;
+    }
+
+    public double CarryOf(int fragmentId, ResourceKind kind) => _carry.TryGetValue(fragmentId, out var c) ? c[(int)kind] : 0;
+
+    /// <summary>Подобрать выпавшую ношу (или любую добычу) фрагментом.</summary>
+    public void PickupAt(int fragmentId, ResourceKind kind, double amount) {
+        if (IsDead || amount <= 0) return;
+        AddLoot(Fragments.IndexOf(fragmentId) >= 0 ? fragmentId : -1, kind, amount);
+    }
+
+    private double AddLoot(int fragmentId, ResourceKind kind, double amount) {
+        if (amount <= 0) return 0;
+        if (fragmentId < 0 || fragmentId == Fragments.LeadId) return Resources.Add(kind, amount);
+        if (!_carry.TryGetValue(fragmentId, out var c)) { c = new double[ResourceInfo.Count]; _carry[fragmentId] = c; }
+        c[(int)kind] += amount;
+        return amount;
+    }
+
+    /// <summary>Ведущий никогда ничего не «несёт» — всё, что у него оказалось, уходит в хранилище.</summary>
+    private CostItem[] DepositLead() {
+        int lead = Fragments.LeadId;
+        if (!_carry.TryGetValue(lead, out var c)) return new CostItem[0];
+        _carry.Remove(lead);
+        var got = new List<CostItem>();
+        for (int i = 0; i < c.Length; i++) {
+            if (c[i] <= 0) continue;
+            double added = Resources.Add((ResourceKind)i, c[i]);
+            if (added > 0) got.Add(new CostItem((ResourceKind)i, added));
+        }
+        return got.ToArray();
+    }
 
     /// <summary>Поглощение конкретным фрагментом: масса и бонус цепочки достаются ему.</summary>
     public double OnAbsorbAt(int fragmentId, string speciesId, double mass) {
@@ -269,6 +326,14 @@ public sealed class RunState {
         if (amount <= 0.0) return false;
         amount *= DamageTakenFactor;
         bool dissolved = Fragments.Remove(fragmentId, amount);
+        LastDropped = new CostItem[0];
+        if (dissolved && _carry.TryGetValue(fragmentId, out var lost)) {
+            _carry.Remove(fragmentId);
+            var drop = new List<CostItem>();
+            for (int i = 0; i < lost.Length; i++) if (lost[i] > 0) drop.Add(new CostItem((ResourceKind)i, lost[i]));
+            LastDropped = drop.ToArray();
+        }
+        if (dissolved) DepositLead(); // растворился ведущий — новый ведущий сдаёт свою ношу
         if (!IsDead && Mass < SizeRule.MinViableMass) {
             IsDead = true;
             _killedBy = sourceId;

@@ -485,6 +485,32 @@ public sealed partial class RunGame : MonoBehaviour {
         FollowCamera.ZoomMult = zoom;
     }
 
+    // ---------- Джойстик (v0.9) ----------
+    private const float JoyAccel = 14f;      // ползание: заметно медленнее рывка — охота и броня всё ещё про рывок
+    private const float JoyMaxSpeed = 3.8f;
+
+    /// <summary>Ползание ведущего по джойстику (двойники тянутся за ним сами).</summary>
+    private void JoystickStep() {
+        var j = RunJoystick.Instance;
+        if (j == null || !GameSettings.Joystick || _player == null) return;
+        Vector2 d = j.Dir;
+        if (d.sqrMagnitude < 0.0001f) return;
+        var rb = _player.Rb;
+        Vector2 n = d.normalized;
+        float max = JoyMaxSpeed * (float)Run.DashSpeedMult * Mathf.Min(1f, d.magnitude * 1.25f);
+        if (Vector2.Dot(rb.linearVelocity, n) < max) rb.AddForce(n * (JoyAccel * rb.mass), ForceMode2D.Force);
+    }
+
+    /// <summary>Кнопка «Рывок»: туда, куда наклонён джойстик, иначе — по ходу движения.</summary>
+    public void JoystickDash() {
+        if (!InRun || _player == null) return;
+        Vector2 d = RunJoystick.Instance != null ? RunJoystick.Instance.Dir : Vector2.zero;
+        if (d.sqrMagnitude < 0.04f) d = _player.Rb.linearVelocity;
+        if (d.sqrMagnitude < 0.0001f) d = Vector2.up;
+        d.Normalize();
+        OnDashRelease(new Vec2(d.x, d.y), 1.0);
+    }
+
     /// <summary>Радиус ведущего фрагмента.</summary>
     private float PlayerRadius => (float)SizeRule.RadiusForMass(Run.Fragments.Count > 0 ? Run.Fragments[0].Mass : Run.Mass);
 
@@ -535,8 +561,10 @@ public sealed partial class RunGame : MonoBehaviour {
     private void HurtFragment(double amount, string source) {
         int id = _hitFrag >= 0 && _frags.ContainsKey(_hitFrag) ? _hitFrag : Run.Fragments.LeadId;
         _lastHitSource = source;
+        Vector2 at = _frags.TryGetValue(id, out var hv) ? hv.View.Rb.position : (Vector2)_player.transform.position;
         if (Run.OnMassLostAt(id, amount, source)) {
             _ui.Flash("Фрагмент растворился", 1.4f);
+            DropCarry(at);
             SyncFragments();
         }
     }
@@ -689,12 +717,14 @@ public sealed partial class RunGame : MonoBehaviour {
             _ui.Banner(c.SoulName + " поглощена — её память теперь ваша", 3f);
         } else if (!c.IsFood) _ui.Flash("Поглощено: " + c.Species.Name);
         if (!c.IsFood && Run.LastYield != null) {
-            // добыча в хранилище — цветом ресурса
+            // добыча в хранилище — цветом ресурса; у двойника — «в ноше», до слияния
+            bool twin = _hitFrag >= 0 && _hitFrag != Run.Fragments.LeadId;
             for (int y = 0; y < Run.LastYield.Length; y++) {
                 var it = Run.LastYield[y];
-                GameFeel.Text(pos + new Vector3(0.6f, -0.3f - 0.45f * y, 0), "+" + it.Amount.ToString("0.#") + " " + ResourceInfo.Name(it.Kind),
+                GameFeel.Text(pos + new Vector3(0.6f, -0.3f - 0.45f * y, 0), "+" + it.Amount.ToString("0.#") + " " + ResourceInfo.Name(it.Kind) + (twin ? " (в ноше)" : ""),
                     RunEvolutionUi.Hex(ResourceInfo.Color(it.Kind)), 0.75f);
             }
+            if (twin && Run.LastYield.Length > 0) OnTwinLoot();
         }
         if (!c.IsFood) {
             GameFeel.Text(pos, "+" + (c.Mass + bonus).ToString("0.0"), GameBootstrap.CFood);
@@ -736,7 +766,9 @@ public sealed partial class RunGame : MonoBehaviour {
         _sinceDash += dt;
         var pPos = _player.Rb.position;
         float pr = PlayerRadius;
+        JoystickStep();
         FragmentsStep(dt);
+        LootStep();
         if (!InRun) return;
         pPos = _player.Rb.position;
         pr = PlayerRadius;
@@ -898,6 +930,7 @@ public sealed partial class RunGame : MonoBehaviour {
                   (float)Run.LightRadius * (Run.OpenWorld ? 1.8f : 1f));
         UpdateExitVisual();
         if (!_ui.ModalOpen) TwoFingerStep();
+        if (InRun) TwinGlowStep();
         if (Run.Evolution != null && Run.Evolution.FreeTokens > _lastTokens) {
             _ui.Banner("Жетон эволюции! Откройте «Эволюцию» и выберите путь", 3f);
             ProceduralSfx.Instance?.Play("unlock");
