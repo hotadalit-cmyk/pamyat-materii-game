@@ -286,7 +286,8 @@ public static class RunWorldGenTests {
         rs.UseAltarAt(spring);
         Eq(after, rs.Mass, "spring only once");
         rs.UseAltarAt(relic);
-        True(rs.PendingOffer != null, "relic gives an offer");
+        True(rs.Evolution.FreeTokens >= 1, "relic gives a free evolution token");
+        True(rs.Resources.Get(ResourceKind.Psyche) >= 10 - 1e-9, "relic gives resources");
         True(rs.IsAltarUsed(-1) && rs.IsAltarUsed(9999), "out of range counts as used");
         var im = rs.Finish();
         True(im.EssenceEarned >= RunState.RelicEssence, "relic essence counted");
