@@ -4,27 +4,33 @@ using UnityEngine;
 
 namespace PM.EditorTools {
 /// <summary>
-/// Импорт сторонних моделей (Assets/ThirdParty/Resources/Monsters): анимации — Legacy (играются по имени
-/// без контроллеров), все клипы зациклены; для моделей с внешней текстурой — материал Standard.
+/// Импорт сторонних моделей (Assets/ThirdParty/Resources/Monsters): анимация Generic (Legacy на устройстве
+/// «схлопывал» скелет из Blender), ходьба/полёт/покой зациклены; для моделей с внешней текстурой — материал Standard.
 /// </summary>
 public sealed class ThirdPartyModelImport : AssetPostprocessor {
     private const string MonsterDir = "Assets/ThirdParty/Resources/Monsters";
 
+    private bool IsMonster => assetPath.Replace('\\', '/').StartsWith(MonsterDir);
+
     void OnPreprocessModel() {
-        if (!assetPath.Replace('\\', '/').StartsWith(MonsterDir)) return;
+        if (!IsMonster) return;
         var mi = (ModelImporter)assetImporter;
-        mi.animationType = ModelImporterAnimationType.Legacy;
+        mi.animationType = ModelImporterAnimationType.Generic;
         mi.importAnimation = true;
-        mi.generateAnimations = ModelImporterGenerateAnimations.GenerateAnimations;
         mi.globalScale = 1f;
         mi.materialImportMode = ModelImporterMaterialImportMode.ImportStandard;
     }
 
-    void OnPostprocessModel(GameObject root) {
-        if (!assetPath.Replace('\\', '/').StartsWith(MonsterDir)) return;
-        var anim = root.GetComponent<Animation>();
-        if (anim == null) return;
-        foreach (AnimationState st in anim) st.clip.wrapMode = WrapMode.Loop;
+    void OnPreprocessAnimation() {
+        if (!IsMonster) return;
+        var mi = (ModelImporter)assetImporter;
+        var clips = mi.defaultClipAnimations;
+        for (int i = 0; i < clips.Length; i++) {
+            string n = clips[i].name;
+            // ходьба/полёт/покой — по кругу; удары и смерть — один раз
+            clips[i].loopTime = n.Contains("Walk") || n.Contains("Flying") || n.Contains("Idle") || n.Contains("Running") || n.Contains("Dance");
+        }
+        mi.clipAnimations = clips;
     }
 }
 
@@ -39,8 +45,7 @@ public static class ThirdPartyImport {
             string p = path.Replace('\\', '/');
             string name = Path.GetFileNameWithoutExtension(p);
             // текстура рядом с моделью → свой материал (Standard), чтобы модель не была белой
-            string texPath = dir + "/" + name + "_Texture.png";
-            var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(texPath);
+            var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(dir + "/" + name + "_Texture.png");
             if (tex != null) {
                 string matPath = dir + "/Materials/" + name + ".mat";
                 var mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
@@ -49,17 +54,9 @@ public static class ThirdPartyImport {
                 mat.SetFloat("_Glossiness", 0.15f);
                 EditorUtility.SetDirty(mat);
             }
-            var go = AssetDatabase.LoadAssetAtPath<GameObject>(p);
-            var bounds = new Bounds();
-            bool first = true;
-            foreach (var r in go.GetComponentsInChildren<Renderer>()) {
-                if (first) { bounds = r.bounds; first = false; } else bounds.Encapsulate(r.bounds);
-            }
-            report.Append(name).Append(" size=").Append(bounds.size.ToString("F2"));
-            report.Append(" mats=").Append(go.GetComponentInChildren<Renderer>() != null ? go.GetComponentInChildren<Renderer>().sharedMaterials.Length : 0);
-            report.Append(" clips:");
+            report.Append(name).Append(" clips:");
             foreach (var o in AssetDatabase.LoadAllAssetsAtPath(p))
-                if (o is AnimationClip c && !c.name.StartsWith("__preview")) report.Append(' ').Append(c.name);
+                if (o is AnimationClip c && !c.name.StartsWith("__preview")) report.Append(' ').Append(c.name).Append(c.isLooping ? "(loop)" : "");
             report.Append('\n');
         }
         AssetDatabase.SaveAssets();

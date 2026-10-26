@@ -130,24 +130,31 @@ public static class ThirdPartyArt {
         // масштаб — на своём узле: клипы FBX анимируют корень модели (позиция/масштаб) и перезаписали бы его
         float scale = diameter * 1.5f / fp;
         yaw.localScale = new Vector3(scale, scale, scale);
-        var anim = inst.GetComponentInChildren<Animation>();
+        var animator = inst.GetComponentInChildren<Animator>();
+        if (animator == null) animator = inst.AddComponent<Animator>();
+        animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+        animator.applyRootMotion = false;
         var mm = tilt.gameObject.AddComponent<MonsterModel>();
         mm.Yaw = yaw;
-        mm.Anim = anim;
-        if (anim != null) {
-            anim.cullingType = AnimationCullingType.AlwaysAnimate;
-            mm.Loop = PickClip(anim, "Walk", "Flying", "Running", "Idle");
-            mm.IdleClip = PickClip(anim, "Idle", "Flying", "Walk");
-            mm.HitClip = PickClip(anim, "HitRecieve", "Hit");
-            if (mm.Loop != null) anim.Play(mm.Loop);
+        mm.Animator = animator;
+        if (!_clips.TryGetValue(model, out var clips)) {
+            clips = Resources.LoadAll<AnimationClip>("Monsters/" + model);
+            _clips[model] = clips;
         }
+        mm.Loop = PickClip(clips, "Walk", "Flying", "Running", "Idle");
+        mm.IdleClip = PickClip(clips, "Idle", "Flying", "Walk");
+        mm.HitClip = PickClip(clips, "HitRecieve", "Hit");
+        mm.PlayLoop(true);
         return mm;
     }
 
-    private static string PickClip(Animation anim, params string[] keys) {
+    private static readonly Dictionary<string, AnimationClip[]> _clips = new Dictionary<string, AnimationClip[]>();
+
+    private static AnimationClip PickClip(AnimationClip[] clips, params string[] keys) {
+        if (clips == null) return null;
         foreach (var k in keys)
-            foreach (AnimationState st in anim)
-                if (st.name.Contains(k)) return st.name;
+            foreach (var c in clips)
+                if (c != null && c.name.Contains(k) && !c.name.StartsWith("__preview")) return c;
         return null;
     }
 }
@@ -155,13 +162,23 @@ public static class ThirdPartyArt {
 /// <summary>Живая модель существа: поворот по направлению движения, ходьба/покой, вздрагивание при ударе.</summary>
 public sealed class MonsterModel : MonoBehaviour {
     public Transform Yaw;
-    public Animation Anim;
-    public string Loop, IdleClip, HitClip;
+    public Animator Animator;
+    public AnimationClip Loop, IdleClip, HitClip;
     private float _yaw = 180f;     // по умолчанию — лицом к игроку (вниз по экрану)
     private Rigidbody2D _rb;
     private bool _moving = true;
+    private UnityEngine.Playables.PlayableGraph _graph;
+    private float _hitUntil;
 
     void Start() { _rb = GetComponentInParent<Rigidbody2D>(); }
+
+    private void Play(AnimationClip clip) {
+        if (clip == null || Animator == null) return;
+        if (_graph.IsValid()) _graph.Destroy();
+        UnityEngine.Animations.AnimationPlayableUtilities.PlayClip(Animator, clip, out _graph);
+    }
+
+    public void PlayLoop(bool moving) { _moving = moving; Play(moving ? Loop : (IdleClip ?? Loop)); }
 
     void Update() {
         if (Yaw == null) return;
@@ -172,19 +189,21 @@ public sealed class MonsterModel : MonoBehaviour {
             _yaw = Mathf.LerpAngle(_yaw, target, 1f - Mathf.Exp(-8f * Time.deltaTime));
         }
         Yaw.localRotation = Quaternion.Euler(0f, _yaw, 0f);
-        if (Anim == null) return;
-        bool moving = sp > 0.4f;
-        if (moving != _moving && !Anim.IsPlaying(HitClip ?? "")) {
-            _moving = moving;
-            string clip = moving ? Loop : (IdleClip ?? Loop);
-            if (clip != null) Anim.CrossFade(clip, 0.2f);
+        if (_hitUntil > 0f) {
+            if (Time.time < _hitUntil) return;
+            _hitUntil = 0f;
+            PlayLoop(_moving);
         }
+        bool moving = sp > 0.4f;
+        if (moving != _moving) PlayLoop(moving);
     }
 
     public void Flinch() {
-        if (Anim == null || HitClip == null) return;
-        Anim.CrossFade(HitClip, 0.05f);
-        Anim.CrossFadeQueued(_moving ? Loop : (IdleClip ?? Loop), 0.2f);
+        if (HitClip == null) return;
+        Play(HitClip);
+        _hitUntil = Time.time + Mathf.Min(HitClip.length, 0.6f);
     }
+
+    void OnDestroy() { if (_graph.IsValid()) _graph.Destroy(); }
 }
 }
