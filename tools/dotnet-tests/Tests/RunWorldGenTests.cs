@@ -253,18 +253,33 @@ public static class RunWorldGenTests {
             Eq(d, rs.Depth, "depth " + d);
             rs.OnAbsorb("spore", rs.Room.GoalMass + 1);
             while (rs.PendingOffer != null) rs.ChooseMutation(rs.PendingOffer.Options[0]);
-            True(rs.ExitOpen, "shaft open");
+            True(rs.GuardianAwake, "guardian awake at goal " + d);
+            True(!rs.ExitOpen, "shaft closed until guardian falls " + d); // v0.11: нужен страж
+            ExposeGuardian(rs);
+            rs.OnBossAbsorbed();
+            True(rs.ExitOpen, "shaft open after guardian " + d);
             True(rs.TryEnterExit(), "descend");
         }
         Eq(5, rs.Depth, "depth 5");
-        True(rs.Boss != null && rs.Layout.Kind == RoomKind.Boss, "warden on 5");
+        True(rs.Guardian != null && rs.Layout.Kind == RoomKind.Boss, "warden on 5");
+        rs.OnAbsorb("spore", rs.Room.GoalMass + 1);
+        True(rs.GuardianAwake, "warden awake at goal");
         True(!rs.ExitOpen, "shaft closed until warden");
+        ExposeGuardian(rs);
         rs.OnBossAbsorbed();
         while (rs.PendingOffer != null) rs.ChooseMutation(rs.PendingOffer.Options[0]);
         True(rs.TryEnterExit(), "final descent");
         True(rs.IsVictory, "victory");
         var im = rs.Finish();
         True(im.EssenceEarned >= 80, "open world depth essence doubled");
+    }
+
+    /// <summary>Обнажить стража текущей глубины (серия ударов с рикошетом 0).</summary>
+    private static void ExposeGuardian(RunState rs) {
+        int guard = 0;
+        while (!rs.Guardian.IsExposed && guard++ < 200000)
+            rs.Guardian.ApplyHit(9.0, 60.0, null, 0);
+        True(rs.Guardian.IsExposed, "guardian exposed");
     }
 
     public static void RunState_Altars_ByIndex() {
