@@ -31,7 +31,7 @@ public sealed class ProceduralSfx : MonoBehaviour {
         }
         var rnd = new System.Random(7);
         // игрок и бой
-        Put("jet", Synth.Mix(Synth.Whoosh(rnd, 0.3f), Synth.Sweep(0.07f, 190f, 90f, 0.35f, 30f)));
+        Put("jet", Synth.Echo(Synth.Gurgle(rnd, 0.42f), 0.07f, 0.22f));   // рывок — журчание воды
         Put("eat", Synth.Echo(Synth.Mix(Synth.Sweep(0.08f, 380f, 1250f, 0.6f, 55f), Synth.Noise(rnd, 0.012f, 3000f, 0.15f)), 0.06f, 0.2f));
         Put("capture", Synth.Echo(Synth.Mix(Synth.Squelch(rnd, 0.24f, 1400f, 260f), Synth.Gulp(0.3f, 260f, 105f)), 0.09f, 0.25f));
         Put("weaken", Synth.Mix(Synth.Noise(rnd, 0.06f, 2200f, 0.55f), Synth.Sweep(0.14f, 160f, 70f, 0.7f, 22f)));
@@ -156,6 +156,36 @@ public static class Synth {
             float f = Mathf.Lerp(f0, f1, t * t) * (1f + 0.12f * Mathf.Sin(TwoPi * 11f * s));
             ph += TwoPi * f / R;
             d[i] = Mathf.Sin(ph) * 0.5f * Mathf.Sin(Mathf.PI * t);
+        }
+        return d;
+    }
+
+    /// <summary>
+    /// Журчание: густой рой мелких пузырьков (у каждого высота растёт — так звучит лопающийся в воде пузырь)
+    /// поверх мягкого шума потока. Громкость нарастает и стихает, как короткая струйка.
+    /// </summary>
+    public static float[] Gurgle(System.Random rnd, float dur) {
+        int n = (int)(R * dur);
+        var d = new float[n];
+        float y = 0, a = 1f - Mathf.Exp(-TwoPi * 700f / R);
+        for (int i = 0; i < n; i++) {
+            float t = (float)i / n;
+            y += a * ((float)rnd.NextDouble() * 2f - 1f - y);
+            d[i] = y * 0.5f * Mathf.Sin(Mathf.PI * Mathf.Pow(t, 0.5f));
+        }
+        int bubbles = (int)(dur * 70f);
+        for (int b = 0; b < bubbles; b++) {
+            float at = (float)rnd.NextDouble() * dur * 0.85f;
+            float env = Mathf.Sin(Mathf.PI * Mathf.Pow(at / dur, 0.5f));      // гуще в начале струйки
+            float f0 = 350f + (float)rnd.NextDouble() * 900f;
+            float len = 0.018f + (float)rnd.NextDouble() * 0.03f;
+            int start = (int)(at * R), m = (int)(len * R);
+            float ph = 0, amp = (0.25f + (float)rnd.NextDouble() * 0.35f) * env;
+            for (int i = 0; i < m && start + i < n; i++) {
+                float s = i / (float)R, k = (float)i / m;
+                ph += TwoPi * f0 * (1f + 1.6f * k) / R;                       // пузырь: высота ползёт вверх
+                d[start + i] += Mathf.Sin(ph) * amp * Mathf.Exp(-k * 4f) * Mathf.Min(1f, s * 2000f);
+            }
         }
         return d;
     }
