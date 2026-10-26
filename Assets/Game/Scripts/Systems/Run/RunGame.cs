@@ -70,6 +70,7 @@ public sealed partial class RunGame : MonoBehaviour {
         input.transform.SetParent(transform, false);
         input.AddComponent<PullGestureInput>();
         PullGestureInput.ReleaseHandler = OnDashRelease;
+        GameSettings.Apply(); // громкость, FPS, чувствительность, камера — из настроек игрока
         var sfx = new GameObject("procedural_sfx");
         sfx.transform.SetParent(transform, false);
         sfx.AddComponent<ProceduralSfx>();
@@ -289,7 +290,7 @@ public sealed partial class RunGame : MonoBehaviour {
         _ui.SetMinimap(_world);
         _lastDepthShown = plan.Depth;
         _ui.BiomeCard(plan.Depth, biome.Name, biome.Subtitle, RunWorldBuilder.Hex(biome.AccentColor));
-        _ui.Flash("Найдите шахту вниз. Поглощайте — чтобы её открыть", 4f);
+        _ui.Hint("Найдите шахту вниз. Поглощайте — чтобы её открыть", 4f);
     }
 
     /// <summary>Появление отложенных существ рядом и усыпление дальних — сотни существ без потерь FPS.</summary>

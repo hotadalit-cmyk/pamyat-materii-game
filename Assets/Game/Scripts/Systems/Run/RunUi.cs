@@ -35,6 +35,8 @@ public sealed class RunUi : MonoBehaviour {
     private Text _titleSoul, _infoTitle, _infoBody;
     private RunMinimap _minimap;
     private RunEvolutionUi _evo;
+    private RunSettingsUi _settings;
+    private RectTransform _splitRt, _gatherRt;
     private Image _splitBtn, _gatherBtn;
     private Text _splitLabel, _gatherLabel;
 
@@ -43,7 +45,8 @@ public sealed class RunUi : MonoBehaviour {
                              (_titleModal != null && _titleModal.activeSelf) ||
                              (_infoModal != null && _infoModal.activeSelf) ||
                              (_minimap != null && _minimap.IsBig) ||
-                             (_evo != null && _evo.ModalOpen);
+                             (_evo != null && _evo.ModalOpen) ||
+                             (_settings != null && _settings.IsOpen);
 
     public static RunUi Build(RunGame game) {
         var canvasGo = new GameObject("run_ui");
@@ -64,6 +67,14 @@ public sealed class RunUi : MonoBehaviour {
         ui.BuildOffer();
         ui.BuildImprint();
         ui._evo = RunEvolutionUi.Build(ui._root, game);
+        ui._settings = RunSettingsUi.Build(ui._root, game);
+        // «Настройки» — маленькая кнопка слева от миникарты
+        var set = Button(ui._root, "settings_btn", Vector2.zero, new Vector2(200, 80), GameBootstrap.COutline, 0.35f, "Настройки", 26);
+        var setRt = (RectTransform)set.transform;
+        setRt.anchorMin = setRt.anchorMax = setRt.pivot = new Vector2(1, 1);
+        setRt.anchoredPosition = new Vector2(-480, -28);
+        set.GetComponent<Button>().onClick.AddListener(() => { if (!ui.ModalOpen) ui._settings.Open(); });
+        GameSettings.Changed += ui.ApplyHandedness;
         ui.BuildTitle();
         ui.BuildInfo();
         return ui;
@@ -99,6 +110,7 @@ public sealed class RunUi : MonoBehaviour {
         srt.anchoredPosition = new Vector2(-28, 168);
         split.GetComponent<Button>().onClick.AddListener(() => _game.RequestSplit());
         _splitBtn = split.GetComponent<Image>();
+        _splitRt = srt;
         _splitLabel = split.GetComponentInChildren<Text>();
         var gather = Button(_root, "gather_btn", Vector2.zero, new Vector2(250, 120), GameBootstrap.CSoul, 0.8f, "Собраться", 30);
         var grt = (RectTransform)gather.transform;
@@ -106,6 +118,8 @@ public sealed class RunUi : MonoBehaviour {
         grt.anchoredPosition = new Vector2(-28, 28);
         gather.GetComponent<Button>().onClick.AddListener(() => _game.RequestGather());
         _gatherBtn = gather.GetComponent<Image>();
+        _gatherRt = grt;
+        ApplyHandedness();
         _gatherLabel = gather.GetComponentInChildren<Text>();
 
         _biomeTitle = Label(_root, "", 72, TextAnchor.MiddleCenter, new Vector2(0, 120), new Vector2(1600, 100), new Vector2(0.5f, 0.5f));
@@ -146,6 +160,23 @@ public sealed class RunUi : MonoBehaviour {
         _biomeSub.color = new Color(0.9f, 0.93f, 1f, 1f);
         _biomeTimer = 3.2f;
     }
+
+    /// <summary>Обучающая подсказка — показывается, только если подсказки включены в настройках.</summary>
+    public void Hint(string text, float seconds = 3f) { if (GameSettings.Hints) Flash(text, seconds); }
+
+    /// <summary>Кнопки деления под большой палец: справа (по умолчанию) или слева.</summary>
+    public void ApplyHandedness() {
+        if (_splitRt == null || _gatherRt == null) return;
+        bool left = GameSettings.LeftHanded;
+        var anchor = left ? new Vector2(0, 0) : new Vector2(1, 0);
+        float x = left ? 28 : -28;
+        _splitRt.anchorMin = _splitRt.anchorMax = _splitRt.pivot = anchor;
+        _gatherRt.anchorMin = _gatherRt.anchorMax = _gatherRt.pivot = anchor;
+        _splitRt.anchoredPosition = new Vector2(x, 168);
+        _gatherRt.anchoredPosition = new Vector2(x, 28);
+    }
+
+    void OnDestroy() { GameSettings.Changed -= ApplyHandedness; }
 
     public void Banner(string text, float seconds = 2.2f) { _banner.text = text; _bannerTimer = seconds; }
     public void Flash(string text, float seconds = 1.4f) { _flash.text = text; _flashTimer = seconds; }
@@ -324,12 +355,14 @@ public sealed class RunUi : MonoBehaviour {
             _titleModal.SetActive(false);
             PM.Systems.Input.PullGestureInput.Blocked = false;
             _game.OnTitleClosed();
-            Flash("Тяните ПРОТИВ движения и отпустите", 4f);
+            Hint("Тяните ПРОТИВ движения и отпустите", 4f);
         });
         var how = Button(_titleModal.transform, "how", new Vector2(-330, -230), new Vector2(560, 100), GameBootstrap.CSlime, 0.55f, "Как играть", 34);
         how.GetComponent<Button>().onClick.AddListener(() => ShowInfo("Как играть", HowToPlay()));
         var best = Button(_titleModal.transform, "bestiary", new Vector2(330, -230), new Vector2(560, 100), GameBootstrap.CSoul, 0.55f, "Бестиарий", 34);
         best.GetComponent<Button>().onClick.AddListener(() => ShowInfo("Бестиарий", BestiaryText()));
+        var settings = Button(_titleModal.transform, "settings", new Vector2(0, -360), new Vector2(560, 90), GameBootstrap.COutline, 0.35f, "Настройки", 32);
+        settings.GetComponent<Button>().onClick.AddListener(() => _settings.Open());
         _titleModal.SetActive(false);
     }
 

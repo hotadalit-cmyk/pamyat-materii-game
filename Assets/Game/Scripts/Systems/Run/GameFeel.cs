@@ -47,8 +47,17 @@ public sealed class GameFeel : MonoBehaviour {
 
     /// <summary>Тряска: 0.15 — лёгкий толчок, 0.5 — сильный удар, 1 — взрыв.</summary>
     public static void Shake(float amount) {
-        if (Instance != null) Instance._trauma = Mathf.Clamp01(Instance._trauma + amount);
+        if (Instance == null) return;
+        Instance._trauma = Mathf.Clamp01(Instance._trauma + amount * GameSettings.Shake);
+#if UNITY_ANDROID || UNITY_IOS
+        // сильный удар — короткая вибрация (если включена в настройках)
+        if (amount >= 0.45f && GameSettings.Vibration && Time.unscaledTime - Instance._lastVibro > 0.6f) {
+            Instance._lastVibro = Time.unscaledTime;
+            Handheld.Vibrate();
+        }
+#endif
     }
+    private float _lastVibro = -10f;
 
     /// <summary>Стоп-кадр: мир замирает на долю секунды — удар «ощущается».</summary>
     public static void HitStop(float seconds) {

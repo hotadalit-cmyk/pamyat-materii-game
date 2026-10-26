@@ -239,7 +239,7 @@ public sealed partial class RunGame {
             if (Vector2.Distance(p, new Vector2((float)mouths[i].X, (float)mouths[i].Y)) > 3.5f) continue;
             _crackHinted.Add(i);
             if (PlayerRadius * 2f > 0.95f)
-                _ui.Flash("Узкая трещина — разделитесь, чтобы пролезть", 3f);
+                _ui.Hint("Узкая трещина — разделитесь, чтобы пролезть", 3f);
         }
     }
 

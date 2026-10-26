@@ -11,6 +11,8 @@ public sealed class FollowCamera : MonoBehaviour {
     public float AimBias = 1.6f;
     /// <summary>v0.5: множитель кадрирования (растёт с массой героя) и смещение тряски — задаёт GameFeel.</summary>
     public static float ZoomMult = 1f;
+    /// <summary>Отдаление из настроек игрока («Ближе / Обычно / Дальше»).</summary>
+    public static float UserZoom = 1f;
     public static Vector2 ShakeOffset;
     /// <summary>Мгновенно перенести камеру к цели (смена комнаты — без «проезда» через полкарты).</summary>
     public static bool Snap;
@@ -30,7 +32,7 @@ public sealed class FollowCamera : MonoBehaviour {
     void LateUpdate() {
         if (_cam == null) return;
         float aspect = (float)Screen.width / (float)System.Math.Max(1, Screen.height);
-        float target = (float)PM.Domain.Core.OrthoFraming.ComputeOrthoSize(aspect) * ZoomMult;
+        float target = (float)PM.Domain.Core.OrthoFraming.ComputeOrthoSize(aspect) * ZoomMult * UserZoom;
         _cam.orthographicSize = Mathf.Lerp(_cam.orthographicSize, target, 1f - Mathf.Exp(-3f * Time.unscaledDeltaTime));
         if (Target == null) return;
         var bias = Vector3.zero;

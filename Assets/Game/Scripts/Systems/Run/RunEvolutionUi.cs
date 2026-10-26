@@ -27,6 +27,7 @@ public sealed class RunEvolutionUi : MonoBehaviour {
     private GameObject _evoModal;
     private EvoBranch _branch = EvoBranch.Body;
     private readonly Image[] _tabImgs = new Image[5];
+    private readonly Text[] _tabTexts = new Text[5];
     private Transform _nodeLayer;
     private Text _storeText, _tokenText;
     private Text _detTitle, _detBody, _detCost, _detBlock;
@@ -99,10 +100,23 @@ public sealed class RunEvolutionUi : MonoBehaviour {
 
     private static int CountAvailable(RunState run) {
         int n = 0;
-        var all = EvolutionTree.All();
-        for (int i = 0; i < all.Length; i++)
-            if (run.Evolution.CanUnlock(all[i].Id, run.Resources, run.KnownSpecies) == UnlockBlock.None) n++;
+        for (int b = 0; b < 5; b++) n += CountAvailable(run, (EvoBranch)b);
         return n;
+    }
+
+    /// <summary>Узлы ветви, доступные сейчас: за ресурсы или жетоном.</summary>
+    private static int CountAvailable(RunState run, EvoBranch branch) {
+        int n = 0;
+        var nodes = EvolutionTree.Branch(branch);
+        for (int i = 0; i < nodes.Length; i++) if (Availability(run, nodes[i]) != 0) n++;
+        return n;
+    }
+
+    /// <summary>0 — нельзя; 1 — можно за ресурсы; 2 — только жетоном.</summary>
+    private static int Availability(RunState run, EvoNode n) {
+        if (run.Evolution.CanUnlock(n.Id, run.Resources, run.KnownSpecies) == UnlockBlock.None) return 1;
+        if (run.Evolution.FreeTokens > 0 && run.Evolution.CanUnlockFree(n.Id, run.KnownSpecies) == UnlockBlock.None) return 2;
+        return 0;
     }
 
     // ================= Экран эволюции =================
@@ -117,6 +131,7 @@ public sealed class RunEvolutionUi : MonoBehaviour {
                 EvolutionTree.BranchName(br), 28, new Vector2(0, 1));
             tab.GetComponent<Button>().onClick.AddListener(() => { _branch = br; _selected = null; RefreshEvolution(); });
             _tabImgs[b] = tab.GetComponent<Image>();
+            _tabTexts[b] = tab.GetComponentInChildren<Text>();
         }
         var close = MakeButton(box, "close", new Vector2(-22, -18), new Vector2(170, 74), GameBootstrap.CSlime, 0.6f, "Закрыть", 28, new Vector2(1, 1));
         close.GetComponent<Button>().onClick.AddListener(CloseEvolution);
@@ -196,6 +211,10 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         for (int b = 0; b < 5; b++) {
             var c = BranchColor((EvoBranch)b);
             _tabImgs[b].color = new Color(c.r, c.g, c.b, (EvoBranch)b == _branch ? 0.95f : 0.3f);
+            // число узлов, которые можно развить прямо сейчас, — видно, в какую ветвь заглянуть
+            int avail = CountAvailable(run, (EvoBranch)b);
+            _tabTexts[b].text = EvolutionTree.BranchName((EvoBranch)b) + (avail > 0 ? "  •" + avail : "");
+            _tabTexts[b].color = avail > 0 ? new Color(1f, 0.95f, 0.6f) : TextC;
         }
         RefreshStore();
         for (int i = _nodeLayer.childCount - 1; i >= 0; i--) Destroy(_nodeLayer.GetChild(i).gameObject);
@@ -224,15 +243,29 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         bool owned = run.Evolution.Unlocked.Contains(n.Id);
         bool gene = !string.IsNullOrEmpty(n.RequiredGene) && (run.KnownSpecies == null || !run.KnownSpecies.Contains(n.RequiredGene));
         Color bc = BranchColor(n.Branch);
+        int avail = owned ? 0 : Availability(run, n);
+        Color hl = avail == 2 ? new Color(1f, 0.82f, 0.3f) : new Color(0.45f, 1f, 0.55f);
+        // доступные — подсветка: пульсирующее свечение за карточкой (за ресурсы — зелёное, жетоном — золотое)
+        if (avail != 0) {
+            var glow = Box(_nodeLayer, "glow_" + n.Id, p, new Vector2(300, 200), new Color(hl.r, hl.g, hl.b, 0.5f), new Vector2(0, 1));
+            glow.pivot = new Vector2(0.5f, 0.5f);
+            glow.GetComponent<Image>().raycastTarget = false;
+            glow.gameObject.AddComponent<UiPulse>().Base = new Color(hl.r, hl.g, hl.b, 0.55f);
+        }
         Color bg = owned ? new Color(bc.r * 0.6f, bc.g * 0.6f, bc.b * 0.6f, 0.95f)
-                 : block == UnlockBlock.None ? new Color(bc.r * 0.35f, bc.g * 0.35f, bc.b * 0.35f, 0.95f)
-                 : new Color(0.1f, 0.12f, 0.15f, 0.9f);
+                 : avail != 0 ? new Color(bc.r * 0.42f, bc.g * 0.42f, bc.b * 0.42f, 0.98f)
+                 : new Color(0.07f, 0.08f, 0.1f, 0.92f);                  // недоступные — приглушены
         var card = MakeButton(_nodeLayer, "node_" + n.Id, p, new Vector2(270, 170), bg, 1f, "", 24, new Vector2(0, 1), center: true);
         var outline = card.AddComponent<Outline>();
-        outline.effectColor = n.Id == _selected ? new Color(1f, 1f, 1f, 0.9f) : block == UnlockBlock.None ? bc : new Color(0, 0, 0, 0);
-        outline.effectDistance = new Vector2(3, -3);
+        outline.effectColor = n.Id == _selected ? new Color(1f, 1f, 1f, 0.95f) : avail != 0 ? hl : new Color(0, 0, 0, 0);
+        outline.effectDistance = avail != 0 || n.Id == _selected ? new Vector2(4, -4) : new Vector2(3, -3);
+        if (avail != 0) {
+            var tag = Label(card.transform, avail == 2 ? "ЖЕТОН" : "МОЖНО", 18, TextAnchor.UpperLeft, new Vector2(10, -4), new Vector2(110, 26), new Vector2(0, 1));
+            tag.color = hl;
+        }
         string title = gene ? "??? (" + GeneName(n.RequiredGene) + ")" : n.Name;
-        Label(card.transform, title, 25, TextAnchor.UpperCenter, new Vector2(0, -12), new Vector2(250, 66), new Vector2(0.5f, 1));
+        var tt = Label(card.transform, title, 25, TextAnchor.UpperCenter, new Vector2(0, -22), new Vector2(250, 66), new Vector2(0.5f, 1));
+        if (!owned && avail == 0) tt.color = new Color(0.62f, 0.66f, 0.72f);
         string sub = owned ? "развито" : CostShort(n.Cost);
         var st = Label(card.transform, sub, 21, TextAnchor.LowerCenter, new Vector2(0, 10), new Vector2(256, 84), new Vector2(0.5f, 0));
         st.supportRichText = true;
@@ -421,6 +454,18 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         var img = go.AddComponent<Image>();
         img.color = c;
         img.raycastTarget = false;
+    }
+}
+
+/// <summary>Пульс подсветки (на unscaled-времени — работает и на паузе).</summary>
+public sealed class UiPulse : MonoBehaviour {
+    public Color Base = Color.white;
+    private Image _img;
+    void Awake() { _img = GetComponent<Image>(); }
+    void Update() {
+        if (_img == null) return;
+        float k = 0.45f + 0.55f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 4f));
+        _img.color = new Color(Base.r, Base.g, Base.b, Base.a * k);
     }
 }
 }
