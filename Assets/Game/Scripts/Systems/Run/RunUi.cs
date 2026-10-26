@@ -361,8 +361,10 @@ public sealed class RunUi : MonoBehaviour {
         how.GetComponent<Button>().onClick.AddListener(() => ShowInfo("Как играть", HowToPlay()));
         var best = Button(_titleModal.transform, "bestiary", new Vector2(330, -230), new Vector2(560, 100), GameBootstrap.CSoul, 0.55f, "Бестиарий", 34);
         best.GetComponent<Button>().onClick.AddListener(() => ShowInfo("Бестиарий", BestiaryText()));
-        var settings = Button(_titleModal.transform, "settings", new Vector2(0, -360), new Vector2(560, 90), GameBootstrap.COutline, 0.35f, "Настройки", 32);
+        var settings = Button(_titleModal.transform, "settings", new Vector2(-330, -360), new Vector2(560, 90), GameBootstrap.COutline, 0.35f, "Настройки", 32);
         settings.GetComponent<Button>().onClick.AddListener(() => _settings.Open());
+        var credits = Button(_titleModal.transform, "credits", new Vector2(330, -360), new Vector2(560, 90), GameBootstrap.COutline, 0.35f, "Титры", 32);
+        credits.GetComponent<Button>().onClick.AddListener(() => ShowInfo("Титры", CreditsText()));
         _titleModal.SetActive(false);
     }
 
@@ -391,6 +393,17 @@ public sealed class RunUi : MonoBehaviour {
         _infoBody.text = body;
         _infoModal.SetActive(true);
         _infoModal.transform.SetAsLastSibling();
+    }
+
+    /// <summary>Авторы сторонних ресурсов: CC BY и OFL требуют указать авторство, CC0 — из благодарности.</summary>
+    private static string CreditsText() {
+        return "Память Материи — игра о капле живой материи.\n\n" +
+               "Иконки: Lorc и Delapouite, game-icons.net — CC BY 3.0 (creativecommons.org/licenses/by/3.0)\n" +
+               "Шрифты: Russo One (Jovanny Lemonad), Rubik (Hubert & Fischer, Cyreal) — SIL Open Font License 1.1\n" +
+               "3D-монстры: Quaternius (quaternius.com) — CC0\n" +
+               "Интерфейс и звуки: Kenney (kenney.nl) — CC0\n" +
+               "Музыка: Paul Wortmann, JaggedStone (OpenGameArt.org) — CC0\n\n" +
+               "Спасибо всем, кто делится своим творчеством свободно.";
     }
 
     private static string HowToPlay() {

@@ -94,7 +94,7 @@ public static class ThirdPartyArt {
 
     /// <summary>
     /// Посадить 3D-модель на существо. Вид 3/4 сверху (наклон к камере), модель «смотрит» по движению.
-    /// diameter — диаметр тела (мир. ед.); модель вписывается в ~1.5× этого диаметра.
+    /// diameter — диаметр тела (мир. ед.); модель вписывается в ~2.1× этого диаметра.
     /// </summary>
     public static MonsterModel Attach(Transform creature, string speciesId, float diameter, Color tint, bool tinted) {
         if (!MonsterFor.TryGetValue(speciesId, out var model)) return null;
@@ -128,7 +128,7 @@ public static class ThirdPartyArt {
         }
         float fp = _footprint[model];
         // масштаб — на своём узле: клипы FBX анимируют корень модели (позиция/масштаб) и перезаписали бы его
-        float scale = diameter * 1.5f / fp;
+        float scale = diameter * 2.1f / fp;
         yaw.localScale = new Vector3(scale, scale, scale);
         var animator = inst.GetComponentInChildren<Animator>();
         if (animator == null) animator = inst.AddComponent<Animator>();

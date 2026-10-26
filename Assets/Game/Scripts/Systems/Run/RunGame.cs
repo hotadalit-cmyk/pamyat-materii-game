@@ -955,11 +955,11 @@ public sealed partial class RunGame : MonoBehaviour {
         var l = lightGo.AddComponent<Light>();
         l.type = LightType.Directional;
         l.color = new Color(1f, 0.95f, 0.86f);
-        l.intensity = 1.15f;
+        l.intensity = 1.5f;
         l.shadows = LightShadows.None;
         lightGo.transform.rotation = Quaternion.LookRotation(new Vector3(0.35f, -0.55f, 1f));
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.5f, 0.5f, 0.6f);
+        RenderSettings.ambientLight = new Color(0.68f, 0.68f, 0.78f);
         _music = gameObject.AddComponent<AudioSource>();
         _music.loop = true;
         _music.playOnAwake = false;
