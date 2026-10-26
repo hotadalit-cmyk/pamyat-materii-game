@@ -342,6 +342,8 @@ public sealed partial class RunGame : MonoBehaviour {
                 GameFeel.Text(_player.transform.position, "+" + (Run.Mass - before).ToString("0.0") + " родник", new Color(0.5f, 0.85f, 1f), 1.2f);
             else if (altars[i].Kind == AltarKind.Relic)
                 GameFeel.Text(_player.transform.position, "Реликвия! +15 эссенции", new Color(1f, 0.85f, 0.4f), 1.2f);
+            if (altars[i].Kind != AltarKind.Spring)
+                _ui.Hint("Алтарь дал жетон и " + RunState.MaxTransmutesPerShrine + " обмена «Алхимии» (Эволюция → Алхимия)", 3.5f);
             var c = _altarRings[i].color; c.a = 0.15f; _altarRings[i].color = c;
         }
     }
@@ -405,10 +407,9 @@ public sealed partial class RunGame : MonoBehaviour {
         c.IsNemesis = spec.IsNemesis;
         c.SoulName = spec.SoulName;
         c.Variant = spec.Variant;  // v0.10: мерцание — визуальная подсказка и ×1.5 ресурсов
-        if (c.IsShimmering && c.Ring != null) {
-            // Лёгкий циан-оттенок кольца — игрок сразу видит «ценную» добычу.
-            var rc = c.Ring.color; rc.r = 0.55f; rc.g = 1f; rc.b = 1f; rc.a = 0.6f; c.Ring.color = rc;
-        }
+        if (c.IsShimmering)   // сияние поверх тьмы: «ценную» добычу видно издалека (пульс — в UpdateRings)
+            c.Sparkle = SpriteUtil.AddSprite(view.transform, SpriteUtil.GlowSprite, r * 4f, r * 4f,
+                new Color(0.55f, 1f, 1f, 0.5f), DarknessMask.Order + 2);
         c.Traits = traits;
         c.Init(sp, spec.Mass, new CreatureBrain(_seed + (ulong)(index * 7919 + 1)), view, r);
         if (!food) c.EchoDot = SpriteUtil.AddSprite(view.transform, SpriteUtil.RingSprite, r * 2.6f, r * 2.6f,
@@ -757,6 +758,10 @@ public sealed partial class RunGame : MonoBehaviour {
             Meta.Nemeses.OnSoulAbsorbed(c.SoulName);
             _ui.Banner(c.SoulName + " поглощена — её память теперь ваша", 3f);
         } else if (!c.IsFood) _ui.Flash("Поглощено: " + c.Species.Name + (c.IsShimmering ? " (мерцание!)" : ""));
+        if (c.IsShimmering) {
+            GameFeel.Text(pos + Vector3.up * 0.9f, "Мерцание: ресурсы ×1.5", new Color(0.55f, 1f, 1f), 1.1f);
+            ProceduralSfx.Instance?.Play("pickup");
+        }
         if (!c.IsFood && Run.LastReclaimedMutation != null) {
             // v0.10: возвращённая из немезиды мутация — показать игроку.
             var mut = MutationCatalog.Get(Run.LastReclaimedMutation);
@@ -986,6 +991,14 @@ public sealed partial class RunGame : MonoBehaviour {
         UpdateExitVisual();
         if (!_ui.ModalOpen) TwoFingerStep();
         if (InRun) TwinGlowStep();
+        if (InRun && Run.CompletedBiomesCount > _biomesShown) {
+            // v0.10: область изучена целиком — праздник и эссенция
+            _biomesShown = Run.CompletedBiomesCount;
+            _ui.Banner("«" + Run.LastBiomeCompleted + "» изучена целиком! +" + RunState.BiomeCompletionEssence.ToString("0") + " эссенции души", 3.5f);
+            ProceduralSfx.Instance?.Play("evolve");
+            GameFeel.Shake(0.2f);
+            SplashBurst2D.Instance?.Burst(_player.transform.position, Vector2.up, 16);
+        }
         CodexStep();
         if (Run.Evolution != null && Run.Evolution.FreeTokens > _lastTokens) {
             _ui.Banner("Жетон эволюции! Откройте «Эволюцию» и выберите путь", 3f);
@@ -1032,12 +1045,23 @@ public sealed partial class RunGame : MonoBehaviour {
             if (fm >= c.Mass * Run.Mutations.AbsorbRatio) col = new Color(0.4f, 1f, 0.5f, 0.7f);
             else if (c.Mass >= fm * 1.25 || c.IsBoss) col = new Color(1f, 0.35f, 0.3f, 0.75f);
             else col = new Color(1f, 0.85f, 0.4f, 0.45f);
+            if (c.IsShimmering) {
+                // мерцание: кольцо переливается бирюзой, сияние дышит
+                float t = 0.5f + 0.5f * Mathf.Sin(Time.time * 5f + i);
+                col = Color.Lerp(col, new Color(0.55f, 1f, 1f, 0.9f), 0.35f + 0.4f * t);
+                if (c.Sparkle != null) {
+                    c.Sparkle.color = new Color(0.55f, 1f, 1f, 0.3f + 0.35f * t);
+                    float s = 0.9f + 0.2f * t;
+                    c.Sparkle.transform.localScale = new Vector3(s, s, 1f);
+                }
+            }
             c.Ring.color = col;
         }
     }
 
     private RunAudio _audio;
     private bool _splitHinted, _soulHinted;
+    private int _biomesShown;
 
     /// <summary>Свет для 3D-моделей (тёплый, сверху-сбоку) и фоновая музыка пещеры.</summary>
     private void SetupLightAndMusic() {

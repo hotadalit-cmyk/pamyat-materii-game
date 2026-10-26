@@ -52,6 +52,25 @@ public static class WorldGenerator {
 
     private sealed class Chamber { public int Cx, Cy; public double R; public int Region; }
 
+    public const double ShimmerChance = 0.12;       // v0.10: доля мерцающих существ
+    public const double EliteShimmerChance = 0.3;   // в элитных гнёздах — чаще (риск ради добычи)
+
+    /// <summary>
+    /// v0.10: часть существ мерцает (+50% ресурсов). Отдельный поток случайных чисел — карта,
+    /// позиции и массы не меняются. Споры и души-немезиды не мерцают.
+    /// </summary>
+    private static void AssignShimmer(WorldMap m, ulong seed) {
+        var vr = new PmRandom(seed ^ 0x5A1E57A11UL);
+        for (int i = 0; i < m.Spawns.Count; i++) {
+            var s = m.Spawns[i];
+            if (s.SpeciesId == "spore" || s.IsNemesis) continue;
+            int cx = (int)s.Pos.X, cy = (int)s.Pos.Y;
+            int reg = cx >= 0 && cy >= 0 && cx < m.Width && cy < m.Height ? m.RegionOf[cy * m.Width + cx] : -1;
+            double chance = reg >= 0 && m.Regions[reg].Kind == RegionKind.Elite ? EliteShimmerChance : ShimmerChance;
+            if (vr.NextDouble01() < chance) { s.Variant = SpawnVariant.Shimmering; m.Spawns[i] = s; }
+        }
+    }
+
     public static WorldMap Generate(int depth, ulong seed, NemesisRegistry nemeses) {
         if (depth < 1) depth = 1;
         if (depth > RunState.MaxDepth) depth = RunState.MaxDepth;
@@ -350,6 +369,7 @@ public static class WorldGenerator {
         for (int s = 0; s < m.Spawns.Count; s++) total += m.Spawns[s].Mass;
         m.GoalMass = System.Math.Max(6.0, total * 0.25);
         BuildWallRects(m);
+        AssignShimmer(m, seed);
         return m;
     }
 

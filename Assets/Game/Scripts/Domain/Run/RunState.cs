@@ -271,8 +271,11 @@ public sealed class RunState {
     public const int MaxTransmutesPerShrine = 3;
 
     /// <summary>Сколько трансмутаций осталось в текущей комнате-святилище.</summary>
-    public int TransmutesLeft =>
-        (Layout != null && Layout.Kind == RoomKind.Shrine) ? MaxTransmutesPerShrine - _transmutesThisRoom : 0;
+    public int TransmutesLeft => OpenWorld ? _alchemyCharges
+        : (Layout != null && Layout.Kind == RoomKind.Shrine) ? MaxTransmutesPerShrine - _transmutesThisRoom : 0;
+
+    /// <summary>Открытый мир: обмены, накопленные у святилищ и реликвий (тратятся где угодно).</summary>
+    private int _alchemyCharges;
 
     /// <summary>Сколько трансмутаций уже сделано в этой комнате — для тестов и UI.</summary>
     public int TransmutesUsedThisRoom => _transmutesThisRoom;
@@ -287,6 +290,16 @@ public sealed class RunState {
     public int CompletedBiomesCount => _completedBiomes.Count;
     /// <summary>Имя последнего завершённого биома — для UI-флеша «Грибной коридор исследован!».</summary>
     public string LastBiomeCompleted { get; private set; }
+
+    /// <summary>Сколько видов области уже поглощено в этой жизни (для подсказки «Виды 2/4»).</summary>
+    public int SpeciesEatenFrom(BiomeDef b) {
+        if (b == null || b.SpeciesPool == null) return 0;
+        int n = 0;
+        for (int i = 0; i < b.SpeciesPool.Length; i++) if (_speciesThisRun.Contains(b.SpeciesPool[i])) n++;
+        return n;
+    }
+
+    public bool IsBiomeCompleted(BiomeId id) => _completedBiomes.Contains(id);
 
     /// <summary>Проверяет все биомы: если их пул видов целиком поглощён в этом забеге — даёт +5 эссенции.</summary>
     private void CheckBiomeCompletions() {
@@ -314,16 +327,19 @@ public sealed class RunState {
     /// </summary>
     public bool TryTransmute(ResourceKind from, ResourceKind to) {
         if (IsDead || IsVictory) return false;
-        if (Layout == null || Layout.Kind != RoomKind.Shrine) return false;
         if (from == to) return false;
-        if (_transmutesThisRoom >= MaxTransmutesPerShrine) return false;
+        if (OpenWorld) { if (_alchemyCharges <= 0) return false; }
+        else {
+            if (Layout == null || Layout.Kind != RoomKind.Shrine) return false;
+            if (_transmutesThisRoom >= MaxTransmutesPerShrine) return false;
+        }
         if (Resources == null) return false;
         if (Resources.Get(from) + 1e-9 < 3.0) return false;
         if (Resources.Get(to) + 1.0 > Resources.Capacity + 1e-9) return false;
         // Обе проверки пройдены — транзакция атомарна.
         Resources.Pay(Cost.Of(new CostItem(from, 3.0)));
         Resources.Add(to, 1.0);
-        _transmutesThisRoom++;
+        if (OpenWorld) _alchemyCharges--; else _transmutesThisRoom++;
         LastTransmute = new TransmuteResult { From = from, To = to };
         return true;
     }
@@ -728,6 +744,7 @@ public sealed class RunState {
             if (target > Mass) Mass = target;
         } else {
             Evolution.FreeTokens++;                         // святилище и реликвия — бесплатный узел
+            _alchemyCharges += MaxTransmutesPerShrine;      // v0.10: и три обмена «Алхимии»
             if (a.Kind == AltarKind.Relic) {
                 _relicEssence += RelicEssence;
                 Resources.Add(ResourceKind.Psyche, 10);

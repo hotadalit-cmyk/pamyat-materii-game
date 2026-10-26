@@ -154,6 +154,11 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         _storeText = Label(store, "", 26, TextAnchor.UpperLeft, new Vector2(24, -70), new Vector2(340, 420), new Vector2(0, 1));
         _tokenText = Label(store, "", 26, TextAnchor.UpperLeft, new Vector2(24, -500), new Vector2(340, 120), new Vector2(0, 1));
         _tokenText.color = new Color(1f, 0.9f, 0.4f);
+        // алхимия: обмены копятся у алтарей-святилищ и реликвий
+        var alch = MakeButton(store, "alchemy_btn", new Vector2(24, -390), new Vector2(332, 74), new Color(0.45f, 0.95f, 0.85f), 0.9f, "Алхимия", 28, new Vector2(0, 1));
+        alch.GetComponent<Button>().onClick.AddListener(OpenAlchemy);
+        _alchLabel = alch.GetComponentInChildren<Text>();
+        BuildAlchemy();
         // поле узлов
         var field = new GameObject("nodes");
         field.transform.SetParent(box, false);
@@ -202,6 +207,7 @@ public sealed class RunEvolutionUi : MonoBehaviour {
 
     /// <summary>Кнопка «Назад»: закрыть верхнее окно (показатели или эволюцию).</summary>
     public bool CloseTop() {
+        if (_alchModal != null && _alchModal.activeSelf) { _alchModal.SetActive(false); return true; }
         if (_statsModal != null && _statsModal.activeSelf) { _statsModal.SetActive(false); _game.SetPaused(false); return true; }
         if (_evoModal != null && _evoModal.activeSelf) { CloseEvolution(); return true; }
         return false;
@@ -214,6 +220,7 @@ public sealed class RunEvolutionUi : MonoBehaviour {
 
     private void RefreshStore() {
         var run = _game.Run;
+        if (_alchLabel != null) _alchLabel.text = "Алхимия · обменов: " + run.TransmutesLeft;
         var sb = new System.Text.StringBuilder();
         for (int i = 0; i < ResourceInfo.Count; i++) {
             var k = (ResourceKind)i;
@@ -444,6 +451,76 @@ public sealed class RunEvolutionUi : MonoBehaviour {
               .Append(Mathf.CeilToInt((float)it.Amount)).Append(enough ? "" : "</color>").Append('\n');
         }
         return sb.ToString();
+    }
+
+    // ================= Алхимия (v0.10) =================
+    private Text _alchLabel, _alchInfo;
+    private GameObject _alchModal;
+    private readonly Image[] _alchFrom = new Image[ResourceInfo.Count], _alchTo = new Image[ResourceInfo.Count];
+    private int _from = 1, _to = 5;
+
+    private void BuildAlchemy() {
+        _alchModal = new GameObject("alchemy");
+        _alchModal.transform.SetParent(_evoModal.transform, false);
+        var rt = _alchModal.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; rt.offsetMin = rt.offsetMax = Vector2.zero;
+        _alchModal.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.6f);
+        var box = Box(_alchModal.transform, "alch_box", Vector2.zero, new Vector2(1000, 620), Modal, new Vector2(0.5f, 0.5f));
+        Label(box, "АЛХИМИЯ · 3 → 1", 44, TextAnchor.MiddleLeft, new Vector2(40, -24), new Vector2(700, 60), new Vector2(0, 1)).color = GameBootstrap.COutline;
+        var close = MakeButton(box, "close", new Vector2(-22, -18), new Vector2(170, 70), GameBootstrap.CSlime, 0.6f, "Закрыть", 28, new Vector2(1, 1));
+        close.GetComponent<Button>().onClick.AddListener(() => _alchModal.SetActive(false));
+        Label(box, "Отдать 3:", 28, TextAnchor.MiddleLeft, new Vector2(40, -120), new Vector2(220, 50), new Vector2(0, 1));
+        Label(box, "Получить 1:", 28, TextAnchor.MiddleLeft, new Vector2(40, -270), new Vector2(220, 50), new Vector2(0, 1));
+        for (int i = 0; i < ResourceInfo.Count; i++) {
+            int idx = i;
+            _alchFrom[i] = ResTile(box, i, new Vector2(250 + i * 118, -100), () => { _from = idx; RefreshAlchemy(); });
+            _alchTo[i] = ResTile(box, i, new Vector2(250 + i * 118, -250), () => { _to = idx; RefreshAlchemy(); });
+        }
+        _alchInfo = Label(box, "", 27, TextAnchor.MiddleCenter, new Vector2(0, -380), new Vector2(940, 90), new Vector2(0.5f, 1));
+        var go = MakeButton(box, "do", new Vector2(0, 36), new Vector2(420, 100), GameBootstrap.CFood, 0.95f, "Обменять", 34, new Vector2(0.5f, 0));
+        go.GetComponent<Button>().onClick.AddListener(() => {
+            if (_game.Run.TryTransmute((ResourceKind)_from, (ResourceKind)_to)) {
+                ProceduralSfx.Instance?.Play("deposit");
+                RefreshStore();
+            } else ProceduralSfx.Instance?.Play("deny");
+            RefreshAlchemy();
+        });
+        _alchModal.SetActive(false);
+    }
+
+    private Image ResTile(Transform parent, int i, Vector2 pos, System.Action onPick) {
+        var k = (ResourceKind)i;
+        var tile = MakeButton(parent, "res" + i, pos, new Vector2(104, 104), new Color(0.12f, 0.18f, 0.24f), 0.95f, "", 20, new Vector2(0, 1));
+        tile.GetComponent<Button>().onClick.AddListener(() => { ProceduralSfx.Instance?.Play("click"); onPick(); });
+        var ic = new GameObject("icon");
+        ic.transform.SetParent(tile.transform, false);
+        var img = ic.AddComponent<Image>();
+        img.sprite = ThirdPartyArt.Icon(ResourceIcon(k));
+        img.color = Hex(ResourceInfo.Color(k));
+        img.raycastTarget = false;
+        img.rectTransform.sizeDelta = new Vector2(64, 64);
+        return tile.GetComponent<Image>();
+    }
+
+    private void OpenAlchemy() {
+        _alchModal.SetActive(true);
+        _alchModal.transform.SetAsLastSibling();
+        RefreshAlchemy();
+    }
+
+    private void RefreshAlchemy() {
+        var run = _game.Run;
+        for (int i = 0; i < ResourceInfo.Count; i++) {
+            _alchFrom[i].color = i == _from ? new Color(0.9f, 0.55f, 0.3f, 1f) : new Color(0.12f, 0.18f, 0.24f, 0.95f);
+            _alchTo[i].color = i == _to ? new Color(0.35f, 0.85f, 0.5f, 1f) : new Color(0.12f, 0.18f, 0.24f, 0.95f);
+        }
+        var f = (ResourceKind)_from; var t = (ResourceKind)_to;
+        string why = run.TransmutesLeft <= 0 ? "\nНет обменов: найдите святилище или реликвию"
+                   : _from == _to ? "\nВыберите разные ресурсы"
+                   : run.Resources.Get(f) < 3 ? "\nНе хватает: " + ResourceInfo.Name(f)
+                   : "";
+        _alchInfo.text = "3 " + ResourceInfo.Name(f) + " → 1 " + ResourceInfo.Name(t) + "   ·   обменов: " + run.TransmutesLeft + why;
+        _alchInfo.color = why == "" ? new Color(0.85f, 1f, 0.9f) : new Color(1f, 0.7f, 0.6f);
     }
 
     // ================= Показатели =================

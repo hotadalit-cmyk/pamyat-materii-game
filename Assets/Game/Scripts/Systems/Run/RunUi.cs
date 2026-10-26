@@ -364,7 +364,9 @@ public sealed class RunUi : MonoBehaviour {
             if (run.Room != null) {
                 bool evap = run.Layout != null && run.Layout.Biome != null && run.Layout.Biome.EvaporationPerSec > 0;
                 _depth.text = run.OpenWorld && run.Layout != null && run.Layout.Biome != null
-                    ? string.Format("Глубина {0} · {1}{2}", run.Depth, run.Layout.Biome.Name, evap ? " · жар" : "")
+                    ? string.Format("Глубина {0} · {1}{2}\n<size=21>Виды области: {3}/{4}{5}</size>", run.Depth, run.Layout.Biome.Name, evap ? " · жар" : "",
+                        run.SpeciesEatenFrom(run.Layout.Biome), run.Layout.Biome.SpeciesPool != null ? run.Layout.Biome.SpeciesPool.Length : 0,
+                        run.IsBiomeCompleted(run.Layout.Biome.Id) ? " — все!" : "")
                     : string.Format("Глубина {0} · комната {1}/{2}{3}", run.Depth,
                         Mathf.Clamp(run.RoomIndex + 1, 1, RunState.RoomsPerDepth), RunState.RoomsPerDepth,
                         evap ? " · жар" : "");
