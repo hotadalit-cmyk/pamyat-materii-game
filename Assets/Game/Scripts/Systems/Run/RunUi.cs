@@ -34,6 +34,7 @@ public sealed class RunUi : MonoBehaviour {
     private GameObject _titleModal, _infoModal;
     private Text _titleSoul, _infoTitle, _infoBody;
     private RunMinimap _minimap;
+    private RunEvolutionUi _evo;
     private Image _splitBtn, _gatherBtn;
     private Text _splitLabel, _gatherLabel;
 
@@ -41,7 +42,8 @@ public sealed class RunUi : MonoBehaviour {
                              (_imprintModal != null && _imprintModal.activeSelf) ||
                              (_titleModal != null && _titleModal.activeSelf) ||
                              (_infoModal != null && _infoModal.activeSelf) ||
-                             (_minimap != null && _minimap.IsBig);
+                             (_minimap != null && _minimap.IsBig) ||
+                             (_evo != null && _evo.ModalOpen);
 
     public static RunUi Build(RunGame game) {
         var canvasGo = new GameObject("run_ui");
@@ -61,6 +63,7 @@ public sealed class RunUi : MonoBehaviour {
         ui.BuildHud();
         ui.BuildOffer();
         ui.BuildImprint();
+        ui._evo = RunEvolutionUi.Build(ui._root, game);
         ui.BuildTitle();
         ui.BuildInfo();
         return ui;
@@ -80,7 +83,7 @@ public sealed class RunUi : MonoBehaviour {
         _depth = Label(top, "Глубина 1 · 1/3", 28, TextAnchor.MiddleLeft, new Vector2(30, -140), new Vector2(500, 40), new Vector2(0, 1));
         _combo = Label(top, "", 34, TextAnchor.MiddleRight, new Vector2(-30, -22), new Vector2(260, 52), new Vector2(1, 1));
         _combo.color = new Color(1f, 0.9f, 0.4f);
-        _mutations = Label(_root, "", 24, TextAnchor.UpperLeft, new Vector2(40, -236), new Vector2(700, 120), new Vector2(0, 1));
+        _mutations = Label(_root, "", 22, TextAnchor.UpperLeft, new Vector2(40, -470), new Vector2(700, 120), new Vector2(0, 1));
         _mutations.color = new Color(0.75f, 0.65f, 1f, 0.9f);
 
         _bossBar = Box(_root, "boss_bar", new Vector2(0, 40), new Vector2(1000, 84), Panel, new Vector2(0.5f, 0)).gameObject;

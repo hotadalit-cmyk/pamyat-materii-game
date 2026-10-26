@@ -79,6 +79,18 @@ public sealed class RunState {
         }
     }
     public FragmentSet Fragments { get; private set; }
+
+    // ---------- v0.8: ресурсы, хранилище, дерево эволюции ----------
+    public ResourceStore Resources { get; private set; }
+    public EvolutionState Evolution { get; private set; }
+    private readonly HashSet<string> _known = new HashSet<string>();
+    /// <summary>Виды, чьи гены известны (поглощены в этой жизни или раньше) — открывают генные узлы.</summary>
+    public ICollection<string> KnownSpecies => _known;
+    /// <summary>Что дало последнее поглощение (для всплывающих «+2 Хитин»).</summary>
+    public CostItem[] LastYield { get; private set; } = new CostItem[0];
+    public double LightRadius => Mutations.LightRadius + (Evolution != null ? Evolution.Sum(EvoEffectKind.LightFlat) : 0);
+    public double PullBonus => Evolution != null ? Evolution.Sum(EvoEffectKind.PullFlat) : 0;
+    public double DashSpeedMult => Mutations.DashSpeedMult * (1.0 + (Evolution != null ? Evolution.Sum(EvoEffectKind.DashSpeedMult) : 0));
     private int _creditId = -1;   // какой фрагмент получает прибавку (поглощение конкретным фрагментом)
     public double PeakMass { get; private set; }
     public MutationSet Mutations { get; }
@@ -111,6 +123,10 @@ public sealed class RunState {
         Depth = 1;
         RoomIndex = 0;
         Fragments = new FragmentSet(StartMass + _meta.StartMassBonus);
+        Resources = new ResourceStore { Capacity = ResourceStore.BaseCapacity };
+        Evolution = new EvolutionState();
+        if (_meta.SeenSpecies != null) foreach (var sp in _meta.SeenSpecies) _known.Add(sp);
+        if (OpenWorld) Fragments.MaxCount = 2; // делиться на большее число частей учит ветвь «Деление»
         PeakMass = Mass;
         Combo = new ComboTracker();
         if (OpenWorld) SetupWorld(); else SetupRoom();
@@ -139,7 +155,20 @@ public sealed class RunState {
     /// <summary>Как OnAbsorb, но добавляет и возвращает бонус цепочки поглощений.</summary>
     public double OnAbsorbEx(string speciesId, double mass) {
         if (mass <= 0.0 || IsDead) return 0.0;
+        double yieldMass = mass;
+        if (Evolution != null) mass *= 1.0 + Evolution.Sum(EvoEffectKind.MassGainMult);
         double bonus = Combo.OnAbsorb(speciesId == "spore", mass);
+        if (Resources != null) {
+            var items = YieldTable.For(speciesId, yieldMass);
+            double ym = 1.0 + Evolution.Sum(EvoEffectKind.YieldMult);
+            var got = new List<CostItem>(items.Length);
+            for (int i = 0; i < items.Length; i++) {
+                double added = Resources.Add(items[i].Kind, items[i].Amount * ym);
+                if (added > 0) got.Add(new CostItem { Kind = items[i].Kind, Amount = added });
+            }
+            LastYield = got.ToArray();
+            _known.Add(speciesId);
+        }
         Mass += mass + bonus;
         RoomAbsorbed += mass + bonus;
         if (Mass > PeakMass) PeakMass = Mass;
@@ -211,6 +240,7 @@ public sealed class RunState {
     /// <summary>−масса; при смерти запоминает KilledBy.</summary>
     public void OnMassLost(double amount, string sourceId) {
         if (amount <= 0.0) return;
+        amount *= DamageTakenFactor;
         Mass -= amount;
         if (!IsDead && Mass < SizeRule.MinViableMass) {
             IsDead = true;
@@ -237,6 +267,7 @@ public sealed class RunState {
     /// <summary>Удар по конкретному фрагменту. Возвращает true, если фрагмент растворился.</summary>
     public bool OnMassLostAt(int fragmentId, double amount, string sourceId) {
         if (amount <= 0.0) return false;
+        amount *= DamageTakenFactor;
         bool dissolved = Fragments.Remove(fragmentId, amount);
         if (!IsDead && Mass < SizeRule.MinViableMass) {
             IsDead = true;
@@ -247,6 +278,37 @@ public sealed class RunState {
 
     public double FragmentMass(int id) => Fragments.MassOf(id);
 
+    private double DamageTakenFactor {
+        get { double k = 1.0 + (Evolution != null ? Evolution.Sum(EvoEffectKind.DamageTakenMult) : 0); return k < 0.2 ? 0.2 : k; }
+    }
+
+    /// <summary>Развить узел дерева: за ресурсы или жетоном. Пересчитывает лимиты (заряды, фрагменты, хранилище).</summary>
+    public bool TryEvolve(string nodeId, bool free) {
+        if (IsDead || IsVictory || Evolution == null) return false;
+        bool hadCrystal = Mutations.Stacks("m_crystal") > 0;
+        bool ok = free ? Evolution.TryUnlockFree(nodeId, _known, Mutations)
+                       : Evolution.TryUnlock(nodeId, Resources, _known, Mutations);
+        if (!ok) return false;
+        if (!hadCrystal && Mutations.Stacks("m_crystal") > 0) Mass *= CrystalMassBonusMult;
+        if (Mass > PeakMass) PeakMass = Mass;
+        RecomputeLimits();
+        return true;
+    }
+
+    private void RecomputeLimits() {
+        int maxDash = Mutations.DashCharges + _meta.BonusDashCharges + (int)System.Math.Round(Evolution.Sum(EvoEffectKind.MaxDash));
+        if (maxDash > MaxDashCharges) DashCharges += maxDash - MaxDashCharges;
+        MaxDashCharges = maxDash;
+        if (DashCharges > MaxDashCharges) DashCharges = MaxDashCharges;
+        Resources.Capacity = ResourceStore.BaseCapacity + Evolution.Sum(EvoEffectKind.StorageCap);
+        if (OpenWorld) Fragments.MaxCount = 2 + (int)System.Math.Round(Evolution.Sum(EvoEffectKind.MaxFragments));
+        double minMass = FragmentSet.MinFragmentMass + Evolution.Sum(EvoEffectKind.SplitMinMass);
+        Fragments.MinMass = minMass < 0.6 ? 0.6 : minMass;
+    }
+
+    /// <summary>Показатели героя с разбором источников (для экрана «Показатели»).</summary>
+    public List<StatLine> Stats() => StatSheet.Build(Mass, Fragments.Count, DashCharges, Mutations, Evolution, _meta);
+
     /// <summary>Учитывает лучший удар игрока (для BestHit в LifeImprint).</summary>
     public void OnHit(double dealtMassLoss) {
         if (dealtMassLoss > _bestHit) _bestHit = dealtMassLoss;
@@ -256,7 +318,7 @@ public sealed class RunState {
     public void Tick(double dt) {
         if (dt <= 0.0 || IsDead) return;
         Combo.Tick(dt);
-        double regen = Mutations.RegenPerSec * dt;
+        double regen = (Mutations.RegenPerSec + (Evolution != null ? Evolution.Sum(EvoEffectKind.RegenFlat) : 0)) * dt;
         if (regen > 0.0) {
             Mass += regen;
             if (Mass > PeakMass) {
@@ -368,11 +430,12 @@ public sealed class RunState {
             if (target > PeakMass) target = PeakMass;
             if (target > Mass) Mass = target;
         } else {
-            if (PendingOffer == null) {
-                PendingOffer = MakeOffer();
-                if (PendingOffer.Options.Length == 0) PendingOffer = null;
-            } else _offersDue++;
-            if (a.Kind == AltarKind.Relic) _relicEssence += RelicEssence;
+            Evolution.FreeTokens++;                         // святилище и реликвия — бесплатный узел
+            if (a.Kind == AltarKind.Relic) {
+                _relicEssence += RelicEssence;
+                Resources.Add(ResourceKind.Psyche, 10);
+                Resources.Add(ResourceKind.Crystal, 6);
+            } else Resources.Add(ResourceKind.Organic, 8);
         }
         _altarUsed[index] = true;
     }
@@ -452,6 +515,11 @@ public sealed class RunState {
         while (_nextThreshold < GrowthThresholds.Length && PeakMass >= GrowthThresholds[_nextThreshold]) {
             _nextThreshold++;
             _offersDue++;
+        }
+        if (OpenWorld && Evolution != null) {
+            // v0.8: рост даёт жетон эволюции — игрок сам выбирает узел в дереве
+            if (_offersDue > 0) { Evolution.FreeTokens += _offersDue; _offersDue = 0; }
+            return;
         }
         if (PendingOffer == null && _offersDue > 0) {
             _offersDue--;

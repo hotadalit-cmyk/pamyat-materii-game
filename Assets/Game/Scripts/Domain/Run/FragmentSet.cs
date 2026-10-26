@@ -18,6 +18,11 @@ public sealed class FragmentSet {
     public const double DissolveMass = 0.5;      // ниже — фрагмент растворяется
     public const int MaxFragments = 8;
 
+    /// <summary>Текущий лимит фрагментов (v0.8: 2 + ветвь «Деление»; не выше MaxFragments).</summary>
+    public int MaxCount = MaxFragments;
+    /// <summary>Минимальная масса половинки при делении (ветвь «Деление» снижает).</summary>
+    public double MinMass = MinFragmentMass;
+
     private readonly List<Fragment> _items = new List<Fragment>();
     private int _nextId = 1;
 
@@ -40,12 +45,12 @@ public sealed class FragmentSet {
 
     public double MassOf(int id) { int i = IndexOf(id); return i < 0 ? 0 : _items[i].Mass; }
 
-    public bool CanSplit => _items.Count < MaxFragments && LargestSplittable() >= 0;
+    public bool CanSplit => _items.Count < System.Math.Min(MaxCount, MaxFragments) && LargestSplittable() >= 0;
 
     private int LargestSplittable() {
         int best = -1;
         for (int i = 0; i < _items.Count; i++)
-            if (_items[i].Mass >= 2 * MinFragmentMass && (best < 0 || _items[i].Mass > _items[best].Mass)) best = i;
+            if (_items[i].Mass >= 2 * MinMass && (best < 0 || _items[i].Mass > _items[best].Mass)) best = i;
         return best;
     }
 
@@ -56,9 +61,10 @@ public sealed class FragmentSet {
     public List<int[]> SplitAll() {
         var created = new List<int[]>();
         int n = _items.Count;
-        for (int i = 0; i < n && _items.Count < MaxFragments; i++) {
+        int cap = System.Math.Min(MaxCount, MaxFragments);
+        for (int i = 0; i < n && _items.Count < cap; i++) {
             var f = _items[i];
-            if (f.Mass < 2 * MinFragmentMass) continue;
+            if (f.Mass < 2 * MinMass) continue;
             double half = f.Mass * 0.5;
             f.Mass = half;
             _items[i] = f;

@@ -152,6 +152,24 @@ public sealed partial class RunGame : MonoBehaviour {
         _ui.BiomeCard(Run.Depth, biome.Name, biome.Subtitle, RunWorldBuilder.Hex(biome.AccentColor));
     }
 
+    /// <summary>Пауза для экранов эволюции и показателей (мир замирает, жест рывка выключен).</summary>
+    public void SetPaused(bool paused) {
+        GameFeel.CancelHitStop();
+        Time.timeScale = paused ? 0f : 1f;
+        PullGestureInput.Blocked = paused;
+    }
+
+    /// <summary>Развить узел дерева эволюции (из экрана «Эволюция»).</summary>
+    public bool TryEvolve(string nodeId, bool free) {
+        if (!InRun || !Run.TryEvolve(nodeId, free)) return false;
+        var node = EvolutionTree.Get(nodeId);
+        ApplyPlayerSize();
+        _ui.Flash("Эволюция: " + (node != null ? node.Name : nodeId), 2f);
+        _lastTokens = Run.Evolution.FreeTokens;
+        return true;
+    }
+    private int _lastTokens;
+
     public void UpgradeSoul(SoulStat stat) {
         if (Meta.TryUpgrade(stat)) {
             SaveMeta();
@@ -214,7 +232,7 @@ public sealed partial class RunGame : MonoBehaviour {
 
         PlaceFragmentsAt(ToV2(plan.PlayerStart));
         FollowCamera.Snap = true;
-        _dark.Set((float)biome.Darkness01, (float)Run.Mutations.LightRadius);
+        _dark.Set((float)biome.Darkness01, (float)Run.LightRadius);
 
         if (plan.Depth != _lastDepthShown) {
             _lastDepthShown = plan.Depth;
@@ -266,7 +284,7 @@ public sealed partial class RunGame : MonoBehaviour {
 
         PlaceFragmentsAt(ToV2(plan.PlayerStart));
         FollowCamera.Snap = true;
-        _dark.Set((float)biome.Darkness01, (float)Run.Mutations.LightRadius);
+        _dark.Set((float)biome.Darkness01, (float)Run.LightRadius);
         StreamCreatures(true);
         _ui.SetMinimap(_world);
         _lastDepthShown = plan.Depth;
@@ -460,7 +478,7 @@ public sealed partial class RunGame : MonoBehaviour {
         }
         _ricochets = 0;
         _sinceDash = 0f;
-        float speed = DashSpeed * (float)Run.Mutations.DashSpeedMult * (float)charge;
+        float speed = DashSpeed * (float)Run.DashSpeedMult * (float)charge;
         var impulse = new Vector2((float)dir.X, (float)dir.Y) * speed;
         for (int i = 0; i < _fragList.Count; i++) _fragList[i].View.Rb.linearVelocity += impulse; // стая рвётся вместе
         ProceduralSfx.Instance?.Play("jet");
@@ -650,6 +668,14 @@ public sealed partial class RunGame : MonoBehaviour {
             Meta.Nemeses.OnSoulAbsorbed(c.SoulName);
             _ui.Banner(c.SoulName + " поглощена — её память теперь ваша", 3f);
         } else if (!c.IsFood) _ui.Flash("Поглощено: " + c.Species.Name);
+        if (!c.IsFood && Run.LastYield != null) {
+            // добыча в хранилище — цветом ресурса
+            for (int y = 0; y < Run.LastYield.Length; y++) {
+                var it = Run.LastYield[y];
+                GameFeel.Text(pos + new Vector3(0.6f, -0.3f - 0.45f * y, 0), "+" + it.Amount.ToString("0.#") + " " + ResourceInfo.Name(it.Kind),
+                    RunEvolutionUi.Hex(ResourceInfo.Color(it.Kind)), 0.75f);
+            }
+        }
         if (!c.IsFood) {
             GameFeel.Text(pos, "+" + (c.Mass + bonus).ToString("0.0"), GameBootstrap.CFood);
             if (Run.Combo.Chain >= 2) {
@@ -710,7 +736,7 @@ public sealed partial class RunGame : MonoBehaviour {
             float dist = d.magnitude;
             if (c.IsFood) {
                 // биогравитация: споры тянутся к фрагменту, касание — поглощение
-                float pull = (1.6f + 0.45f * Mathf.Sqrt((float)fMass)) * (float)Run.Mutations.PullRadiusMult;
+                float pull = (1.6f + 0.45f * Mathf.Sqrt((float)fMass) + (float)Run.PullBonus) * (float)Run.Mutations.PullRadiusMult;
                 if (dist < pull && dist > 0.001f)
                     rb.AddForce(d / dist * (9f * rb.mass * (1f - dist / pull)), ForceMode2D.Force);
                 if (dist <= fr + c.Radius * 0.6f) Absorb(c);
@@ -849,9 +875,14 @@ public sealed partial class RunGame : MonoBehaviour {
         ApplyPlayerSize();
         var biome = Run.Layout != null ? Run.Layout.Biome : null;
         _dark.Set((float)(biome != null ? biome.Darkness01 : Run.Room.Darkness01),
-                  (float)Run.Mutations.LightRadius * (Run.OpenWorld ? 1.8f : 1f));
+                  (float)Run.LightRadius * (Run.OpenWorld ? 1.8f : 1f));
         UpdateExitVisual();
         if (!_ui.ModalOpen) TwoFingerStep();
+        if (Run.Evolution != null && Run.Evolution.FreeTokens > _lastTokens) {
+            _ui.Banner("Жетон эволюции! Откройте «Эволюцию» и выберите путь", 3f);
+            ProceduralSfx.Instance?.Play("unlock");
+        }
+        if (Run.Evolution != null) _lastTokens = Run.Evolution.FreeTokens;
         if (_world != null) {
             _miniTimer -= Time.unscaledDeltaTime;
             if (_miniTimer <= 0f) { _miniTimer = 0.2f; _world.FlushMini(); }
@@ -879,7 +910,7 @@ public sealed partial class RunGame : MonoBehaviour {
 
     private void UpdateEcho() {
         double sense = Run.Mutations.SenseRadius;
-        float light = (float)Run.Mutations.LightRadius;
+        float light = (float)Run.LightRadius;
         Vector2 p = _player.transform.position;
         for (int i = 0; i < _creatures.Count; i++) {
             var c = _creatures[i];
