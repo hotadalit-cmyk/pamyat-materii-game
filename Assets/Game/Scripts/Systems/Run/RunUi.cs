@@ -162,8 +162,7 @@ public sealed class RunUi : MonoBehaviour {
             int frags = _game.FragmentCount;
             bool canSplit = _game.CanSplit;
             _splitBtn.color = new Color(GameBootstrap.CSlime.r, GameBootstrap.CSlime.g, GameBootstrap.CSlime.b, canSplit ? 0.8f : 0.25f);
-            _splitLabel.text = frags > 1 ? "Разделиться
-(" + frags + ")" : "Разделиться";
+            _splitLabel.text = frags > 1 ? "Разделиться\n(" + frags + ")" : "Разделиться";
             _gatherBtn.gameObject.SetActive(frags > 1);
             bool g = _game.Gathering;
             _gatherBtn.color = g ? new Color(1f, 0.85f, 0.4f, 0.9f) : new Color(GameBootstrap.CSoul.r, GameBootstrap.CSoul.g, GameBootstrap.CSoul.b, 0.8f);
