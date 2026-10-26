@@ -28,6 +28,20 @@ public static class RunRoomTests {
         True(allSame, "все спавны идентичны по позициям и массам");
     }
 
+    public static void Generate_SoulSlimeAtMostOneAndNotInFirstRoom() {
+        for (ulong seed = 1; seed <= 300; seed++) {
+            for (int depth = 1; depth <= RunState.MaxDepth; depth++) {
+                for (int room = 0; room < RunState.RoomsPerDepth; room++) {
+                    var plan = RoomGenerator.Generate(depth, room, seed, null);
+                    int souls = 0;
+                    foreach (var s in plan.Spawns) if (s.SpeciesId == "soul_slime" && !s.IsNemesis) souls++;
+                    True(souls <= 1, "at most one soul slime per room");
+                    if (depth == 1 && room == 0) Eq(0, souls, "no soul slime in the very first room");
+                }
+            }
+        }
+    }
+
     public static void Generate_DifferentSeedsDiffer() {
         var a = RoomGenerator.Generate(3, 2, 100UL, null);
         var b = RoomGenerator.Generate(3, 2, 200UL, null);

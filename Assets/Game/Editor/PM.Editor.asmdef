@@ -4,6 +4,7 @@
     "references": [
         "PM.Domain",
         "PM.Persistence",
+        "PM.Domain.Run",
         "PM.Systems"
     ],
     "includePlatforms": [

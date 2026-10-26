@@ -3,7 +3,8 @@
     "rootNamespace": "PM.Systems",
     "references": [
         "PM.Domain",
-        "PM.Persistence"
+        "PM.Persistence",
+        "PM.Domain.Run"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

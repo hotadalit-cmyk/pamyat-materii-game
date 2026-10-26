@@ -61,8 +61,18 @@ public static class RoomGenerator {
         if (creatureCount > 6) creatureCount = 6;
         var eligible = EligibleSpecies(depth);
         double massMult = 1.0 + DepthMassGrowth * (depth - 1);
+        // душеслизень — охотник с массой игрока: не больше одного на комнату и ни одного
+        // в самой первой комнате (первые секунды — на освоение рывка, а не на бегство)
+        bool soulAllowed = !(depth == 1 && roomIndex == 0);
         for (int i = 0; i < creatureCount && eligible.Count > 0; i++) {
             var sp = eligible[rng.NextInt(eligible.Count)];
+            if (sp.Id == "soul_slime") {
+                if (!soulAllowed) {
+                    if (eligible.Count == 1) break;
+                    i--; continue; // перевыбрать другой вид
+                }
+                soulAllowed = false;
+            }
             double mass = sp.Id == "soul_slime"
                 ? EstimatePlayerMass(depth) * rng.Range(0.9, 1.1)
                 : sp.BaseMass * massMult * rng.Range(0.85, 1.15);

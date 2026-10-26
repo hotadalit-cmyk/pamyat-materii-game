@@ -190,6 +190,9 @@ public sealed class RunGame : MonoBehaviour {
     private void SpawnCreature(SpawnSpec spec, int index) {
         var sp = SpeciesCatalog.Get(spec.SpeciesId);
         if (sp == null) return;
+        // у каждой души есть имя — иначе она не сможет стать немезидой
+        if (sp.ColorIndex == 3 && string.IsNullOrEmpty(spec.SoulName))
+            spec.SoulName = Meta.Nemeses.PickSoulName(_rng);
         bool food = sp.Behavior == CreatureBehavior.Food;
         float r = (float)SizeRule.RadiusForMass(spec.Mass);
         var view = SimEntityView2D.Create(_roomRoot, sp.Id + "_" + index,
