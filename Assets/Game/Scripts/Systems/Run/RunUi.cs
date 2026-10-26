@@ -161,9 +161,11 @@ public sealed class RunUi : MonoBehaviour {
             }
             if (run.Room != null) {
                 bool evap = run.Layout != null && run.Layout.Biome != null && run.Layout.Biome.EvaporationPerSec > 0;
-                _depth.text = string.Format("Глубина {0} · комната {1}/{2}{3}", run.Depth,
-                    Mathf.Clamp(run.RoomIndex + 1, 1, RunState.RoomsPerDepth), RunState.RoomsPerDepth,
-                    evap ? " · жар" : "");
+                _depth.text = run.OpenWorld && run.Layout != null && run.Layout.Biome != null
+                    ? string.Format("Глубина {0} · {1}{2}", run.Depth, run.Layout.Biome.Name, evap ? " · жар" : "")
+                    : string.Format("Глубина {0} · комната {1}/{2}{3}", run.Depth,
+                        Mathf.Clamp(run.RoomIndex + 1, 1, RunState.RoomsPerDepth), RunState.RoomsPerDepth,
+                        evap ? " · жар" : "");
                 float goal = (float)System.Math.Max(0.01, run.Room.GoalMass);
                 float frac = Mathf.Clamp01((float)run.RoomAbsorbed / goal);
                 _goalFill.rectTransform.sizeDelta = new Vector2(Mathf.Max(16f, 660f * frac), 16f);

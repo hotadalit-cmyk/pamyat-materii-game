@@ -10,7 +10,7 @@ namespace PM.Systems.Run {
 /// Начало координат мира — левый нижний угол карты, клетка = 1 единица.
 /// </summary>
 public sealed class WorldView {
-    public const int PxPerCell = 4;
+    public const int PxPerCell = 6;
     public readonly WorldMap Map;
     public readonly Texture2D MiniTex;      // 1 px = 1 клетка; неоткрытое прозрачно
     public readonly bool[] Explored;
@@ -64,17 +64,24 @@ public sealed class WorldView {
         var px = new Color32[tw * th];
         for (int ty = 0; ty < th; ty++) {
             int cy = ty / P;
+            float fy = (ty + 0.5f) / P - 0.5f;               // координата в «центрах клеток»
             for (int tx = 0; tx < tw; tx++) {
                 int cx = tx / P, ci = cy * w + cx;
                 Color c;
-                float n = Noise(tx * 0.09f, ty * 0.09f) * 0.6f + Noise(tx * 0.31f, ty * 0.31f) * 0.4f;
-                if (Map.Cells[ci] == 1) {
+                float n = Noise(tx * 0.06f, ty * 0.06f) * 0.6f + Noise(tx * 0.21f, ty * 0.21f) * 0.4f;
+                // органичный край: билинейная интерполяция пола между центрами клеток + порог с шумом
+                float fx = (tx + 0.5f) / P - 0.5f;
+                float soft = FloorAt(fx, fy, w, h);
+                bool isFloor = soft > 0.5f + (n - 0.5f) * 0.25f;
+                if (isFloor && Map.Cells[ci] == 0) ci = NearestFloorCell(cx, cy, w, h, ci);
+                if (isFloor) {
                     int reg = Map.RegionOf != null ? Map.RegionOf[ci] : -1;
                     c = reg >= 0 && reg < regionTint.Length ? regionTint[reg] : Color.Lerp(floorC, wallC, 0.25f);
                     c = Color.Lerp(c, glow, 0.12f + 0.18f * n);
                     c *= 0.88f + 0.24f * n;
                 } else {
-                    int d = dist[ci];
+                    if (Map.Cells[ci] == 1) ci = NearestWallCell(cx, cy, w, h, ci);
+                    int d = dist[ci] == 0 ? 1 : dist[ci];
                     float k = d >= 4 ? 0f : (4 - d) / 3f;          // 1 у самого пола
                     c = Color.Lerp(wallC * 0.45f, wallC, k) * (0.85f + 0.3f * n);
                     if (d == 1) c = Color.Lerp(c, accent, 0.18f + 0.12f * n); // светящаяся кромка стены
@@ -92,6 +99,28 @@ public sealed class WorldView {
         sr.sprite = Sprite.Create(tex, new Rect(0, 0, tw, th), Vector2.zero, P);
         sr.sortingOrder = 0;
         go.transform.position = Vector3.zero;
+    }
+
+    private float FloorAt(float fx, float fy, int w, int h) {
+        int x0 = Mathf.FloorToInt(fx), y0 = Mathf.FloorToInt(fy);
+        float tx = fx - x0, ty = fy - y0;
+        float a = Cell(x0, y0, w, h), b = Cell(x0 + 1, y0, w, h), c = Cell(x0, y0 + 1, w, h), d = Cell(x0 + 1, y0 + 1, w, h);
+        return Mathf.Lerp(Mathf.Lerp(a, b, tx), Mathf.Lerp(c, d, tx), ty);
+    }
+    private float Cell(int x, int y, int w, int h) => x < 0 || y < 0 || x >= w || y >= h ? 0f : Map.Cells[y * w + x];
+    private int NearestFloorCell(int cx, int cy, int w, int h, int fallback) {
+        for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+            int x = cx + dx, y = cy + dy;
+            if (x >= 0 && y >= 0 && x < w && y < h && Map.Cells[y * w + x] == 1) return y * w + x;
+        }
+        return fallback;
+    }
+    private int NearestWallCell(int cx, int cy, int w, int h, int fallback) {
+        for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+            int x = cx + dx, y = cy + dy;
+            if (x >= 0 && y >= 0 && x < w && y < h && Map.Cells[y * w + x] == 0) return y * w + x;
+        }
+        return fallback;
     }
 
     private static Color TintFor(RegionKind k, Color floor, Color accent) {

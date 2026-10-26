@@ -476,7 +476,8 @@ public sealed class RunGame : MonoBehaviour {
             col.sharedMaterial = null; col.sharedMaterial = _playerMat; // применить изменённый материал
         }
         // крупное тело — камера отъезжает, чтобы видеть больше пещеры
-        FollowCamera.ZoomMult = Mathf.Clamp(0.75f + 0.125f * Mathf.Sqrt((float)Run.Mass), 0.95f, 1.6f);
+        FollowCamera.ZoomMult = Mathf.Clamp(0.75f + 0.125f * Mathf.Sqrt((float)Run.Mass), 0.95f, 1.6f)
+                                * (Run.OpenWorld ? 1.9f : 1f); // в открытом мире видно больше пещеры
     }
 
     private float PlayerRadius => (float)SizeRule.RadiusForMass(Run.Mass);
@@ -838,7 +839,8 @@ public sealed class RunGame : MonoBehaviour {
         if (!_ui.ModalOpen) Run.Tick(Time.deltaTime);
         ApplyPlayerSize();
         var biome = Run.Layout != null ? Run.Layout.Biome : null;
-        _dark.Set((float)(biome != null ? biome.Darkness01 : Run.Room.Darkness01), (float)Run.Mutations.LightRadius);
+        _dark.Set((float)(biome != null ? biome.Darkness01 : Run.Room.Darkness01),
+                  (float)Run.Mutations.LightRadius * (Run.OpenWorld ? 1.8f : 1f));
         UpdateExitVisual();
         if (_world != null) {
             _miniTimer -= Time.unscaledDeltaTime;
