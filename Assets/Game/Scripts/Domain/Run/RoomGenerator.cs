@@ -2,6 +2,9 @@ using System.Collections.Generic;
 using PM.Domain.Core;
 namespace PM.Domain.Run {
 
+/// <summary>v0.10: особый спавн — мерцание даёт +50% ресурсов при поглощении.</summary>
+public enum SpawnVariant { None = 0, Shimmering = 1 }
+
 /// <summary>Один спавн в комнате.</summary>
 public struct SpawnSpec {
     public string SpeciesId;
@@ -9,6 +12,7 @@ public struct SpawnSpec {
     public double Mass;
     public bool IsNemesis;
     public string SoulName;   // только для немезид
+    public SpawnVariant Variant; // v0.10: мерцание — не влияет на массу/позицию, только на добычу
 }
 
 /// <summary>План комнаты: арена, спавны, цель, выход. Чистые данные, без UnityEngine.</summary>
@@ -34,6 +38,8 @@ public static class RoomGenerator {
     private const double DepthMassGrowth = 0.25; // ×(1 + 0.25×(depth−1))
     private const double GoalShare = 0.4;
     private const double MinGoalMass = 2.0;
+    private const double ShimmeringChance = 0.12;  // v0.10: шанс мерцания на не-спору/не-немезиду
+    private const ulong ShimmeringSeedXor = 0xC0FFEEDEADBEEFUL;  // отдельный rng — не трогает основной поток
 
     public static RoomPlan Generate(int depth, int roomIndex, ulong seed, NemesisRegistry nemeses) {
         if (depth < 1) depth = 1;
@@ -95,6 +101,18 @@ public static class RoomGenerator {
         // --- позиции: крупные размещаем первыми (проще упаковка), отступ от стен,
         // ≥2.0 от старта игрока, ≥(r1+r2+0.3) друг от друга ---
         PlaceAllSpawns(rng, plan);
+
+        // v0.10: мерцание — отдельный поток случайных чисел, чтобы не сдвинуть позиции
+        // и массы основного rng. Споры и немезиды не мерцают (особый смысл и так есть).
+        var variantRng = new PmRandom(seed ^ ShimmeringSeedXor);
+        for (int i = 0; i < plan.Spawns.Count; i++) {
+            var s = plan.Spawns[i];
+            if (s.SpeciesId == "spore" || s.IsNemesis) continue;
+            if (variantRng.NextDouble01() < ShimmeringChance) {
+                s.Variant = SpawnVariant.Shimmering;
+                plan.Spawns[i] = s;
+            }
+        }
 
         // --- цель комнаты: ~40% массы поглощаемого содержимого, не меньше 2 ---
         double absorbable = 0.0;

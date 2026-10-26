@@ -160,6 +160,21 @@ public sealed class RunState {
     /// <summary>+масса, учёт видов/генов, счётчики, проверка порога роста.</summary>
     public void OnAbsorb(string speciesId, double mass) => OnAbsorbEx(speciesId, mass);
 
+    /// <summary>
+    /// v0.10: Поглощение мерцающей особи — даёт ×1.5 ресурсов (масса не меняется).
+    /// Unity вызывает это вместо OnAbsorb, когда подобрана особь с SpawnVariant.Shimmering.
+    /// </summary>
+    public double OnAbsorbVariant(string speciesId, double mass, SpawnVariant variant) {
+        double saved = _shimmeringYieldMult;
+        if (variant == SpawnVariant.Shimmering) _shimmeringYieldMult = 1.5;
+        LastAbsorbVariant = variant;
+        try { return OnAbsorbEx(speciesId, mass); }
+        finally { _shimmeringYieldMult = saved; }
+    }
+    private double _shimmeringYieldMult = 1.0;
+    /// <summary>Вариант последнего поглощённого существа (None/Shimmering) — для UI-всплеска «Мерцание!».</summary>
+    public SpawnVariant LastAbsorbVariant { get; private set; }
+
     /// <summary>Как OnAbsorb, но добавляет и возвращает бонус цепочки поглощений.</summary>
     public double OnAbsorbEx(string speciesId, double mass) {
         if (mass <= 0.0 || IsDead) return 0.0;
@@ -172,6 +187,7 @@ public sealed class RunState {
         if (Resources != null) {
             var items = YieldTable.For(speciesId, yieldMass);
             double ym = 1.0 + Evolution.Sum(EvoEffectKind.YieldMult);
+            ym *= _shimmeringYieldMult; // v0.10: мерцание ×1.5 к выпадаемым ресурсам
             var got = new List<CostItem>(items.Length);
             if (_creditId >= 0 && _creditId != Fragments.LeadId) ym *= 1.0 + Evolution.Sum(EvoEffectKind.CloneYieldMult);
             for (int i = 0; i < items.Length; i++) {
