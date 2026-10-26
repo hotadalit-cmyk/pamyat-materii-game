@@ -43,10 +43,14 @@ public sealed class RunUi : MonoBehaviour {
     public RunEvolutionUi Evo => _evo;
     public Transform Root => _root;
     public RectTransform DashRt => _skDash != null ? _skDash.Rt : null;
+
+    /// <summary>v0.12: сколько герою нельзя делать рывок (оглушение Хора Бездны); 0 — рывок свободен.</summary>
+    public void SetDashLocked(float seconds) { _dashLock = Mathf.Max(0f, seconds); }
     public RectTransform SplitRt => _skSplit != null ? _skSplit.Rt : null;
     public RectTransform GatherRt => _skGather != null ? _skGather.Rt : null;
     // умения справа внизу и круглые кнопки сверху (раскладка в духе MOBA, v0.9)
     private SkillButton _skDash, _skSplit, _skGather, _skSoul, _skMenu, _skBook;
+    private float _dashLock; // v0.12: оглушение Хора — рывок недоступен
     private GameObject _pauseModal;
     private RawImage _vignette;
     private float _hurtT;
@@ -338,10 +342,18 @@ public sealed class RunUi : MonoBehaviour {
         var run = _game != null ? _game.Run : null;
         UpdateVignette(run);
         if (run != null && _skDash != null) {
-            // рывок: число зарядов в центре, тень перезарядки по кругу, вспышка при готовности
-            _skDash.SetCounter(run.DashCharges + "/" + run.MaxDashCharges);
-            _skDash.SetCooldown(run.DashCharges > 0 ? 0f : 1f - (float)run.ChargeProgress01);
-            _skDash.SetState(run.DashCharges > 0);
+            if (_dashLock > 0f) { // v0.12: оглушение — кнопка серая с таймером, надпись «Оглушён!»
+                _skDash.SetState(false, true);
+                _skDash.SetCooldown(1f);
+                _skDash.SetCounter("");
+                _skDash.SetLabel("Оглушён! " + _dashLock.ToString("0.0") + " с");
+            } else {
+                // рывок: число зарядов в центре, тень перезарядки по кругу, вспышка при готовности
+                _skDash.SetCounter(run.DashCharges + "/" + run.MaxDashCharges);
+                _skDash.SetCooldown(run.DashCharges > 0 ? 0f : 1f - (float)run.ChargeProgress01);
+                _skDash.SetState(run.DashCharges > 0);
+                _skDash.SetLabel("");
+            }
         }
         if (run != null) {
             _mass.text = string.Format("Масса {0:0.0}", run.Mass);

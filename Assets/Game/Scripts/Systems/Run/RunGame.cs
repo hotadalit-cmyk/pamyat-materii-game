@@ -66,6 +66,15 @@ public sealed partial class RunGame : MonoBehaviour {
     private SpriteRenderer _guardianTelegraph, _guardianWeakRing;
     private bool _guardianBannerShown;
     private float _guardianZoneSlow;
+    // v0.12: механики этапа 2
+    private readonly RunCreature[] _guardianParts = new RunCreature[3];   // капли Горнила
+    private readonly int[] _guardianPartIds = new int[3];
+    private readonly SpriteRenderer[] _guardianTelegraphs = new SpriteRenderer[3]; // круги гейзеров
+    private SpriteRenderer _guardianRing, _guardianBeam;                  // кипящее кольцо, луч
+    private readonly SpriteRenderer[] _guardianShards = new SpriteRenderer[4];     // осколки Гранильщика
+    private readonly SpriteRenderer[] _currentDots = new SpriteRenderer[8];        // частицы течения Хора
+    private float _guardianDashLock;                                            // запрет рывка (Хор)
+    private bool _playerDashed; private Vec2 _playerDashDir;             // рывок в этом такте (Гранильщик)
     private float _shockT = -1f;
     private DarknessMask _dark;
     private RunUi _ui;
@@ -558,6 +567,11 @@ public sealed partial class RunGame : MonoBehaviour {
 
     private void OnDashRelease(Vec2 dir, double charge) {
         if (!InRun || _ui.ModalOpen) return;
+        if (_guardianDashLock > 0f) { // v0.12: Хор Бездны оглушил — рывок недоступен (обе схемы)
+            _ui.Flash("Оглушён! Рывок через " + _guardianDashLock.ToString("0.0") + " с");
+            ProceduralSfx.Instance?.Play("deny");
+            return;
+        }
         if (!Run.TryDash()) {
             _ui.Flash("Нет зарядов рывка — подождите");
             ProceduralSfx.Instance?.Play("deny");
@@ -565,6 +579,8 @@ public sealed partial class RunGame : MonoBehaviour {
         }
         _ricochets = 0;
         _sinceDash = 0f;
+        _playerDashed = true;      // v0.12: страж видит рывок (зеркало Гранильщика)
+        _playerDashDir = dir;
         float speed = DashSpeed * (float)Run.DashSpeedMult * (float)charge;
         var impulse = new Vector2((float)dir.X, (float)dir.Y) * speed;
         _player.Rb.linearVelocity += impulse;
@@ -597,6 +613,7 @@ public sealed partial class RunGame : MonoBehaviour {
         if (c == null || c.IsFood) return;
         if (c.IsBoss) {
             if (Run.OpenWorld && _guardian == c) { OnGuardianContact(c, rel, point); return; } // v0.11
+            if (Run.OpenWorld && GuardianPartIndex(c) >= 0) { OnGuardianPartContact(c, rel, point); return; } // v0.12: капли Горнила
             OnBossContact(c, rel, point); return;
         }
         var res = SizeRule.Resolve(Run.FragmentMass(fragmentId), Run.Mutations, c.Mass, c.Mutations, rel);
@@ -966,7 +983,13 @@ public sealed partial class RunGame : MonoBehaviour {
     private void GuardianStep(float dt, Vector2 pPos) {
         var g = Run.Guardian;
         _guardianZoneSlow = 0f;
-        if (g == null || !Run.GuardianAwake || Run.GuardianAbsorbed) { HideGuardianVisuals(); return; }
+        if (g == null || !Run.GuardianAwake || Run.GuardianAbsorbed) {
+            HideGuardianVisuals();
+            DespawnGuardianParts();
+            _guardianDashLock = 0f;
+            _ui.SetDashLocked(0f);
+            return;
+        }
         if (_guardian == null) {
             SpawnGuardianAt(Run.Room.ExitPos); // страж ждёт у шахты (ExitPos — Vec2)
             if (_guardian == null) return;
@@ -980,12 +1003,17 @@ public sealed partial class RunGame : MonoBehaviour {
         var rb = _guardian.View.Rb;
         var o = g.Think(new GuardianInput {
             SelfPos = new Vec2(rb.position.x, rb.position.y), PlayerPos = new Vec2(pPos.x, pPos.y),
-            PlayerMass = Run.Mass, Dt = dt
+            PlayerMass = Run.Mass, Dt = dt,
+            PlayerDashed = _playerDashed, PlayerDashDir = _playerDashDir, // v0.12: зеркало Гранильщика
         });
+        _playerDashed = false; // флаг однотактный
+        _guardianDashLock = Mathf.Max(0f, (float)o.DashLockSeconds);
+        _ui.SetDashLocked(_guardianDashLock); // серая кнопка рывка с таймером «Оглушён!»
         if (o.ResetFight) { // отступление в фазе 1: штраф и восстановление — в Domain
             Run.OnGuardianFightReset();
             _ui.Banner(g.Def.Name + ": отступление — страж восстанавливает силы (−25% массы)", 3f);
             ProceduralSfx.Instance?.Play("deny");
+            DespawnGuardianParts();
             if (Run.IsDead) { EndRun(); return; }
         }
         if (o.Impulse) {
@@ -997,7 +1025,7 @@ public sealed partial class RunGame : MonoBehaviour {
             var p = rb.position + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (_guardian.Radius + 0.8f);
             SpawnCreature(new SpawnSpec { SpeciesId = o.MinionSpecies, Pos = new Vec2(p.x, p.y), Mass = o.MinionMass }, 3000 + _creatures.Count);
         }
-        if (o.SpawnMinions > 0) _ui.Flash(g.Def.Name + " выпускает выводок!");
+        if (o.SpawnMinions > 0) _ui.Flash(g.Def.Name + (g.Def.Kind == GuardianKind.Grinder ? ": осколки сходят с орбиты!" : " выпускает выводок!"));
         if (o.Shockwave) {
             _shockT = 0f;
             _shockRing.transform.position = rb.position;
@@ -1009,23 +1037,64 @@ public sealed partial class RunGame : MonoBehaviour {
                 if (away.magnitude < 5f) frb.linearVelocity += away.normalized * (10f * (1f - away.magnitude / 5f) + 3f);
             }
         }
-        if (o.Strike) { // удар корней: доля массы героя (Domain отдал телеграф заранее)
+        if (o.Strike) { // удар по площади: доля массы героя (Domain отдал телеграф заранее)
             _hitFrag = Run.Fragments.LeadId;
             HurtFragment(Run.Mass * o.StrikeDamageFrac, g.Def.SpeciesId);
             _hitFrag = -1;
             GameFeel.Shake(0.5f);
-            GameFeel.Text(pPos + Vector2.up * 0.8f, "Корни бьют!", new Color(0.65f, 1f, 0.55f), 1.1f);
+            GameFeel.Text(pPos + Vector2.up * 0.8f, StrikeLabel(g.Def.Kind), new Color(0.65f, 1f, 0.55f), 1.1f);
             ProceduralSfx.Instance?.Play("hit");
-            if (Run.IsDead) { EndRun(); return; }
         }
+        if (o.Knockback.Length > 0.001) // v0.12: отброс гейзера Горнила
+            _player.Rb.linearVelocity += new Vector2((float)o.Knockback.X, (float)o.Knockback.Y);
+        if (o.Current.Length > 0.001) { // v0.12: течение Хора — сила на героя + частицы
+            _player.Rb.AddForce(new Vector2((float)o.Current.X, (float)o.Current.Y) * _player.Rb.mass, ForceMode2D.Force);
+            DrawCurrentDots(o.Current);
+        }
+        if (o.Pull > 0.001) { // v0.12: воронка Ф3 — притяжение к стражу
+            Vector2 toG = (Vector2)_guardian.transform.position - pPos;
+            if (toG.sqrMagnitude > 0.01f)
+                _player.Rb.AddForce(toG.normalized * ((float)o.Pull * _player.Rb.mass), ForceMode2D.Force);
+        }
+        if (o.RingBurn) { // v0.12: вне кипящего кольца Горнила — 1.0 массы/с
+            _hitFrag = Run.Fragments.LeadId;
+            HurtFragment(g.Def.RingDamagePerSec * dt, g.Def.SpeciesId);
+            _hitFrag = -1;
+        }
+        if (Run.IsDead) { EndRun(); return; }
+        GuardianPartsStep(o);          // v0.12: капли Горнила
         GuardianZonesStep(dt, pPos, o);
-        GuardianTelegraphStep(o);
+        GuardianTelegraphStep(o);      // одиночный телеграф (Спороносица, Хор)
+        GuardianTelegraphsStep(o);     // до трёх кругов (гейзеры Горнила)
+        DrawGuardianRing(o, rb.position); // кипящее кольцо арены
+        DrawGuardianShards(o);         // осколки Гранильщика
+        DrawGuardianBeam(o);           // луч Гранильщика
         DrawGuardianZones(o);
         if (_guardianWeakRing != null) _guardianWeakRing.enabled = o.WeakPointOpen; // зелёное кольцо — бей сейчас
-        _guardian.Mass = g.Hp;
-        _guardian.ApplySize();
+        if (g.LastBlock) { // v0.12: осколок Гранильщика отбил удар — отскок и −5% массы герою
+            _player.Rb.linearVelocity += new Vector2((float)g.LastBlockBounce.X, (float)g.LastBlockBounce.Y) * 7f;
+            _hitFrag = Run.Fragments.LeadId;
+            HurtFragment(Run.Mass * g.Def.BlockMassFrac, g.Def.SpeciesId);
+            _hitFrag = -1;
+            GameFeel.Text(pPos + Vector2.up * 0.8f, "Осколок отбил удар!", new Color(0.85f, 0.9f, 1f), 1.0f);
+            ProceduralSfx.Instance?.Play("glass");
+            if (Run.IsDead) { EndRun(); return; }
+        }
+        if (_guardianParts[0] == null && _guardianParts[1] == null && _guardianParts[2] == null) {
+            _guardian.Mass = g.Hp; // без деления тело стража несёт весь HP
+            _guardian.ApplySize();
+        }
         if (g.IsExposed && _guardian.View.Body != null)
             _guardian.View.Body.color = Color.Lerp(GameBootstrap.CDanger, Color.white, 0.4f + 0.3f * Mathf.Sin(_time * 8f));
+    }
+
+    private static string StrikeLabel(GuardianKind kind) {
+        switch (kind) {
+            case GuardianKind.Forge: return "Гейзер!";
+            case GuardianKind.AbyssChoir: return "Импульс!";
+            case GuardianKind.Grinder: return "Луч!";
+            default: return "Корни бьют!";
+        }
     }
 
     /// <summary>Урон и замедление зон стража по ведущему фрагменту (замедление применит ZoneStepOne).</summary>
@@ -1057,9 +1126,224 @@ public sealed partial class RunGame : MonoBehaviour {
         _guardianTelegraph.enabled = true;
         _guardianTelegraph.transform.position = new Vector3((float)o.Telegraph.Pos.X, (float)o.Telegraph.Pos.Y, 0f);
         float full = (float)o.Telegraph.Radius * 2f;
-        float window = Run.Guardian != null && Run.Guardian.Def.RootTelegraph > 0.0 ? (float)Run.Guardian.Def.RootTelegraph : 0.8f;
-        float frac = 1f - Mathf.Clamp01((float)o.Telegraph.Seconds / window);
+        double window = o.Telegraph.Window > 0.0 ? o.Telegraph.Window
+            : (Run.Guardian != null && Run.Guardian.Def.RootTelegraph > 0.0 ? Run.Guardian.Def.RootTelegraph : 0.8);
+        float frac = 1f - Mathf.Clamp01((float)(o.Telegraph.Seconds / window));
         _guardianTelegraph.transform.localScale = new Vector3(full * frac, full * frac, 1f);
+    }
+
+    /// <summary>v0.12: до трёх красных колец телеграфов (гейзеры Горнила); пустые слоты гасятся.</summary>
+    private void GuardianTelegraphsStep(GuardianOutput o) {
+        var list = o.Telegraphs;
+        for (int i = 0; i < _guardianTelegraphs.Length; i++) {
+            var sr = _guardianTelegraphs[i];
+            bool show = list != null && i < list.Length && list[i].Seconds > 0.0 && list[i].Radius > 0.0;
+            if (!show) { if (sr != null) sr.enabled = false; continue; }
+            if (sr == null) {
+                var go = new GameObject("guardian_telegraph" + i);
+                go.transform.SetParent(_roomRoot, false);
+                sr = SpriteUtil.AddSprite(go.transform, SpriteUtil.RingSprite, 1f, 1f,
+                    new Color(1f, 0.35f, 0.15f, 0.85f), DarknessMask.Order + 9);
+                _guardianTelegraphs[i] = sr;
+            }
+            var t = list[i];
+            sr.enabled = true;
+            sr.transform.position = new Vector3((float)t.Pos.X, (float)t.Pos.Y, 0f);
+            float full = (float)t.Radius * 2f;
+            double window = t.Window > 0.0 ? t.Window : (t.Seconds > 0.0 ? t.Seconds : 1.0);
+            float frac = 1f - Mathf.Clamp01((float)(t.Seconds / window));
+            sr.transform.localScale = new Vector3(full * frac, full * frac, 1f);
+        }
+    }
+
+    /// <summary>v0.12: кипящее кольцо Горнила — оранжевая граница арены, сжимается по ArenaRadiusNow.</summary>
+    private void DrawGuardianRing(GuardianOutput o, Vector2 gPos) {
+        bool show = o.ArenaRadiusNow > 0.01;
+        if (!show) { if (_guardianRing != null) _guardianRing.enabled = false; return; }
+        if (_guardianRing == null) {
+            var go = new GameObject("guardian_ring");
+            go.transform.SetParent(_roomRoot, false);
+            _guardianRing = SpriteUtil.AddSprite(go.transform, SpriteUtil.RingSprite, 1f, 1f,
+                new Color(1f, 0.55f, 0.15f, 0.75f), DarknessMask.Order + 4);
+        }
+        _guardianRing.enabled = true;
+        Vector2 c = o.Center.Length > 0.001 ? new Vector2((float)o.Center.X, (float)o.Center.Y) : gPos;
+        _guardianRing.transform.position = c;
+        float full = (float)o.ArenaRadiusNow * 2f;
+        _guardianRing.transform.localScale = new Vector3(full, full, 1f);
+    }
+
+    /// <summary>v0.12: осколки Гранильщика на орбите.</summary>
+    private void DrawGuardianShards(GuardianOutput o) {
+        var list = o.Shards;
+        for (int i = 0; i < _guardianShards.Length; i++) {
+            var sr = _guardianShards[i];
+            bool show = list != null && i < list.Length;
+            if (!show) { if (sr != null) sr.enabled = false; continue; }
+            if (sr == null) {
+                var go = new GameObject("guardian_shard" + i);
+                go.transform.SetParent(_roomRoot, false);
+                sr = SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, 1f, 1f,
+                    new Color(0.8f, 0.85f, 0.95f, 0.95f), DarknessMask.Order + 6);
+                _guardianShards[i] = sr;
+            }
+            sr.enabled = true;
+            sr.transform.position = new Vector3((float)list[i].X, (float)list[i].Y, 0f);
+            float d = (float)Run.Guardian.Def.ShardRadius * 2.4f;
+            sr.transform.localScale = new Vector3(d, d, 1f);
+        }
+    }
+
+    /// <summary>v0.12: луч Гранильщика — полоса-телеграф (тонкая → толстая), затем вспышка.</summary>
+    private void DrawGuardianBeam(GuardianOutput o) {
+        bool telegraph = o.Beam.Seconds > 0.0;
+        bool show = telegraph || o.BeamFlash;
+        if (!show) { if (_guardianBeam != null) _guardianBeam.enabled = false; return; }
+        if (_guardianBeam == null) {
+            var go = new GameObject("guardian_beam");
+            go.transform.SetParent(_roomRoot, false);
+            _guardianBeam = SpriteUtil.AddSprite(go.transform, SpriteUtil.SoftRectSprite, 1f, 1f,
+                new Color(1f, 0.45f, 0.3f, 0.7f), DarknessMask.Order + 8);
+        }
+        _guardianBeam.enabled = true;
+        Vector2 from = new Vector2((float)o.Beam.From.X, (float)o.Beam.From.Y);
+        Vector2 to = new Vector2((float)o.Beam.To.X, (float)o.Beam.To.Y);
+        Vector2 mid = (from + to) * 0.5f;
+        Vector2 d = to - from;
+        float len = d.magnitude;
+        float ang = Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg;
+        double window = Run.Guardian != null && Run.Guardian.Def.BeamTelegraph > 0.0 ? Run.Guardian.Def.BeamTelegraph : 0.9;
+        float thick = o.BeamFlash
+            ? (float)o.Beam.Width * 1.6f // вспышка удара
+            : Mathf.Lerp(0.12f, (float)o.Beam.Width, 1f - Mathf.Clamp01((float)(o.Beam.Seconds / window)));
+        _guardianBeam.transform.position = mid;
+        _guardianBeam.transform.rotation = Quaternion.Euler(0f, 0f, ang);
+        _guardianBeam.transform.localScale = new Vector3(len, Mathf.Max(0.06f, thick), 1f);
+        _guardianBeam.color = o.BeamFlash ? new Color(1f, 0.9f, 0.7f, 0.95f) : new Color(1f, 0.45f, 0.3f, 0.6f);
+    }
+
+    /// <summary>v0.12: полупрозрачные частицы по направлению течения Хора.</summary>
+    private void DrawCurrentDots(Vec2 current) {
+        var dir = new Vector2((float)current.X, (float)current.Y).normalized;
+        Vector2 anchor = _player != null ? (Vector2)_player.transform.position : Vector2.zero;
+        for (int i = 0; i < _currentDots.Length; i++) {
+            var sr = _currentDots[i];
+            if (sr == null) {
+                var go = new GameObject("current_dot" + i);
+                go.transform.SetParent(_roomRoot, false);
+                sr = SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, 1f, 1f,
+                    new Color(0.55f, 0.65f, 1f, 0.22f), DarknessMask.Order + 2);
+                _currentDots[i] = sr;
+            }
+            sr.enabled = true;
+            float phase = _time * 1.6f + i * 1.7f;
+            Vector2 side = new Vector2(-dir.y, dir.x);
+            sr.transform.position = anchor + dir * (1.2f + (phase % 1f) * 3.2f) + side * Mathf.Sin(phase * 2.4f) * 0.9f;
+            sr.transform.localScale = new Vector3(0.24f, 0.24f, 1f);
+        }
+    }
+
+    // ---------- капли Горнила (v0.12) ----------
+
+    /// <summary>Слот капли по телу; −1 если это не капля.</summary>
+    private int GuardianPartIndex(RunCreature c) {
+        for (int i = 0; i < _guardianParts.Length; i++) if (_guardianParts[i] == c) return i;
+        return -1;
+    }
+
+    /// <summary>Капли Горнила: домен ведёт позиции, Unity держит тела и наносит урон по partId.</summary>
+    private void GuardianPartsStep(GuardianOutput o) {
+        var g = Run.Guardian;
+        if (o.Parts == null || g == null) { DespawnGuardianParts(); return; }
+        int alive = 0;
+        for (int i = 0; i < o.Parts.Length && i < _guardianParts.Length; i++)
+            if (o.Parts[i].Hp > 0.0 && o.Parts[i].Radius > 0.0) alive++;
+        if (alive == 0) { DespawnGuardianParts(); return; }
+        if (alive == 1) {
+            // осталась одна капля — она и есть страж: тело переносим на её место, капли убираем
+            for (int i = 0; i < o.Parts.Length && i < _guardianParts.Length; i++) {
+                if (o.Parts[i].Hp <= 0.0) continue;
+                DespawnGuardianParts();
+                if (_guardian != null)
+                    _guardian.View.Rb.position = new Vector2((float)o.Parts[i].Pos.X, (float)o.Parts[i].Pos.Y);
+                return;
+            }
+        }
+        for (int i = 0; i < o.Parts.Length && i < _guardianParts.Length; i++) {
+            var p = o.Parts[i];
+            if (p.Hp <= 0.0 || p.Radius <= 0.0) {
+                if (_guardianParts[i] != null) { KillCreature(_guardianParts[i]); _guardianParts[i] = null; _guardianPartIds[i] = 0; }
+                continue;
+            }
+            if (_guardianParts[i] == null) {
+                var c = SpawnCreature(new SpawnSpec { SpeciesId = g.Def.SpeciesId, Pos = p.Pos, Mass = p.Hp }, 9002 + i);
+                if (c == null) continue;
+                c.IsBoss = true; // капля — часть стража: не спит, не съедается
+                c.View.Rb.linearDamping = 1.6f;
+                _guardianParts[i] = c;
+                _guardianPartIds[i] = p.Id;
+            }
+            var pc = _guardianParts[i];
+            pc.View.Rb.position = new Vector2((float)p.Pos.X, (float)p.Pos.Y); // домен ведёт каплю
+            pc.Mass = p.Hp;
+            pc.ApplySize();
+        }
+    }
+
+    private void DespawnGuardianParts() {
+        for (int i = 0; i < _guardianParts.Length; i++) {
+            var c = _guardianParts[i];
+            if (c != null && c) KillCreature(c); // c == false — тело уже разрушено с комнатой
+            _guardianParts[i] = null;
+            _guardianPartIds[i] = 0;
+        }
+    }
+
+    /// <summary>Контакт героя с каплей Горнила: урон конкретной капле (partId), ответка — как у стража.</summary>
+    private void OnGuardianPartContact(RunCreature c, float rel, Vector2 point) {
+        var g = Run.Guardian;
+        if (g == null) return;
+        int slot = GuardianPartIndex(c);
+        if (slot < 0) return;
+        int partId = _guardianPartIds[slot];
+        double fragMass = Run.FragmentMass(_hitFrag >= 0 ? _hitFrag : Run.Fragments.LeadId);
+        if (g.IsExposed && fragMass >= g.Hp * 0.6) { // обнажённого стража поглощаем с любой капли
+            Run.OnBossAbsorbed();
+            CodexOnAbsorb(g.Def.SpeciesId);
+            GameFeel.HitStop(0.25f);
+            GameFeel.Shake(1f);
+            _ui.Banner(g.Def.Name + " поглощён! Шахта открыта", 4f);
+            ProceduralSfx.Instance?.Play("capture");
+            SplashBurst2D.Instance?.Burst(c.transform.position, Vector2.up, 20);
+            KillCreature(c);
+            _guardianParts[slot] = null;
+            DespawnGuardianParts();
+            if (_guardian != null) KillCreature(_guardian);
+            _guardian = null;
+            HideGuardianVisuals();
+            return;
+        }
+        double loss = g.ApplyHit(rel, fragMass, Run.Mutations, _ricochets, partId);
+        if (loss > 0) {
+            Run.OnHit(loss);
+            if (Run.Mutations.LifestealFrac > 0) Run.OnLifesteal(loss);
+            SpawnDroplets(point, loss * 0.6); // массу капли синхронизирует GuardianPartsStep из выхода домена
+            GameFeel.Text(c.transform.position, "−" + loss.ToString("0.0"), new Color(1f, 0.8f, 0.3f), 1.3f);
+            GameFeel.Shake(0.55f);
+            GameFeel.HitStop(0.09f);
+            ProceduralSfx.Instance?.Play("weaken");
+            if (g.IsExposed) _ui.Banner(g.Def.Name + " обнажён — поглотите его!", 3f);
+        } else if (rel > 1.5f) {
+            GameFeel.Text(point, "Броня! Нужна скорость и рикошеты", new Color(0.7f, 0.85f, 1f), 0.8f);
+            ProceduralSfx.Instance?.Play("glass", 0.9f, 0f, 0.45f);
+        }
+        // капля бьёт в ответ суммарной массой стража
+        var res = SizeRule.Resolve(fragMass, Run.Mutations, g.Hp, new MutationSet(), rel);
+        if (res.MassLossA > 0 && !g.IsExposed) {
+            HurtFragment(res.MassLossA, g.Def.SpeciesId);
+            GameFeel.Text(_player.transform.position, "−" + res.MassLossA.ToString("0.0"), GameBootstrap.CDanger);
+            if (Run.IsDead) EndRun();
+        }
     }
 
     /// <summary>Полупрозрачные круги зон спор.</summary>
@@ -1086,6 +1370,12 @@ public sealed partial class RunGame : MonoBehaviour {
         if (_guardianTelegraph != null) _guardianTelegraph.enabled = false;
         if (_guardianWeakRing != null) _guardianWeakRing.enabled = false;
         for (int i = 0; i < _guardianZones.Length; i++) if (_guardianZones[i] != null) _guardianZones[i].enabled = false;
+        // v0.12
+        for (int i = 0; i < _guardianTelegraphs.Length; i++) if (_guardianTelegraphs[i] != null) _guardianTelegraphs[i].enabled = false;
+        if (_guardianRing != null) _guardianRing.enabled = false;
+        if (_guardianBeam != null) _guardianBeam.enabled = false;
+        for (int i = 0; i < _guardianShards.Length; i++) if (_guardianShards[i] != null) _guardianShards[i].enabled = false;
+        for (int i = 0; i < _currentDots.Length; i++) if (_currentDots[i] != null) _currentDots[i].enabled = false;
     }
 
     private void ClearGuardianVisuals() {
@@ -1096,6 +1386,24 @@ public sealed partial class RunGame : MonoBehaviour {
         }
         if (_guardianTelegraph != null) { Destroy(_guardianTelegraph.gameObject); _guardianTelegraph = null; }
         _guardianWeakRing = null;
+        // v0.12
+        for (int i = 0; i < _guardianTelegraphs.Length; i++) {
+            if (_guardianTelegraphs[i] != null) Destroy(_guardianTelegraphs[i].gameObject);
+            _guardianTelegraphs[i] = null;
+        }
+        if (_guardianRing != null) { Destroy(_guardianRing.gameObject); _guardianRing = null; }
+        if (_guardianBeam != null) { Destroy(_guardianBeam.gameObject); _guardianBeam = null; }
+        for (int i = 0; i < _guardianShards.Length; i++) {
+            if (_guardianShards[i] != null) Destroy(_guardianShards[i].gameObject);
+            _guardianShards[i] = null;
+        }
+        for (int i = 0; i < _currentDots.Length; i++) {
+            if (_currentDots[i] != null) Destroy(_currentDots[i].gameObject);
+            _currentDots[i] = null;
+        }
+        DespawnGuardianParts();
+        _guardianDashLock = 0f;
+        _playerDashed = false;
     }
 
     private void SpawnGuardianAt(Vec2 pos) {
