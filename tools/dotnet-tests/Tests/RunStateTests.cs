@@ -209,9 +209,18 @@ public static class RunStateTests {
 
     public static void Victory_AfterLastRoomOfMaxDepth() {
         var st = new RunState(new SoulMeta(), 47UL);
+        int eliteExits = 0;
         for (int i = 0; i < 15; i++) {
-            st.OnAbsorb("spore", st.Room.GoalMass);
-            True(st.ExitOpen, "цель комнаты " + i + " набрана");
+            if (st.Boss != null) { // v0.5: глубина 5, комната 2 — босс
+                Eq(14, i, "босс ждёт только в последней комнате");
+                True(!st.ExitOpen, "выход закрыт, пока страж жив");
+                st.OnBossAbsorbed();
+                True(st.ExitOpen, "страж поглощён — выход открыт");
+            } else {
+                st.OnAbsorb("spore", st.Room.GoalMass);
+                True(st.ExitOpen, "цель комнаты " + i + " набрана");
+            }
+            if (st.Layout.Kind == RoomKind.Elite) eliteExits++;
             True(st.TryEnterExit(), "выход " + i);
         }
         True(st.IsVictory, "15-я комната (глубина 5) пройдена");
@@ -220,12 +229,14 @@ public static class RunStateTests {
         var imprint = st.Finish();
         Eq(5, imprint.DepthReached, "достигнута глубина 5");
         Eq(15, imprint.RoomsCleared, "15 комнат зачищено");
-        Eq(0, imprint.Absorbed, "споры не считаются поглощениями");
+        Eq(0, imprint.Absorbed, "споры и страж не считаются поглощениями");
         Eq(1, imprint.NewSpecies, "спора — новый вид");
-        Eq(115.0, imprint.EssenceEarned, "40 + 45 + 0 + 5 + 25 = 115");
+        Eq(155.0 + 4.0 * eliteExits, imprint.EssenceEarned, "40+45+5+25+40(страж)+4×элита");
         True(imprint.KilledBy == null, "победа — без убийцы");
         True(imprint.PeakMass >= 34.0, "масса выросла за забег");
         Eq(0, imprint.Mutations.Length, "мутации не выбирались");
+        True(imprint.WardenSlain, "страж глубины повержен");
+        Eq("Сердце пещеры", imprint.BiomeReached, "самый глубокий биом");
     }
 
     public static void Finish_IdempotentSameObject() {
@@ -252,13 +263,14 @@ public static class RunStateTests {
         st.OnAbsorb("mite", 0.9);
         st.OnAbsorb("spore", 3.0);   // 6.9 в комнате
         True(st.ExitOpen, "цель второй комнаты набрана");
-        st.OnMassLost(20.0, "spikeback"); // смерть
+        st.OnMassLost(25.0, "spikeback"); // смерть (v0.5: масса выше из-за бонуса цепочки)
         var imprint = st.Finish();
         Eq(1, imprint.DepthReached, "глубина 1");
         Eq(1, imprint.RoomsCleared, "одна комната");
         Eq(4, imprint.Absorbed, "2 жука + немезида + клещ (споры не в счёт)");
         Eq(3, imprint.NewSpecies, "жук, спора, клещ — новые");
-        Eq(19.4, imprint.PeakMass, "пик массы 4 + 8.5 + 6.9");
+        // v0.5: +2.8 бонуса цепочки поглощений (0.625 + 1.5 + 0.675)
+        Eq(22.2, imprint.PeakMass, "пик: 4 + 8.5 + 6.9 + 2.8 бонуса цепочки");
         Eq(35.0, imprint.EssenceEarned, "3 + 2 + 15 + 15 = 35");
         Eq("spikeback", imprint.KilledBy, "убит шипастиком");
         True(meta.Nemeses.Records[0].Defeated, "немезида Искра повержена");
