@@ -19,6 +19,7 @@ public sealed class SoulMeta {
     public int Runs, BestDepth;
     public HashSet<string> KnownGenes = new HashSet<string>();   // гены, хоть раз поглощённые
     public HashSet<string> SeenSpecies = new HashSet<string>();  // виды, хоть раз поглощённые
+    public HashSet<string> Codex = new HashSet<string>();        // v0.9: открытые записи энциклопедии (sp:/bi:/res:)
     public NemesisRegistry Nemeses = new NemesisRegistry();
 
     private readonly int[] _levels = new int[3];
@@ -89,6 +90,9 @@ public sealed class SoulMeta {
         w.Key("seenSpecies").BeginArray();
         foreach (string s in SeenSpecies) w.Value(s ?? "");
         w.EndArray();
+        w.Key("codex").BeginArray();
+        foreach (string c in Codex) w.Value(c ?? "");
+        w.EndArray();
         w.Key("nemeses").BeginArray();
         if (Nemeses != null) {
             for (int i = 0; i < Nemeses.Records.Count; i++) {
@@ -128,6 +132,7 @@ public sealed class SoulMeta {
         }
         meta.KnownGenes = AsSet(At(dict, "knownGenes"));
         meta.SeenSpecies = AsSet(At(dict, "seenSpecies"));
+        meta.Codex = AsSet(At(dict, "codex"));
         if (At(dict, "nemeses") is List<object> records) {
             meta.Nemeses = new NemesisRegistry();
             for (int i = 0; i < records.Count; i++) {

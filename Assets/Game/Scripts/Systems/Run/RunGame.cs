@@ -71,6 +71,8 @@ public sealed partial class RunGame : MonoBehaviour {
         input.AddComponent<PullGestureInput>();
         PullGestureInput.ReleaseHandler = OnDashRelease;
         GameSettings.Apply(); // громкость, FPS, чувствительность, камера — из настроек игрока
+        var lore = Resources.Load<TextAsset>("Codex/lore");     // тексты энциклопедии (написаны в Z.ai)
+        if (lore != null) Codex.LoadLore(lore.text);
         var sfx = new GameObject("procedural_sfx");
         sfx.transform.SetParent(transform, false);
         sfx.AddComponent<ProceduralSfx>();
@@ -667,6 +669,7 @@ public sealed partial class RunGame : MonoBehaviour {
         double fragMass = Run.FragmentMass(_hitFrag >= 0 ? _hitFrag : Run.Fragments.LeadId);
         if (boss.IsExposed && fragMass >= boss.Mass * 0.6) {
             Run.OnBossAbsorbed();
+            CodexOnAbsorb("warden");
             GameFeel.HitStop(0.25f);
             GameFeel.Shake(1f);
             _ui.Banner("Страж поглощён! Сердце пещеры открыто", 4f);
@@ -711,6 +714,33 @@ public sealed partial class RunGame : MonoBehaviour {
         GameFeel.Text(c.transform.position, "Делится!", new Color(0.6f, 0.85f, 1f), 0.8f);
     }
 
+    /// <summary>Первая встреча с видом за всю историю души — карточка энциклопедии.</summary>
+    private void CodexOnAbsorb(string speciesId) {
+        if (string.IsNullOrEmpty(speciesId) || SpeciesCatalog.Get(speciesId) == null) return;
+        bool firstEver = Meta.SeenSpecies == null || !Meta.SeenSpecies.Contains(speciesId);
+        if (!Codex.Unlock(Meta, Codex.SpeciesKey(speciesId))) return;
+        SaveMeta();
+        if (firstEver) _ui.Codex.ShowCard(Codex.ForSpecies(speciesId));
+    }
+
+    /// <summary>Область и ресурсы открываются в энциклопедии без карточки — коротким сообщением.</summary>
+    private void CodexStep() {
+        if (Run == null || Run.Resources == null) return;
+        _codexTimer -= Time.unscaledDeltaTime;
+        if (_codexTimer > 0f) return;
+        _codexTimer = 0.5f;
+        for (int i = 0; i < ResourceInfo.Count; i++) {
+            var k = (ResourceKind)i;
+            if (Run.Resources.Get(k) > 0 && Codex.Unlock(Meta, Codex.ResourceKey(k))) {
+                SaveMeta();
+                _ui.Flash("Энциклопедия: новый ресурс — " + ResourceInfo.Name(k), 1.6f);
+            }
+        }
+        var biome = Run.Layout != null && Run.Layout.Biome != null ? Run.Layout.Biome : BiomeCatalog.ForDepth(Run.Depth);
+        if (biome != null && Codex.Unlock(Meta, Codex.BiomeKey(biome.Id))) SaveMeta();
+    }
+    private float _codexTimer;
+
     private void Absorb(RunCreature c) {
         double bonus = _hitFrag >= 0 ? Run.OnAbsorbAt(_hitFrag, c.Species.Id, c.Mass) : Run.OnAbsorbEx(c.Species.Id, c.Mass);
         var pos = c.transform.position;
@@ -738,6 +768,7 @@ public sealed partial class RunGame : MonoBehaviour {
             SplashBurst2D.Instance?.Burst(pos, Vector2.up, 8);
         }
         ProceduralSfx.Instance?.Play(c.IsFood ? "eat" : "capture");
+        if (!c.IsNemesis) CodexOnAbsorb(c.Species != null ? c.Species.Id : null);
         KillCreature(c);
     }
 
@@ -935,6 +966,7 @@ public sealed partial class RunGame : MonoBehaviour {
         UpdateExitVisual();
         if (!_ui.ModalOpen) TwoFingerStep();
         if (InRun) TwinGlowStep();
+        CodexStep();
         if (Run.Evolution != null && Run.Evolution.FreeTokens > _lastTokens) {
             _ui.Banner("Жетон эволюции! Откройте «Эволюцию» и выберите путь", 3f);
             ProceduralSfx.Instance?.Play("evolve");

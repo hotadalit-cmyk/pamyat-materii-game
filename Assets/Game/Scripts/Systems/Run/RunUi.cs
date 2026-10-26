@@ -38,6 +38,8 @@ public sealed class RunUi : MonoBehaviour {
     private RunMinimap _minimap;
     private RunEvolutionUi _evo;
     private RunSettingsUi _settings;
+    private RunCodexUi _codex;
+    public RunCodexUi Codex => _codex;
     private RectTransform _splitRt, _gatherRt;
     private Image _splitBtn, _gatherBtn;
     private Text _splitLabel, _gatherLabel;
@@ -49,7 +51,8 @@ public sealed class RunUi : MonoBehaviour {
                              (_infoModal != null && _infoModal.activeSelf) ||
                              (_minimap != null && _minimap.IsBig) ||
                              (_evo != null && _evo.ModalOpen) ||
-                             (_settings != null && _settings.IsOpen);
+                             (_settings != null && _settings.IsOpen) ||
+                             (_codex != null && _codex.IsOpen);
 
     public static RunUi Build(RunGame game) {
         var canvasGo = new GameObject("run_ui");
@@ -77,6 +80,13 @@ public sealed class RunUi : MonoBehaviour {
         setRt.anchorMin = setRt.anchorMax = setRt.pivot = new Vector2(1, 1);
         setRt.anchoredPosition = new Vector2(-480, -28);
         set.GetComponent<Button>().onClick.AddListener(() => { if (!ui.ModalOpen) ui._settings.Open(); });
+        // «Энциклопедия» — рядом с настройками
+        var book = Button(ui._root, "codex_btn", Vector2.zero, new Vector2(230, 80), GameBootstrap.CSoul, 0.45f, "Энциклопедия", 24);
+        var bookRt = (RectTransform)book.transform;
+        bookRt.anchorMin = bookRt.anchorMax = bookRt.pivot = new Vector2(1, 1);
+        bookRt.anchoredPosition = new Vector2(-695, -28);
+        book.GetComponent<Button>().onClick.AddListener(() => { if (!ui.ModalOpen) ui._codex.Open(); });
+        ui._codex = RunCodexUi.Build(ui._root, game);
         GameSettings.Changed += ui.ApplyHandedness;
         ui.BuildTitle();
         ui.BuildInfo();
@@ -439,8 +449,8 @@ public sealed class RunUi : MonoBehaviour {
         });
         var how = Button(_titleModal.transform, "how", new Vector2(-660, -60), new Vector2(460, 100), GameBootstrap.CSlime, 0.8f, "Как играть", 34);
         how.GetComponent<Button>().onClick.AddListener(() => ShowInfo("Как играть", HowToPlay()));
-        var best = Button(_titleModal.transform, "bestiary", new Vector2(-660, -190), new Vector2(460, 100), GameBootstrap.CSoul, 0.8f, "Бестиарий", 34);
-        best.GetComponent<Button>().onClick.AddListener(() => ShowInfo("Бестиарий", BestiaryText()));
+        var best = Button(_titleModal.transform, "bestiary", new Vector2(-660, -190), new Vector2(460, 100), GameBootstrap.CSoul, 0.8f, "Энциклопедия", 34);
+        best.GetComponent<Button>().onClick.AddListener(() => _codex.Open());
         var settings = Button(_titleModal.transform, "settings", new Vector2(660, -60), new Vector2(460, 100), GameBootstrap.COutline, 0.6f, "Настройки", 32);
         settings.GetComponent<Button>().onClick.AddListener(() => _settings.Open());
         var credits = Button(_titleModal.transform, "credits", new Vector2(660, -190), new Vector2(460, 100), GameBootstrap.COutline, 0.6f, "Титры", 32);
