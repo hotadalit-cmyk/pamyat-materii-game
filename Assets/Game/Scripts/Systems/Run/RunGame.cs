@@ -136,6 +136,13 @@ public sealed class RunGame : MonoBehaviour {
         }
     }
 
+    /// <summary>Титул закрыт — показать карточку биома (за титулом её бы никто не увидел).</summary>
+    public void OnTitleClosed() {
+        if (Run == null || Run.Room == null) return;
+        var biome = Run.Layout != null ? Run.Layout.Biome : BiomeCatalog.ForDepth(Run.Depth);
+        _ui.BiomeCard(Run.Depth, biome.Name, biome.Subtitle, RunWorldBuilder.Hex(biome.AccentColor));
+    }
+
     public void UpgradeSoul(SoulStat stat) {
         if (Meta.TryUpgrade(stat)) {
             SaveMeta();

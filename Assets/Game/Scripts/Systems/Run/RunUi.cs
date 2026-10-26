@@ -284,7 +284,8 @@ public sealed class RunUi : MonoBehaviour {
         play.GetComponent<Button>().onClick.AddListener(() => {
             _titleModal.SetActive(false);
             PM.Systems.Input.PullGestureInput.Blocked = false;
-            Banner("Тяните ПРОТИВ движения и отпустите", 3f);
+            _game.OnTitleClosed();
+            Flash("Тяните ПРОТИВ движения и отпустите", 4f);
         });
         var how = Button(_titleModal.transform, "how", new Vector2(-330, -230), new Vector2(560, 100), GameBootstrap.CSlime, 0.55f, "Как играть", 34);
         how.GetComponent<Button>().onClick.AddListener(() => ShowInfo("Как играть", HowToPlay()));
