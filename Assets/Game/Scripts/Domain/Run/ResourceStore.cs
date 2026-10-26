@@ -48,6 +48,12 @@ namespace PM.Domain.Run {
         public CostItem(ResourceKind k, double a) { Kind = k; Amount = a; }
     }
 
+    /// <summary>v0.10: Результат алхимии — для UI-всплеска «3 Хитин → 1 Психея».</summary>
+    public sealed class TransmuteResult {
+        public ResourceKind From;
+        public ResourceKind To;
+    }
+
     public sealed class Cost {
         public CostItem[] Items;
         public Cost(CostItem[] items) { Items = items; }

@@ -260,6 +260,45 @@ public sealed class RunState {
         }
     }
 
+    // ---------- v0.10: Алхимия ресурсов у святилища ----------
+    // Игрок может конвертировать 3 единицы одного ресурса в 1 единицу другого.
+    // Доступно только в комнатах-святилищах (Layout.Kind == Shrine), до 3 трансмутаций за комнату.
+    // Не зависит от UseAltar — игрок может взять дар И потратить трансмутации (или только одно).
+    public const int MaxTransmutesPerShrine = 3;
+
+    /// <summary>Сколько трансмутаций осталось в текущей комнате-святилище.</summary>
+    public int TransmutesLeft =>
+        (Layout != null && Layout.Kind == RoomKind.Shrine) ? MaxTransmutesPerShrine - _transmutesThisRoom : 0;
+
+    /// <summary>Сколько трансмутаций уже сделано в этой комнате — для тестов и UI.</summary>
+    public int TransmutesUsedThisRoom => _transmutesThisRoom;
+
+    private int _transmutesThisRoom;
+
+    /// <summary>Последняя трансмутация — для UI-всплеска «3 Хитин → 1 Психея».</summary>
+    public TransmuteResult LastTransmute { get; private set; }
+
+    /// <summary>
+    /// Конвертировать 3 единицы ресурса <paramref name="from"/> в 1 единицу <paramref name="to"/>.
+    /// Только в Shrine-комнате, не больше MaxTransmutesPerShrine раз за заход.
+    /// Возвращает false (без изменений состояния), если условие не выполнено.
+    /// </summary>
+    public bool TryTransmute(ResourceKind from, ResourceKind to) {
+        if (IsDead || IsVictory) return false;
+        if (Layout == null || Layout.Kind != RoomKind.Shrine) return false;
+        if (from == to) return false;
+        if (_transmutesThisRoom >= MaxTransmutesPerShrine) return false;
+        if (Resources == null) return false;
+        if (Resources.Get(from) + 1e-9 < 3.0) return false;
+        if (Resources.Get(to) + 1.0 > Resources.Capacity + 1e-9) return false;
+        // Обе проверки пройдены — транзакция атомарна.
+        Resources.Pay(Cost.Of(new CostItem(from, 3.0)));
+        Resources.Add(to, 1.0);
+        _transmutesThisRoom++;
+        LastTransmute = new TransmuteResult { From = from, To = to };
+        return true;
+    }
+
     /// <summary>Вампиризм: +dealt × LifestealFrac массы.</summary>
     public void OnLifesteal(double dealt) {
         if (dealt <= 0.0 || IsDead) return;
@@ -685,6 +724,9 @@ public sealed class RunState {
         Layout = LayoutGenerator.Generate(Room, kind, _rng.NextUInt());
         AltarUsed = false;
         _bossAbsorbed = false;
+        // v0.10: алхимия ресурсов — сброс на каждой новой комнате.
+        _transmutesThisRoom = 0;
+        LastTransmute = null;
     }
 
     /// <summary>Элитная комната: массы существ ×1.6 и цель ×1.3 (после генерации).</summary>
