@@ -127,8 +127,9 @@ public static class ThirdPartyArt {
             if (r is SkinnedMeshRenderer smr) smr.updateWhenOffscreen = true; // рамка скин-меша в см — без этого телефон отсекает модель
         }
         float fp = _footprint[model];
+        // масштаб — на своём узле: клипы FBX анимируют корень модели (позиция/масштаб) и перезаписали бы его
         float scale = diameter * 1.5f / fp;
-        inst.transform.localScale = inst.transform.localScale * scale;
+        yaw.localScale = new Vector3(scale, scale, scale);
         var anim = inst.GetComponentInChildren<Animation>();
         var mm = tilt.gameObject.AddComponent<MonsterModel>();
         mm.Yaw = yaw;
