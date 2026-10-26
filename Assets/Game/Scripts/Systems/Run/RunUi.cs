@@ -41,7 +41,7 @@ public sealed class RunUi : MonoBehaviour {
     private RectTransform _splitRt, _gatherRt;
     private Image _splitBtn, _gatherBtn;
     private Text _splitLabel, _gatherLabel;
-    private RectTransform _dashRt;
+    private RectTransform _dashRt, _soulRt;
 
     public bool ModalOpen => (_offerModal != null && _offerModal.activeSelf) ||
                              (_imprintModal != null && _imprintModal.activeSelf) ||
@@ -123,6 +123,9 @@ public sealed class RunUi : MonoBehaviour {
         _gatherBtn = gather.GetComponent<Image>();
         _gatherRt = grt;
         _gatherLabel = gather.GetComponentInChildren<Text>();
+        var soul = Button(_root, "soul_btn", Vector2.zero, new Vector2(250, 120), new Color(0.75f, 0.55f, 1f), 0.8f, "Душа ⇄", 30);
+        soul.GetComponent<Button>().onClick.AddListener(() => _game.RequestSoulTransfer());
+        _soulRt = (RectTransform)soul.transform;
         // режим джойстика: круглая кнопка рывка рядом с кнопками деления, срабатывает при касании
         var dash = Box(_root, "dash_btn", Vector2.zero, new Vector2(230, 230), new Color(GameBootstrap.CSlime.r, GameBootstrap.CSlime.g, GameBootstrap.CSlime.b, 0.55f), new Vector2(1, 0));
         dash.GetComponent<Image>().sprite = SpriteUtil.UiCircleSprite;
@@ -212,6 +215,10 @@ public sealed class RunUi : MonoBehaviour {
         _gatherRt.anchorMin = _gatherRt.anchorMax = _gatherRt.pivot = anchor;
         _splitRt.anchoredPosition = new Vector2(x, 168);
         _gatherRt.anchoredPosition = new Vector2(x, 28);
+        if (_soulRt != null) {
+            _soulRt.anchorMin = _soulRt.anchorMax = _soulRt.pivot = anchor;
+            _soulRt.anchoredPosition = new Vector2(x, 308);
+        }
         if (_dashRt != null) {
             _dashRt.anchorMin = _dashRt.anchorMax = _dashRt.pivot = anchor;
             _dashRt.anchoredPosition = new Vector2(left ? 310 : -310, 30);   // между кнопками деления и центром
@@ -241,6 +248,8 @@ public sealed class RunUi : MonoBehaviour {
             _splitBtn.color = new Color(GameBootstrap.CSlime.r, GameBootstrap.CSlime.g, GameBootstrap.CSlime.b, canSplit ? 0.8f : 0.25f);
             _splitLabel.text = frags > 1 ? "Разделиться\n(" + frags + ")" : "Разделиться";
             _gatherBtn.gameObject.SetActive(frags > 1);
+            _splitBtn.gameObject.SetActive(_game.SplitUnlocked);     // деление — только после узла эволюции
+            _soulRt.gameObject.SetActive(_game.CanSoulTransfer);
             bool g = _game.Gathering;
             _gatherBtn.color = g ? new Color(1f, 0.85f, 0.4f, 0.9f) : new Color(GameBootstrap.CSoul.r, GameBootstrap.CSoul.g, GameBootstrap.CSoul.b, 0.8f);
             double carry = _game.TwinCarry;

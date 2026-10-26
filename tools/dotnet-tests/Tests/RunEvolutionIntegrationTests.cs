@@ -20,12 +20,13 @@ public static class RunEvolutionIntegrationTests {
 
     public static void Evolve_PaysAndRaisesLimits() {
         var rs = new RunState(new SoulMeta(), 23UL, true);
-        Eq(2, rs.Fragments.MaxCount, "open world starts with 2 fragments max");
+        Eq(1, rs.Fragments.MaxCount, "open world starts as one body — split is an evolution");
         rs.Resources.Add(ResourceKind.Slime, 40); rs.Resources.Add(ResourceKind.Organic, 40);
         double slime = rs.Resources.Get(ResourceKind.Slime);
         True(rs.TryEvolve("div_split_basics", false), "basics unlocked");
         True(rs.Resources.Get(ResourceKind.Slime) < slime, "resources spent");
-        Eq(0.7, rs.Fragments.MinMass, "split threshold lowered");
+        Eq(2, rs.Fragments.MaxCount, "split unlocked: two bodies");
+        True(rs.HasAbility("split"), "split ability");
         True(!rs.TryEvolve("div_split_basics", false), "cannot buy twice");
         True(rs.TryEvolve("div_triplet", false), "triplet unlocked");
         Eq(3, rs.Fragments.MaxCount, "three fragments allowed");

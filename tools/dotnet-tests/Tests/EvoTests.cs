@@ -159,26 +159,23 @@ namespace PMHarness {
 
         public static void YieldTable_Spore() {
             var items = YieldTable.For("spore", 2.0);
-            Check.Eq(items.Length, 1, "spore: 1 item");
+            Check.Eq(items.Length, 2, "spore: 2 items");
             Check.Eq(items[0].Kind, ResourceKind.Organic, "spore: Organic");
-            Check.Eq(items[0].Amount, 1.2, "spore: 0.6*2=1.2");
+            Check.Eq(items[0].Amount, 1.6, "spore: 0.8*2=1.6");
+            Check.Eq(items[1].Kind, ResourceKind.Slime, "spore: Slime (v0.9)");
         }
 
         public static void YieldTable_Mite() {
             var items = YieldTable.For("mite", 1.0);
             Check.Eq(items.Length, 2, "mite: 2 items");
             Check.Eq(items[0].Amount, 0.8, "mite: Chitin 0.8");
-            Check.Eq(items[1].Amount, 0.4, "mite: Organic 0.4");
+            Check.Eq(items[1].Kind, ResourceKind.Slime, "mite: Slime (v0.9)");
         }
 
-        public static void YieldTable_Beetle_SameAsMite() {
-            var a = YieldTable.For("mite", 1.0);
+        public static void YieldTable_Beetle() {
             var b = YieldTable.For("beetle", 1.0);
-            Check.Eq(a.Length, b.Length, "mite and beetle same length");
-            for (int i = 0; i < a.Length; i++) {
-                Check.Eq(a[i].Kind, b[i].Kind, "same Kind " + i);
-                Check.Eq(a[i].Amount, b[i].Amount, "same Amount " + i);
-            }
+            Check.Eq(b[0].Kind, ResourceKind.Chitin, "beetle: Chitin");
+            Check.Eq(b[1].Kind, ResourceKind.Organic, "beetle: Organic");
         }
 
         public static void YieldTable_Jelly() {
@@ -248,7 +245,7 @@ namespace PMHarness {
 
         public static void YieldTable_SoulSlime() {
             var items = YieldTable.For("soul_slime", 2.0);
-            Check.Eq(items.Length, 1, "soul_slime: 1 item");
+            Check.Eq(items.Length, 2, "soul_slime: Psyche + Slime");
             Check.Eq(items[0].Kind, ResourceKind.Psyche, "soul_slime: Psyche");
             Check.Eq(items[0].Amount, 2.4, "soul_slime: 1.2*2=2.4");
         }
@@ -280,7 +277,7 @@ namespace PMHarness {
             var a = YieldTable.For("mite", 1.0);
             var b = YieldTable.For("mite", 3.0);
             Check.Eq(b[0].Amount, a[0].Amount * 3.0, "Chitin scales 3x");
-            Check.Eq(b[1].Amount, a[1].Amount * 3.0, "Organic scales 3x");
+            Check.Eq(b[1].Amount, a[1].Amount * 3.0, "second item scales 3x");
         }
 
         public static void YieldTable_AllCatalogSpecies_NonEmpty() {
@@ -303,9 +300,9 @@ namespace PMHarness {
 
         public static void All_All5BranchesPresent() {
             var all = EvolutionTree.All();
-            bool[] seen = new bool[5];
+            bool[] seen = new bool[EvolutionTree.BranchCount];
             for (int i = 0; i < all.Length; i++) seen[(int)all[i].Branch] = true;
-            for (int b = 0; b < 5; b++) Check.True(seen[b], "branch " + b + " present");
+            for (int b = 0; b < EvolutionTree.BranchCount; b++) Check.True(seen[b], "branch " + b + " present");
         }
 
         public static void All_Tiers1to4_AllPresent() {
@@ -816,8 +813,8 @@ namespace PMHarness {
         public static void Fragments_Formula() {
             var lines = StatSheet.Build(5.0, 0, 1, EmptyMut(), EmptyEvo(), EmptySoul());
             var fr = Find(lines, "fragments");
-            Check.Eq(fr.Raw, 2.0, "maxFragments default 2");
-            Check.Eq(fr.Value, "0 / 2", "fragments value");
+            Check.Eq(fr.Raw, 1.0, "one body until Деление");
+            Check.Eq(fr.Value, "0 / 1", "fragments value");
         }
 
         public static void Fragments_WithEvoMaxFragments() {

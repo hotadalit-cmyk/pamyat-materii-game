@@ -1,11 +1,14 @@
 // PM.Domain.Run — дерево эволюции (v0.8). C# 9, без LINQ.
 namespace PM.Domain.Run {
-    public enum EvoBranch { Body = 0, Motion = 1, Hunt = 2, Senses = 3, Division = 4 }
+    public enum EvoBranch { Body = 0, Motion = 1, Hunt = 2, Senses = 3, Division = 4, Clones = 5 }
 
     public enum EvoEffectKind {
         Mutation = 0, MaxDash = 1, MaxFragments = 2, StorageCap = 3, LightFlat = 4,
         MassGainMult = 5, YieldMult = 6, SplitMinMass = 7, DashSpeedMult = 8,
-        RegenFlat = 9, DamageTakenMult = 10, PullFlat = 11, DamageDealtMult = 12
+        RegenFlat = 9, DamageTakenMult = 10, PullFlat = 11, DamageDealtMult = 12,
+        // v0.9: способности (MutationId = ключ: split, soul_transfer, clone_return, clone_hunter) и клоны
+        Ability = 13, CloneLeash = 14, CloneSight = 15, CloneSpeedMult = 16, CloneDamageTakenMult = 17,
+        CloneYieldMult = 18, CloneRegen = 19
     }
 
     public struct EvoEffect {
@@ -56,12 +59,17 @@ namespace PM.Domain.Run {
                 case EvoBranch.Hunt:     return "Охота";
                 case EvoBranch.Senses:   return "Чувства";
                 case EvoBranch.Division: return "Деление";
+                case EvoBranch.Clones:   return "Клоны";
             }
             return b.ToString();
         }
 
         private static EvoEffect Mut(string id) { return new EvoEffect(EvoEffectKind.Mutation, 0, id); }
         private static EvoEffect Eff(EvoEffectKind k, double v) { return new EvoEffect(k, v, null); }
+        private static EvoEffect Abil(string key) { return new EvoEffect(EvoEffectKind.Ability, 1, key); }
+
+        /// <summary>Число ветвей — для экранов, перебирающих их по порядку.</summary>
+        public const int BranchCount = 6;
 
         private static EvoNode N(string id, string name, string desc, EvoBranch b, int tier, int col,
                                   Cost cost, EvoEffect[] fx, string[] requires = null,
@@ -203,10 +211,10 @@ namespace PM.Domain.Run {
                 new[]{ Eff(EvoEffectKind.LightFlat, 4.0) }, requires: new[]{ "senses_pull" }));
 
             // ===== DIVISION ===== (фрагменты, деление, хранилище)
-            l.Add(N("div_split_basics", "Деление", "−0.3 к порогу массы для деления.",
+            l.Add(N("div_split_basics", "Деление", "Открывает деление: тело распадается на два клона.",
                 EvoBranch.Division, 1, 0,
-                Cost.Of(new CostItem(ResourceKind.Slime, 8), new CostItem(ResourceKind.Organic, 4)),
-                new[]{ Eff(EvoEffectKind.SplitMinMass, -0.30) }));
+                Cost.Of(new CostItem(ResourceKind.Slime, 5), new CostItem(ResourceKind.Organic, 4)),
+                new[]{ Abil("split") }));
             l.Add(N("div_triplet", "Тройня", "+1 к числу фрагментов при делении.",
                 EvoBranch.Division, 2, 0,
                 Cost.Of(new CostItem(ResourceKind.Slime, 12), new CostItem(ResourceKind.Organic, 6)),
@@ -235,6 +243,44 @@ namespace PM.Domain.Run {
                 EvoBranch.Division, 4, 1,
                 Cost.Of(new CostItem(ResourceKind.Slime, 30), new CostItem(ResourceKind.Psyche, 15)),
                 new[]{ Eff(EvoEffectKind.StorageCap, 40.0) }, requires: new[]{ "div_storage" }));
+
+            // ===== CLONES ===== (самостоятельность клонов; все узлы — после «Деления»)
+            l.Add(N("clone_leash", "Длинная нить", "Клоны уходят дальше: +6 к дальности связи.",
+                EvoBranch.Clones, 2, 0,
+                Cost.Of(new CostItem(ResourceKind.Slime, 6), new CostItem(ResourceKind.Organic, 6)),
+                new[]{ Eff(EvoEffectKind.CloneLeash, 6.0) }, requires: new[]{ "div_split_basics" }));
+            l.Add(N("clone_instinct", "Инстинкт клона", "Клоны замечают добычу на 3 дальше.",
+                EvoBranch.Clones, 2, 1,
+                Cost.Of(new CostItem(ResourceKind.Chitin, 6), new CostItem(ResourceKind.Organic, 5)),
+                new[]{ Eff(EvoEffectKind.CloneSight, 3.0) }, requires: new[]{ "div_split_basics" }));
+            l.Add(N("clone_shell", "Плотная оболочка", "Клоны получают на 30% меньше урона.",
+                EvoBranch.Clones, 2, 2,
+                Cost.Of(new CostItem(ResourceKind.Chitin, 9), new CostItem(ResourceKind.Slime, 3)),
+                new[]{ Eff(EvoEffectKind.CloneDamageTakenMult, -0.30) }, requires: new[]{ "div_split_basics" }));
+            l.Add(N("clone_soul", "Перенос души", "Способность: переселить душу в клона — он станет вами.",
+                EvoBranch.Clones, 3, 0,
+                Cost.Of(new CostItem(ResourceKind.Slime, 8), new CostItem(ResourceKind.Psyche, 4)),
+                new[]{ Abil("soul_transfer") }, requires: new[]{ "clone_leash" }));
+            l.Add(N("clone_packrat", "Вьючные клоны", "+30% ресурсов с добычи клонов — путь собирателя.",
+                EvoBranch.Clones, 3, 1,
+                Cost.Of(new CostItem(ResourceKind.Organic, 10), new CostItem(ResourceKind.Slime, 6)),
+                new[]{ Eff(EvoEffectKind.CloneYieldMult, 0.30) }, requires: new[]{ "clone_instinct" }, exclusive: "clone_t3"));
+            l.Add(N("clone_hunter", "Хищные клоны", "Клоны едят всех не крупнее себя — путь охотника.",
+                EvoBranch.Clones, 3, 2,
+                Cost.Of(new CostItem(ResourceKind.Chitin, 10), new CostItem(ResourceKind.Psyche, 3)),
+                new[]{ Abil("clone_hunter") }, requires: new[]{ "clone_instinct" }, exclusive: "clone_t3"));
+            l.Add(N("clone_return", "Зов улья", "Клон с полной ношей сам возвращается и сдаёт её.",
+                EvoBranch.Clones, 4, 0,
+                Cost.Of(new CostItem(ResourceKind.Slime, 12), new CostItem(ResourceKind.Psyche, 6)),
+                new[]{ Abil("clone_return"), Eff(EvoEffectKind.CloneLeash, 6.0) }, requires: new[]{ "clone_soul" }));
+            l.Add(N("clone_swift", "Проворство", "Клоны на 35% быстрее.",
+                EvoBranch.Clones, 4, 1,
+                Cost.Of(new CostItem(ResourceKind.Slime, 12), new CostItem(ResourceKind.Ember, 4)),
+                new[]{ Eff(EvoEffectKind.CloneSpeedMult, 0.35) }, requires: new[]{ "clone_instinct" }));
+            l.Add(N("clone_perfect", "Совершенный клон", "Клоны восстанавливают 0.04 массы/с и видят ещё на 2 дальше.",
+                EvoBranch.Clones, 4, 2,
+                Cost.Of(new CostItem(ResourceKind.Organic, 16), new CostItem(ResourceKind.Psyche, 8)),
+                new[]{ Eff(EvoEffectKind.CloneRegen, 0.04), Eff(EvoEffectKind.CloneSight, 2.0) }, requires: new[]{ "clone_shell" }));
 
             return l.ToArray();
         }

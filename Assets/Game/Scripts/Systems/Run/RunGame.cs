@@ -482,7 +482,7 @@ public sealed partial class RunGame : MonoBehaviour {
         }
         // крупное тело или разбежавшаяся стая — камера отъезжает
         float zoom = Mathf.Clamp(0.75f + 0.125f * Mathf.Sqrt((float)Run.Mass), 0.95f, 1.6f) * (Run.OpenWorld ? 1.9f : 1f);
-        if (_player != null && _fragList.Count > 1) zoom = Mathf.Max(zoom, Mathf.Min(3.2f, FragmentSpread() / 4.5f));
+        if (_player != null && _fragList.Count > 1) zoom = Mathf.Max(zoom, Mathf.Min(2.0f, FragmentSpread() / 7f)); // клоны самостоятельны — камера почти не отъезжает
         FollowCamera.ZoomMult = zoom;
     }
 
@@ -526,7 +526,7 @@ public sealed partial class RunGame : MonoBehaviour {
         _sinceDash = 0f;
         float speed = DashSpeed * (float)Run.DashSpeedMult * (float)charge;
         var impulse = new Vector2((float)dir.X, (float)dir.Y) * speed;
-        for (int i = 0; i < _fragList.Count; i++) _fragList[i].View.Rb.linearVelocity += impulse; // стая рвётся вместе
+        _player.Rb.linearVelocity += impulse; // v0.9: рывок — только у души; клоны живут сами
         ProceduralSfx.Instance?.Play("jet");
         GameFeel.Shake(0.08f * (float)charge);
         // капля влаги остаётся позади — видно, что рывок стоит массы
@@ -798,7 +798,8 @@ public sealed partial class RunGame : MonoBehaviour {
             }
             bool touching = dist <= fr + c.Radius + 0.06f;
             // крупное, но уже меньше этого фрагмента — съедаем при касании без удара
-            if (touching && fMass >= c.Mass * Run.Mutations.AbsorbRatio) { Absorb(c); continue; }
+            double ratio = fv.View == _player ? Run.Mutations.AbsorbRatio : Run.CloneAbsorbRatio;
+            if (touching && fMass >= c.Mass * ratio) { Absorb(c); continue; }
             if (touching && c.Traits.LeechPerSec > 0) {
                 double drain = c.Traits.LeechPerSec * dt;
                 HurtFragment(drain, "leech");
@@ -939,6 +940,8 @@ public sealed partial class RunGame : MonoBehaviour {
             ProceduralSfx.Instance?.Play("evolve");
         }
         if (Run.Evolution != null) _lastTokens = Run.Evolution.FreeTokens;
+        if (!_splitHinted && SplitUnlocked) { _splitHinted = true; _ui.Hint("Деление открыто! Кнопка «Разделиться» справа", 3.5f); }
+        if (!_soulHinted && Run.HasAbility("soul_transfer")) { _soulHinted = true; _ui.Hint("Перенос души: кнопка «Душа ⇄» переселит вас в клона", 3.5f); }
         if (_world != null) {
             _miniTimer -= Time.unscaledDeltaTime;
             if (_miniTimer <= 0f) { _miniTimer = 0.2f; _world.FlushMini(); }
@@ -982,6 +985,7 @@ public sealed partial class RunGame : MonoBehaviour {
     }
 
     private RunAudio _audio;
+    private bool _splitHinted, _soulHinted;
 
     /// <summary>Свет для 3D-моделей (тёплый, сверху-сбоку) и фоновая музыка пещеры.</summary>
     private void SetupLightAndMusic() {

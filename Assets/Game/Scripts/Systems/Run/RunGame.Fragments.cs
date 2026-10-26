@@ -19,6 +19,9 @@ public sealed partial class RunGame {
         public SimEntityView2D View;
         public SpriteRenderer Glow;
         public float BaseRadius;
+        public Vector2 WanderDir;      // куда бредёт клон, когда вокруг нет дела
+        public float WanderT;
+        public float Weak;             // 0..1 — слабость вдали от души
     }
 
     private readonly Dictionary<int, FragView> _frags = new Dictionary<int, FragView>();
@@ -162,8 +165,32 @@ public sealed partial class RunGame {
     }
 
     // ---------- Команды игрока ----------
+    public bool CanSoulTransfer => Run != null && InRun && Run.HasAbility("soul_transfer") && Run.Fragments.Count > 1;
+    public bool SplitUnlocked => Run != null && Run.HasAbility("split");
+
+    /// <summary>Перенос души: по кругу в следующего клона — он становится вами (камера, свет, управление).</summary>
+    public void RequestSoulTransfer() {
+        if (!InRun || _ui.ModalOpen || !CanSoulTransfer) return;
+        var ids = Run.Fragments.Ids();
+        int target = ids[1];                       // ведущий всегда первый — следующий за ним клон
+        Vector2 from = _player.Rb.position;
+        if (!Run.TransferSoul(target)) { ProceduralSfx.Instance?.Play("deny"); return; }
+        BindLead();
+        ApplyPlayerSize();
+        ProceduralSfx.Instance?.Play("altar");
+        SplashBurst2D.Instance?.Burst(from, Vector2.up, 6);
+        GameFeel.Text(_player.transform.position, "Душа здесь", new Color(0.75f, 0.6f, 1f), 1f);
+        ShowDeposit(_player.Rb.position);
+        _ui.Flash("Душа перенесена — теперь вы этот клон", 1.6f);
+    }
+
     public void RequestSplit() {
         if (!InRun || _ui.ModalOpen) return;
+        if (!Run.HasAbility("split")) {
+            _ui.Flash("Деление откроет эволюция: ветвь «Деление»");
+            ProceduralSfx.Instance?.Play("deny");
+            return;
+        }
         var pairs = Run.TrySplit();
         if (pairs.Count == 0) {
             _ui.Flash(Run.Fragments.Count >= FragmentSet.MaxFragments ? "Больше делиться нельзя" : "Слишком мало массы, чтобы разделиться");
@@ -197,12 +224,17 @@ public sealed partial class RunGame {
         ProceduralSfx.Instance?.Play(_gathering ? "merge" : "deny");
     }
 
-    // ---------- Физика стаи ----------
+    // ---------- Физика клонов ----------
+    /// <summary>
+    /// v0.9: клоны не управляются — охотятся, бродят и сдают ношу сами. Вдали от души слабеют и
+    /// теряют массу, за пределом связи лопаются (RunState.DriftAt). «Собраться» — общий сбор и слияние.
+    /// </summary>
     private void FragmentsStep(float dt) {
         if (_fragList.Count <= 1) { _gathering = false; return; }
         Vector2 lead = _player.Rb.position;
         float leadR = PlayerRadius;
         if (_gathering) _gatherTimer += dt;
+        bool homing = Run.HasAbility("clone_return");
         for (int i = 0; i < _fragList.Count; i++) {
             var fv = _fragList[i];
             if (fv.View == _player) continue;
@@ -210,10 +242,10 @@ public sealed partial class RunGame {
             Vector2 d = lead - rb.position;
             float dist = d.magnitude, r = FragRadius(fv);
             float gap = dist - leadR - r;
-            if (_gathering && gap < 0.12f) {
-                // касание в режиме сбора — слияние в ведущего
-                int keep = Run.Fragments.LeadId;
-                if (Run.MergeFragments(keep, fv.Id)) {
+            bool returning = _gathering || (homing && Run.CarryTotal(fv.Id) >= RunState.CloneReturnCarry);
+            if (returning && gap < 0.12f) {
+                // касание при сборе (или клон с полной ношей вернулся) — слияние в ведущего
+                if (Run.MergeFragments(Run.Fragments.LeadId, fv.Id)) {
                     ProceduralSfx.Instance?.Play("merge");
                     GameFeel.Text(lead, "Слияние", new Color(0.6f, 0.9f, 1f), 0.8f);
                     ShowDeposit(lead);
@@ -222,29 +254,73 @@ public sealed partial class RunGame {
                     return;
                 }
             }
-            if (!_gathering && TwinForage(fv, rb, lead, dist)) continue;
-            if (gap <= 0.4f || dist < 0.001f) continue;
-            // мягкая стая: тянутся к ведущему; в сборе — сильно (и сильнее со временем: застрявшие догоняют)
-            float k = _gathering ? 14f + 10f * Mathf.Min(_gatherTimer, 3f) : (gap > 6f ? 7f : 2.5f);
-            rb.AddForce(d / dist * (k * rb.mass), ForceMode2D.Force);
+            if (!_gathering) {
+                var drift = Run.DriftAt(fv.Id, dist, dt);
+                fv.Weak = (float)Run.CloneWeakness(dist);
+                if (drift == RunState.Drift.Popped) { OnClonePopped(rb.position); return; }
+                if (drift == RunState.Drift.Weak && !_driftHinted) {
+                    _driftHinted = true;
+                    _ui.Hint("Клон слишком далеко — он слабеет и может лопнуть", 3f);
+                }
+            } else fv.Weak = 0f;
+            if (returning) {
+                if (dist < 0.001f) continue;
+                float kr = _gathering ? 14f + 10f * Mathf.Min(_gatherTimer, 3f) : 12f;
+                rb.AddForce(d / dist * (kr * rb.mass), ForceMode2D.Force);
+                continue;
+            }
+            if (TwinForage(fv, rb, lead, dist)) continue;
+            Wander(fv, rb, lead, dist, dt);
         }
-        // фрагменты не слипаются случайно вне сбора — лёгкое расталкивание между не-ведущими
+        // клоны не слипаются случайно — лёгкое расталкивание
         for (int i = 0; i < _fragList.Count; i++)
             for (int j = i + 1; j < _fragList.Count; j++) {
                 var a = _fragList[i].View.Rb; var b = _fragList[j].View.Rb;
-                Vector2 d = b.position - a.position;
+                Vector2 dd = b.position - a.position;
                 float min = FragRadius(_fragList[i]) + FragRadius(_fragList[j]) + 0.15f;
-                float dd = d.magnitude;
-                if (_gathering || dd >= min || dd < 0.001f) continue;
-                Vector2 push = d / dd * (min - dd) * 6f;
+                float m = dd.magnitude;
+                if (_gathering || m >= min || m < 0.001f) continue;
+                Vector2 push = dd / m * (min - m) * 6f;
                 a.AddForce(-push * a.mass, ForceMode2D.Force);
                 b.AddForce(push * b.mass, ForceMode2D.Force);
             }
     }
 
+    private bool _driftHinted;
+
+    /// <summary>Скорость клона: прокачка «Проворство», слабость вдали.</summary>
+    private float CloneMaxSpeed(FragView fv) => TwinMaxSpeed * (float)Run.CloneSpeedMult * (1f - 0.6f * fv.Weak);
+
+    /// <summary>Нечего делать — клон бродит сам; ближе к краю связи забирает к душе.</summary>
+    private void Wander(FragView fv, Rigidbody2D rb, Vector2 lead, float dist, float dt) {
+        fv.WanderT -= dt;
+        if (fv.WanderT <= 0f || fv.WanderDir == Vector2.zero) {
+            fv.WanderT = 1.5f + Random.value * 2.5f;
+            float ang = Random.value * Mathf.PI * 2f;
+            fv.WanderDir = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
+        }
+        float soft = (float)Run.CloneLeash;
+        Vector2 home = dist > 0.001f ? (lead - rb.position) / dist : Vector2.zero;
+        float pull = Mathf.InverseLerp(soft * 0.45f, soft * 0.9f, dist);   // у края связи — домой
+        Vector2 dir = Vector2.Lerp(fv.WanderDir, home, pull).normalized;
+        float cap = CloneMaxSpeed(fv) * (0.45f + 0.55f * pull);
+        if (Vector2.Dot(rb.linearVelocity, dir) < cap) rb.AddForce(dir * (6f * rb.mass), ForceMode2D.Force);
+    }
+
+    /// <summary>Клон лопнул: ноша и масса рассыпаются там, где он был.</summary>
+    private void OnClonePopped(Vector2 at) {
+        DropCarry(at);
+        double m = Run.LastPoppedMass;
+        if (m > 0.05) SpawnDroplets(at, m * 0.7);
+        SplashBurst2D.Instance?.Burst(at, Vector2.up, 14);
+        ProceduralSfx.Instance?.Play("dissolve");
+        GameFeel.Shake(0.2f);
+        _ui.Flash("Клон ушёл слишком далеко и лопнул", 2f);
+        SyncFragments();
+    }
+
     // ---------- Двойники-добытчики (v0.9) ----------
-    private const float TwinLeash = 12f;      // дальше от ведущего двойник не уходит за добычей
-    private const float TwinSight = 7f;       // радиус, в котором двойник замечает еду
+        private const float TwinSight = 7f;       // радиус, в котором двойник замечает еду
     private const float TwinFear = 4.5f;      // радиус, в котором двойник бежит от крупных
     private const float TwinMaxSpeed = 6.5f;
     private bool _carryHinted;
@@ -254,23 +330,26 @@ public sealed partial class RunGame {
     /// выпавшую ношу. Уходит не дальше поводка от ведущего. true — сила уже приложена, «стая» не нужна.
     /// </summary>
     private bool TwinForage(FragView fv, Rigidbody2D rb, Vector2 lead, float distToLead) {
-        if (distToLead > TwinLeash) return false;
+        float soft = (float)Run.CloneLeash;
         Vector2 me = rb.position;
         double m = Run.FragmentMass(fv.Id);
+        double ratio = Run.CloneAbsorbRatio;
         float r = FragRadius(fv);
+        float sight = (TwinSight + (float)Run.CloneSightBonus) * (1f - 0.5f * fv.Weak);
         Vector2 flee = Vector2.zero;
-        Vector2 target = Vector2.zero; float best = TwinSight; bool has = false;
+        Vector2 target = Vector2.zero; float best = sight; bool has = false;
         for (int i = 0; i < _creatures.Count; i++) {
             var c = _creatures[i];
             if (c == null || c.IsBoss || !c.gameObject.activeSelf) continue;
             Vector2 cp = c.View.Rb.position;
             float d = Vector2.Distance(me, cp) - c.Radius - r;
-            bool edible = c.IsFood || m >= c.Mass * Run.Mutations.AbsorbRatio;
+            bool edible = c.IsFood || m >= c.Mass * ratio;
             if (!edible) {
                 if (c.Mass > m * 0.9 && d < TwinFear) flee += (me - cp).normalized * (1f - Mathf.Max(0f, d) / TwinFear);
                 continue;
             }
-            if (d < best && Vector2.Distance(lead, cp) < TwinLeash) { best = d; target = cp; has = true; }
+            // за добычей — только в пределах связи: дальше клон слабеет
+            if (d < best && Vector2.Distance(lead, cp) < soft) { best = d; target = cp; has = true; }
         }
         for (int i = 0; i < _loot.Count; i++) {
             float d = Vector2.Distance(me, _loot[i].Pos);
@@ -280,7 +359,7 @@ public sealed partial class RunGame {
         if (!fleeing && !has) return false;
         Vector2 dir = fleeing ? flee.normalized : (target - me).normalized;
         float k = fleeing ? 18f : 11f;
-        if (Vector2.Dot(rb.linearVelocity, dir) < TwinMaxSpeed) rb.AddForce(dir * (k * rb.mass), ForceMode2D.Force);
+        if (Vector2.Dot(rb.linearVelocity, dir) < CloneMaxSpeed(fv)) rb.AddForce(dir * (k * rb.mass), ForceMode2D.Force);
         return true;
     }
 
@@ -370,6 +449,7 @@ public sealed partial class RunGame {
                 c = Color.Lerp(c, new Color(1f, 0.82f, 0.3f, 0.6f), k);
                 c.a *= 0.8f + 0.2f * Mathf.Sin(Time.time * 5f + fv.Id);
             }
+            if (fv.Weak > 0f) c = Color.Lerp(c, new Color(1f, 0.25f, 0.2f, 0.7f), fv.Weak * (0.6f + 0.4f * Mathf.Sin(Time.time * 12f)));
             fv.Glow.color = c;
         }
     }
@@ -390,7 +470,7 @@ public sealed partial class RunGame {
 
     /// <summary>Жест: касание двумя пальцами — разделиться (кнопки дублируют).</summary>
     private void TwoFingerStep() {
-        if (GameSettings.Joystick) return; // палец на джойстике + тап по кнопке — не жест деления
+        if (GameSettings.Joystick || !SplitUnlocked) return; // джойстик + тап по кнопке — не жест; деление ещё не открыто
         if (UnityEngine.Input.touchCount == 2) {
             var a = UnityEngine.Input.GetTouch(0); var b = UnityEngine.Input.GetTouch(1);
             if (b.phase == TouchPhase.Began) _twoFingerT = Time.unscaledTime;

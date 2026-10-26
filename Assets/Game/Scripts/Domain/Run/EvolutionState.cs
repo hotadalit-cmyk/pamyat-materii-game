@@ -60,6 +60,17 @@ namespace PM.Domain.Run {
         /// <summary>Прокачка показателей (v0.9): её уровни складываются с бонусами эволюции в Sum.</summary>
         public StatTraining Training { get; set; }
 
+        /// <summary>Открыта ли способность (эффект Ability с этим ключом у развитого узла).</summary>
+        public bool HasAbility(string key) {
+            foreach (var id in _unlocked) {
+                var node = EvolutionTree.Get(id);
+                if (node == null || node.Effects == null) continue;
+                for (int i = 0; i < node.Effects.Length; i++)
+                    if (node.Effects[i].Kind == EvoEffectKind.Ability && node.Effects[i].MutationId == key) return true;
+            }
+            return false;
+        }
+
         /// <summary>Итог бонусов вида k: открытые узлы эволюции + прокачанные показатели.</summary>
         public double Sum(EvoEffectKind k) {
             double total = Training != null ? Training.Sum(k) : 0;

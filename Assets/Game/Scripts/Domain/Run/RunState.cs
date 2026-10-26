@@ -130,7 +130,7 @@ public sealed class RunState {
         Training = new StatTraining();
         Evolution.Training = Training;
         if (_meta.SeenSpecies != null) foreach (var sp in _meta.SeenSpecies) _known.Add(sp);
-        if (OpenWorld) Fragments.MaxCount = 2; // делиться на большее число частей учит ветвь «Деление»
+        if (OpenWorld) Fragments.MaxCount = 1; // v0.9: делиться можно только после узла «Деление»
         PeakMass = Mass;
         Combo = new ComboTracker();
         if (OpenWorld) SetupWorld(); else SetupRoom();
@@ -166,6 +166,7 @@ public sealed class RunState {
             var items = YieldTable.For(speciesId, yieldMass);
             double ym = 1.0 + Evolution.Sum(EvoEffectKind.YieldMult);
             var got = new List<CostItem>(items.Length);
+            if (_creditId >= 0 && _creditId != Fragments.LeadId) ym *= 1.0 + Evolution.Sum(EvoEffectKind.CloneYieldMult);
             for (int i = 0; i < items.Length; i++) {
                 double added = AddLoot(_creditId, items[i].Kind, items[i].Amount * ym);
                 if (added > 0) got.Add(new CostItem { Kind = items[i].Kind, Amount = added });
@@ -256,6 +257,7 @@ public sealed class RunState {
     /// <summary>Разделиться: каждый достаточно крупный фрагмент — пополам. Пары (родитель, новый) или пусто.</summary>
     public List<int[]> TrySplit() {
         if (IsDead || IsVictory || !Fragments.CanSplit) return new List<int[]>();
+        if (OpenWorld && !HasAbility("split")) return new List<int[]>();
         return Fragments.SplitAll();
     }
 
@@ -268,6 +270,77 @@ public sealed class RunState {
             if (!_carry.TryGetValue(keepId, out var k)) { k = new double[ResourceInfo.Count]; _carry[keepId] = k; }
             for (int i = 0; i < k.Length; i++) k[i] += o[i];
         }
+        LastDeposit = DepositLead();
+        return true;
+    }
+
+    // ---------- Способности и клоны (v0.9) ----------
+    public const double BaseCloneLeash = 10.0;     // дальше — клон слабеет
+    public const double CloneHardLeashMult = 1.8;  // дальше soft×1.8 — лопается
+    public const double CloneDriftLossPerSec = 0.18; // доля массы в секунду на самом краю
+    public const double CloneReturnCarry = 12.0;   // «Зов улья»: с такой ношей клон идёт сдавать
+
+    public bool HasAbility(string key) => Evolution != null && Evolution.HasAbility(key);
+
+    /// <summary>Мягкая граница связи с клонами (мир. ед.).</summary>
+    public double CloneLeash => BaseCloneLeash + Evolution.Sum(EvoEffectKind.CloneLeash);
+    public double CloneSightBonus => Evolution.Sum(EvoEffectKind.CloneSight);
+    public double CloneSpeedMult => 1.0 + Evolution.Sum(EvoEffectKind.CloneSpeedMult);
+    /// <summary>Во сколько раз клон должен быть тяжелее жертвы, чтобы съесть её.</summary>
+    public double CloneAbsorbRatio => HasAbility("clone_hunter") ? 1.0 : Mutations.AbsorbRatio;
+    private double CloneDamageFactor { get { double k = 1.0 + Evolution.Sum(EvoEffectKind.CloneDamageTakenMult); return k < 0.2 ? 0.2 : k; } }
+
+    /// <summary>Слабость клона на расстоянии dist: 0 — в пределах связи, 1 — на грани разрыва.</summary>
+    public double CloneWeakness(double dist) {
+        double soft = CloneLeash, hard = soft * CloneHardLeashMult;
+        if (dist <= soft) return 0;
+        return dist >= hard ? 1 : (dist - soft) / (hard - soft);
+    }
+
+    public enum Drift { Ok = 0, Weak = 1, Popped = 2 }
+
+    /// <summary>
+    /// Клон вдали от души: слабеет и теряет массу; за пределом связи лопается — ноша и масса
+    /// рассыпаются рядом (LastDropped, LastPoppedMass). Ведущего не касается.
+    /// </summary>
+    public Drift DriftAt(int fragmentId, double dist, double dt) {
+        if (IsDead || fragmentId == Fragments.LeadId || Fragments.IndexOf(fragmentId) < 0) return Drift.Ok;
+        double w = CloneWeakness(dist);
+        if (w <= 0) return Drift.Ok;
+        if (w >= 1) { PopFragment(fragmentId); return Drift.Popped; }
+        double loss = Fragments.MassOf(fragmentId) * CloneDriftLossPerSec * w * dt;
+        if (Fragments.Remove(fragmentId, loss)) { DropCarryOf(fragmentId); LastPoppedMass = 0; return Drift.Popped; }
+        return Drift.Weak;
+    }
+
+    /// <summary>Масса лопнувшего клона — Unity рассыпает её каплями.</summary>
+    public double LastPoppedMass { get; private set; }
+
+    /// <summary>Клон лопается: масса и ноша выпадают рядом с ним.</summary>
+    public bool PopFragment(int fragmentId) {
+        if (fragmentId == Fragments.LeadId || Fragments.IndexOf(fragmentId) < 0) return false;
+        double m = Fragments.MassOf(fragmentId);
+        if (!Fragments.Remove(fragmentId, m + 1.0)) return false;
+        LastPoppedMass = m;
+        DropCarryOf(fragmentId);
+        return true;
+    }
+
+    private void DropCarryOf(int fragmentId) {
+        LastDropped = new CostItem[0];
+        if (!_carry.TryGetValue(fragmentId, out var lost)) return;
+        _carry.Remove(fragmentId);
+        var drop = new List<CostItem>();
+        for (int i = 0; i < lost.Length; i++) if (lost[i] > 0) drop.Add(new CostItem((ResourceKind)i, lost[i]));
+        LastDropped = drop.ToArray();
+    }
+
+    /// <summary>Перенос души: клон становится ведущим (вами), его ноша сразу уходит в хранилище.</summary>
+    public bool TransferSoul(int targetId) {
+        LastDeposit = new CostItem[0];
+        if (IsDead || !HasAbility("soul_transfer")) return false;
+        if (targetId == Fragments.LeadId || Fragments.IndexOf(targetId) < 0) return false;
+        Fragments.MakeLead(targetId);
         LastDeposit = DepositLead();
         return true;
     }
@@ -329,6 +402,7 @@ public sealed class RunState {
     public bool OnMassLostAt(int fragmentId, double amount, string sourceId) {
         if (amount <= 0.0) return false;
         amount *= DamageTakenFactor;
+        if (fragmentId != Fragments.LeadId) amount *= CloneDamageFactor;
         bool dissolved = Fragments.Remove(fragmentId, amount);
         LastDropped = new CostItem[0];
         if (dissolved && _carry.TryGetValue(fragmentId, out var lost)) {
@@ -381,7 +455,7 @@ public sealed class RunState {
         MaxDashCharges = maxDash;
         if (DashCharges > MaxDashCharges) DashCharges = MaxDashCharges;
         Resources.Capacity = ResourceStore.BaseCapacity + Evolution.Sum(EvoEffectKind.StorageCap);
-        if (OpenWorld) Fragments.MaxCount = 2 + (int)System.Math.Round(Evolution.Sum(EvoEffectKind.MaxFragments));
+        if (OpenWorld) Fragments.MaxCount = HasAbility("split") ? 2 + (int)System.Math.Round(Evolution.Sum(EvoEffectKind.MaxFragments)) : 1;
         double minMass = FragmentSet.MinFragmentMass + Evolution.Sum(EvoEffectKind.SplitMinMass);
         Fragments.MinMass = minMass < 0.6 ? 0.6 : minMass;
     }
@@ -399,6 +473,8 @@ public sealed class RunState {
         if (dt <= 0.0 || IsDead) return;
         Combo.Tick(dt);
         double regen = (Mutations.RegenPerSec + (Evolution != null ? Evolution.Sum(EvoEffectKind.RegenFlat) : 0)) * dt;
+        double cloneRegen = Evolution != null ? Evolution.Sum(EvoEffectKind.CloneRegen) * dt : 0;
+        if (cloneRegen > 0) for (int i = 1; i < Fragments.Count; i++) Fragments.Add(Fragments[i].Id, cloneRegen);
         if (regen > 0.0) {
             Mass += regen;
             if (Mass > PeakMass) {

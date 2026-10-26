@@ -65,7 +65,7 @@ namespace PM.Domain.Run {
 
     public sealed class StatTraining {
         public const int MaxLevel = 10;
-        public const double CostGrowth = 1.3;   // каждый следующий уровень дороже на 30%
+        public const double CostGrowth = 1.22;  // +22% за уровень: 10-й уровень помещается в базовое хранилище (40)
         private readonly Dictionary<string, int> _lv = new Dictionary<string, int>();
 
         public int Level(string key) => _lv.TryGetValue(key, out var v) ? v : 0;

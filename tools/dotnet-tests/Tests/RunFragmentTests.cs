@@ -62,6 +62,7 @@ public static class RunFragmentTests {
 
     public static void RunState_SplitAndAbsorbAt() {
         var rs = new RunState(new SoulMeta(), 1UL, true);
+        rs.Evolution.FreeTokens++; rs.TryEvolve("div_split_basics", true); // v0.9: деление — узел эволюции
         double total = rs.Mass;
         var pairs = rs.TrySplit();
         Eq(1, pairs.Count, "split once");
@@ -76,6 +77,7 @@ public static class RunFragmentTests {
 
     public static void RunState_FragmentLoss_DissolveAndDeath() {
         var rs = new RunState(new SoulMeta(), 2UL, true);
+        rs.Evolution.FreeTokens++; rs.TryEvolve("div_split_basics", true); // v0.9: деление — узел эволюции
         var pairs = rs.TrySplit();
         int child = pairs[0][1];
         True(rs.OnMassLostAt(child, rs.FragmentMass(child) - 0.2, "mite"), "child dissolved");
@@ -88,6 +90,7 @@ public static class RunFragmentTests {
 
     public static void RunState_MergeFragments() {
         var rs = new RunState(new SoulMeta(), 3UL, true);
+        rs.Evolution.FreeTokens++; rs.TryEvolve("div_split_basics", true); // v0.9: деление — узел эволюции
         var pairs = rs.TrySplit();
         double total = rs.Mass;
         True(rs.MergeFragments(pairs[0][0], pairs[0][1]), "merge");
@@ -97,6 +100,7 @@ public static class RunFragmentTests {
 
     public static void RunState_GenericLossIsProportional() {
         var rs = new RunState(new SoulMeta(), 4UL, true);
+        rs.Evolution.FreeTokens++; rs.TryEvolve("div_split_basics", true); // v0.9: деление — узел эволюции
         rs.TrySplit();
         rs.OnMassLost(1.0, "vent");
         Eq(rs.Fragments[0].Mass, rs.Fragments[1].Mass, "equal halves lose equally");

@@ -26,7 +26,7 @@ namespace PM.Domain.Run {
             });
 
             // fragments
-            int maxFragments = 2 + (int)System.Math.Round(e.Sum(EvoEffectKind.MaxFragments));
+            int maxFragments = e.HasAbility("split") ? 2 + (int)System.Math.Round(e.Sum(EvoEffectKind.MaxFragments)) : 1;   // без «Деления» — одно тело
             list.Add(new StatLine {
                 Key = "fragments",
                 Name = "Фрагменты",
@@ -183,6 +183,7 @@ namespace PM.Domain.Run {
 
         private static string[] SrcFragments(EvolutionState e, int maxFragments) {
             var l = new System.Collections.Generic.List<string>();
+            if (e == null || !e.HasAbility("split")) { l.Add("Одно тело: деление открывает эволюция «Деление»"); return l.ToArray(); }
             l.Add("База 2");
             AddEvoSources(l, e, EvoEffectKind.MaxFragments, "+");
             return l.ToArray();

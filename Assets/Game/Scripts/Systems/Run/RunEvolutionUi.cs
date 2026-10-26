@@ -26,8 +26,8 @@ public sealed class RunEvolutionUi : MonoBehaviour {
     // экран эволюции
     private GameObject _evoModal;
     private EvoBranch _branch = EvoBranch.Body;
-    private readonly Image[] _tabImgs = new Image[5];
-    private readonly Text[] _tabTexts = new Text[5];
+    private readonly Image[] _tabImgs = new Image[EvolutionTree.BranchCount];
+    private readonly Text[] _tabTexts = new Text[EvolutionTree.BranchCount];
     private Transform _nodeLayer;
     private Text _storeText, _tokenText;
     private Text _detTitle, _detBody, _detCost, _detBlock;
@@ -118,7 +118,7 @@ public sealed class RunEvolutionUi : MonoBehaviour {
 
     private static int CountAvailable(RunState run) {
         int n = 0;
-        for (int b = 0; b < 5; b++) n += CountAvailable(run, (EvoBranch)b);
+        for (int b = 0; b < EvolutionTree.BranchCount; b++) n += CountAvailable(run, (EvoBranch)b);
         return n;
     }
 
@@ -143,10 +143,10 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         var box = Box(_evoModal.transform, "evo_box", Vector2.zero, new Vector2(1860, 1020), Modal, new Vector2(0.5f, 0.5f));
         Label(box, "ЭВОЛЮЦИЯ", 46, TextAnchor.MiddleLeft, new Vector2(40, -20), new Vector2(500, 60), new Vector2(0, 1)).color = GameBootstrap.COutline;
         // вкладки ветвей
-        for (int b = 0; b < 5; b++) {
+        for (int b = 0; b < EvolutionTree.BranchCount; b++) {
             var br = (EvoBranch)b;
-            var tab = MakeButton(box, "tab" + b, new Vector2(470 + b * 240, -18), new Vector2(226, 74), BranchColor(br), 0.35f,
-                EvolutionTree.BranchName(br), 28, new Vector2(0, 1));
+            var tab = MakeButton(box, "tab" + b, new Vector2(330 + b * 212, -18), new Vector2(202, 74), BranchColor(br), 0.35f,
+                EvolutionTree.BranchName(br), 26, new Vector2(0, 1));
             tab.GetComponent<Button>().onClick.AddListener(() => { _branch = br; _selected = null; RefreshEvolution(); });
             _tabImgs[b] = tab.GetComponent<Image>();
             _tabTexts[b] = tab.GetComponentInChildren<Text>();
@@ -191,6 +191,7 @@ public sealed class RunEvolutionUi : MonoBehaviour {
             case EvoBranch.Motion: return new Color(0.35f, 0.75f, 1f);
             case EvoBranch.Hunt: return new Color(1f, 0.5f, 0.4f);
             case EvoBranch.Senses: return new Color(0.75f, 0.55f, 1f);
+            case EvoBranch.Clones: return new Color(0.45f, 0.95f, 0.85f);
             default: return new Color(1f, 0.8f, 0.4f);
         }
     }
@@ -226,7 +227,7 @@ public sealed class RunEvolutionUi : MonoBehaviour {
 
     private void RefreshEvolution() {
         var run = _game.Run;
-        for (int b = 0; b < 5; b++) {
+        for (int b = 0; b < EvolutionTree.BranchCount; b++) {
             var c = BranchColor((EvoBranch)b);
             _tabImgs[b].color = new Color(c.r, c.g, c.b, (EvoBranch)b == _branch ? 0.95f : 0.3f);
             // число узлов, которые можно развить прямо сейчас, — видно, в какую ветвь заглянуть
@@ -239,8 +240,10 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         var nodes = EvolutionTree.Branch(_branch);
         var pos = new Dictionary<string, Vector2>();
         const float cw = 290f, ch = 210f;
+        int minTier = 99;
+        for (int i = 0; i < nodes.Length; i++) minTier = Mathf.Min(minTier, nodes[i].Tier);
         for (int i = 0; i < nodes.Length; i++)
-            pos[nodes[i].Id] = new Vector2(nodes[i].Column * cw + 140f, -(nodes[i].Tier - 1) * ch - 90f);
+            pos[nodes[i].Id] = new Vector2(nodes[i].Column * cw + 140f, -(nodes[i].Tier - minTier) * ch - 90f);
         // связи — тонкие линии (под карточками)
         for (int i = 0; i < nodes.Length; i++) {
             var n = nodes[i];
@@ -316,6 +319,11 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         var sb = new System.Text.StringBuilder(n.Description);
         if (!string.IsNullOrEmpty(n.ExclusiveGroup)) sb.Append("\n\nРазвилка: в этой группе можно выбрать только один путь.");
         if (!string.IsNullOrEmpty(n.RequiredGene)) sb.Append("\nГен: ").Append(GeneName(n.RequiredGene));
+        if (n.Requires != null) for (int i = 0; i < n.Requires.Length; i++) {
+            var req = EvolutionTree.Get(n.Requires[i]);
+            if (req != null && !run.Evolution.Unlocked.Contains(req.Id))
+                sb.Append("\nНужно сначала: «").Append(req.Name).Append("» (").Append(EvolutionTree.BranchName(req.Branch)).Append(')');
+        }
         var opens = TrainCatalog.UnlockedByNode(n.Id);
         if (opens.Count > 0) {
             sb.Append("\n\n<color=#7FE0FF>Открывает прокачку: ");
@@ -387,6 +395,20 @@ public sealed class RunEvolutionUi : MonoBehaviour {
                 case EvoEffectKind.RegenFlat: return "lorc_heart-organ";
                 case EvoEffectKind.DamageTakenMult: return "lorc_checked-shield";
                 case EvoEffectKind.PullFlat: return "lorc_magnet";
+                case EvoEffectKind.Ability:
+                    switch (e.MutationId) {
+                        case "split": return "lorc_split-cross";
+                        case "soul_transfer": return "lorc_dragon-spiral";
+                        case "clone_return": return "lorc_bubbles";
+                        case "clone_hunter": return "lorc_claw-slashes";
+                    }
+                    break;
+                case EvoEffectKind.CloneLeash: return "lorc_divert";
+                case EvoEffectKind.CloneSight: return "lorc_semi-closed-eye";
+                case EvoEffectKind.CloneSpeedMult: return "lorc_sprint";
+                case EvoEffectKind.CloneDamageTakenMult: return "lorc_checked-shield";
+                case EvoEffectKind.CloneYieldMult: return "lorc_emerald";
+                case EvoEffectKind.CloneRegen: return "lorc_heart-organ";
             }
         }
         return "lorc_dna1";

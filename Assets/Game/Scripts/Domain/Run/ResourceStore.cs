@@ -129,10 +129,14 @@ namespace PM.Domain.Run {
             if (mass < 0) mass = 0;
             var l = new System.Collections.Generic.List<CostItem>();
             switch (speciesId) {
-                case "spore":
-                    l.Add(new CostItem(ResourceKind.Organic, 0.6 * mass));
+                case "spore":   // v0.9: споры дают и слизь — деление доступно с первой глубины
+                    l.Add(new CostItem(ResourceKind.Organic, 0.8 * mass));
+                    l.Add(new CostItem(ResourceKind.Slime, 0.5 * mass));
                     break;
                 case "mite":
+                    l.Add(new CostItem(ResourceKind.Chitin, 0.8 * mass));
+                    l.Add(new CostItem(ResourceKind.Slime, 0.6 * mass));
+                    break;
                 case "beetle":
                     l.Add(new CostItem(ResourceKind.Chitin, 0.8 * mass));
                     l.Add(new CostItem(ResourceKind.Organic, 0.4 * mass));
@@ -162,6 +166,7 @@ namespace PM.Domain.Run {
                     break;
                 case "soul_slime":
                     l.Add(new CostItem(ResourceKind.Psyche, 1.2 * mass));
+                    l.Add(new CostItem(ResourceKind.Slime, 0.4 * mass));
                     break;
                 case "warden":
                     l.Add(new CostItem(ResourceKind.Organic, 15));

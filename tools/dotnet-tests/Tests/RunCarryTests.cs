@@ -5,6 +5,8 @@ namespace PMHarness {
 public static class RunCarryTests {
     private static RunState Split() {
         var rs = new RunState(new SoulMeta(), 41UL, true);
+        rs.Evolution.FreeTokens = 1;
+        True(rs.TryEvolve("div_split_basics", true), "split unlocked");
         True(rs.TrySplit().Count == 1, "split");
         return rs;
     }
