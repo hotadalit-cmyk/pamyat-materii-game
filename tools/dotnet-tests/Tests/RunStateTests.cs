@@ -317,6 +317,34 @@ public static class RunStateTests {
         Eq(1, st.DashCharges, "заряды не тратятся от Tick");
     }
 
+    // ---------- v0.10: Пороги цепочки поглощений ----------
+
+    public static void ComboMilestone3_RestoresDashCharge() {
+        var st = new RunState(new SoulMeta(), 91UL);
+        True(st.TryDash(), "рывок потрачен");
+        Eq(0, st.DashCharges, "зарядов 0");
+        Eq(0, st.LastComboMilestone, "порогов ещё не было");
+        st.OnAbsorb("mite", 0.4);  // chain 1
+        Eq(0, st.LastComboMilestone, "chain 1 — без порога");
+        st.OnAbsorb("mite", 0.4);  // chain 2
+        Eq(0, st.LastComboMilestone, "chain 2 — без порога");
+        st.OnAbsorb("mite", 0.4);  // chain 3 → milestone
+        Eq(3, st.LastComboMilestone, "chain 3 → порог 3");
+        Eq(1, st.DashCharges, "заряд восстановлен через порог 3");
+    }
+
+    public static void ComboMilestone3_NoEffectWhenDashFull() {
+        var st = new RunState(new SoulMeta(), 93UL);
+        // Без TryDash: DashCharges = MaxDashCharges = 1 (базовый)
+        Eq(1, st.DashCharges, "старт: 1 заряд");
+        Eq(1, st.MaxDashCharges, "максимум: 1");
+        st.OnAbsorb("mite", 0.4);  // chain 1
+        st.OnAbsorb("mite", 0.4);  // chain 2
+        st.OnAbsorb("mite", 0.4);  // chain 3 → milestone 3
+        Eq(3, st.LastComboMilestone, "порог 3 сработал");
+        Eq(1, st.DashCharges, "заряд уже полон — прироста нет");
+    }
+
     // ---------- helpers ----------
     private static bool Contains(string[] arr, string id) {
         for (int i = 0; i < arr.Length; i++) if (arr[i] == id) return true;

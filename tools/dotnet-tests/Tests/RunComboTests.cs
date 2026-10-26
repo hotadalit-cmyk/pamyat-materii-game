@@ -96,5 +96,81 @@ public static class RunComboTests {
         Eq(0.0, combo.OnAbsorb(false, 0.0), "нулевая масса — без бонуса");
         Eq(0, combo.Chain, "нулевая масса не растит цепочку");
     }
+
+    // ---------- v0.10: Пороги цепочки 3/5/8 — мгновенные награды ----------
+
+    public static void PopPendingMilestone_ZeroWhenFresh() {
+        var combo = new ComboTracker();
+        Eq(0, combo.PopPendingMilestone(), "свежий трекер — порога нет");
+        combo.OnAbsorb(false, 1.0);
+        Eq(0, combo.PopPendingMilestone(), "после одного поглощения — порога нет");
+        combo.OnAbsorb(false, 1.0);
+        Eq(0, combo.PopPendingMilestone(), "после двух поглощений — порога нет");
+    }
+
+    public static void PopPendingMilestone_FiresAtChain3() {
+        var combo = new ComboTracker();
+        combo.OnAbsorb(false, 1.0);  // chain 1
+        combo.OnAbsorb(false, 1.0);  // chain 2
+        combo.OnAbsorb(false, 1.0);  // chain 3 → milestone
+        Eq(3, combo.PopPendingMilestone(), "третье поглощение зажигает порог 3");
+        Eq(0, combo.PopPendingMilestone(), "повторный вызов возвращает 0 (порог снят)");
+    }
+
+    public static void PopPendingMilestone_FiresAtChain5() {
+        var combo = new ComboTracker();
+        combo.OnAbsorb(false, 1.0);  // chain 1
+        combo.OnAbsorb(false, 1.0);  // chain 2
+        combo.OnAbsorb(false, 1.0);  // chain 3 → milestone 3 pending
+        Eq(3, combo.PopPendingMilestone(), "порог 3 ещё висит — снимаем");
+        combo.OnAbsorb(false, 1.0);  // chain 4 — без порога
+        Eq(0, combo.PopPendingMilestone(), "после 4 — порога нет");
+        combo.OnAbsorb(false, 1.0);  // chain 5 → milestone 5
+        Eq(5, combo.PopPendingMilestone(), "пятое поглощение зажигает порог 5");
+    }
+
+    public static void PopPendingMilestone_FiresAtChain8() {
+        var combo = new ComboTracker();
+        for (int i = 0; i < 7; i++) { combo.OnAbsorb(false, 1.0); combo.PopPendingMilestone(); }
+        combo.OnAbsorb(false, 1.0);  // chain 8 → milestone
+        Eq(8, combo.PopPendingMilestone(), "восьмое поглощение зажигает порог 8");
+    }
+
+    public static void PopPendingMilestone_FiresOncePerChain() {
+        var combo = new ComboTracker();
+        combo.OnAbsorb(false, 1.0);  // chain 1
+        combo.OnAbsorb(false, 1.0);  // chain 2
+        combo.OnAbsorb(false, 1.0);  // chain 3 → milestone 3 pending
+        Eq(3, combo.PopPendingMilestone(), "порог 3 сработал");
+        combo.OnAbsorb(false, 1.0);  // chain 4
+        Eq(0, combo.PopPendingMilestone(), "порог 3 не срабатывает повторно — цепочка продолжает расти");
+        combo.OnAbsorb(false, 1.0);  // chain 5 → milestone 5
+        Eq(5, combo.PopPendingMilestone(), "порог 5 — следующий по списку");
+    }
+
+    public static void OnDash_ResetsMilestonesSoTheyCanFireAgain() {
+        var combo = new ComboTracker();
+        combo.OnAbsorb(false, 1.0); combo.OnAbsorb(false, 1.0); combo.OnAbsorb(false, 1.0);
+        Eq(3, combo.PopPendingMilestone(), "порог 3 сработал первый раз");
+        combo.OnDash();  // цепочка сброшена → пороги снова доступны
+        combo.OnAbsorb(false, 1.0); combo.OnAbsorb(false, 1.0); combo.OnAbsorb(false, 1.0);
+        Eq(3, combo.PopPendingMilestone(), "после рывка порог 3 снова срабатывает");
+    }
+
+    public static void Tick_ResetsMilestonesAfterTimeout() {
+        var combo = new ComboTracker();
+        combo.OnAbsorb(false, 1.0); combo.OnAbsorb(false, 1.0); combo.OnAbsorb(false, 1.0);
+        Eq(3, combo.PopPendingMilestone(), "порог 3 сработал");
+        combo.Tick(2.5);  // цепочка погасла по таймауту
+        combo.OnAbsorb(false, 1.0); combo.OnAbsorb(false, 1.0); combo.OnAbsorb(false, 1.0);
+        Eq(3, combo.PopPendingMilestone(), "после таймаута порог 3 снова срабатывает");
+    }
+
+    public static void Spores_DontTriggerMilestones() {
+        var combo = new ComboTracker();
+        for (int i = 0; i < 10; i++) combo.OnAbsorb(true, 1.0);  // споры
+        Eq(0, combo.Chain, "споры не растят цепочку");
+        Eq(0, combo.PopPendingMilestone(), "споры не зажигают порогов");
+    }
 }
 }

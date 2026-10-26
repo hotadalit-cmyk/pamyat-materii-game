@@ -166,6 +166,9 @@ public sealed class RunState {
         double yieldMass = mass;
         if (Evolution != null) mass *= 1.0 + Evolution.Sum(EvoEffectKind.MassGainMult);
         double bonus = Combo.OnAbsorb(speciesId == "spore", mass);
+        // v0.10: пороги цепочки 3/5/8 — мгновенная награда за агрессивную игру.
+        int milestone = Combo.PopPendingMilestone();
+        if (milestone > 0) ApplyComboMilestone(milestone);
         if (Resources != null) {
             var items = YieldTable.For(speciesId, yieldMass);
             double ym = 1.0 + Evolution.Sum(EvoEffectKind.YieldMult);
@@ -250,6 +253,33 @@ public sealed class RunState {
         if (Mass > PeakMass) PeakMass = Mass;
         SyncOffers();
     }
+
+    /// <summary>
+    /// v0.10: Награда за порог цепочки поглощений — мгновенный эффект, не меняющий массу/пик.
+    /// 3 — +1 заряд рывка (до максимума); 5 — +1 жетон эволюции (в режиме открытого мира);
+    /// 8 — бесплатное предложение мутации (в комнатном режиме) или ещё +1 жетон (открытый мир).
+    /// </summary>
+    private void ApplyComboMilestone(int milestone) {
+        if (IsDead || IsVictory) return;
+        if (milestone == ComboTracker.MilestoneChain3) {
+            if (DashCharges < MaxDashCharges) DashCharges++;
+            LastComboMilestone = 3;
+        } else if (milestone == ComboTracker.MilestoneChain5) {
+            if (OpenWorld && Evolution != null) Evolution.FreeTokens++;
+            LastComboMilestone = 5;
+        } else if (milestone == ComboTracker.MilestoneChain8) {
+            if (OpenWorld) {
+                if (Evolution != null) Evolution.FreeTokens++;
+            } else if (PendingOffer == null) {
+                PendingOffer = MakeOffer();
+                if (PendingOffer.Options.Length == 0) PendingOffer = null;
+            }
+            LastComboMilestone = 8;
+        }
+    }
+
+    /// <summary>Последний сработавший порог цепочки (3/5/8); 0, если ещё не было. Для UI-флеша «Цепочка 3!».</summary>
+    public int LastComboMilestone { get; private set; }
 
     /// <summary>Зона Pool: +массы; не поглощение, цель комнаты не двигается.</summary>
     public void Heal(double amount) {
