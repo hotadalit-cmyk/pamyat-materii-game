@@ -475,13 +475,16 @@ public sealed class GuardianState {
 
     private void UpdateParts(GuardianInput input, ref GuardianOutput o) {
         if (!_divided) return;
-        // капли медленно ползут к герою
+        // капли медленно ползут к герою (шаг ограничен дистанцией — без перескока на больших тактах)
         for (int i = 0; i < _parts.Length; i++) {
             var p = _parts[i];
             if (p.Hp <= 0.0) continue;
             Vec2 d = input.PlayerPos - p.Pos;
             double len = d.Length;
-            if (len > 0.05) p.Pos += d.Scaled(Def.PartCrawlSpeed * input.Dt / len);
+            if (len <= 0.05) continue;
+            double step = Def.PartCrawlSpeed * input.Dt;
+            if (step > len) step = len;
+            p.Pos += d.Scaled(step / len);
         }
         // слияние: пара ближе rA+rB+0.3 непрерывно PartMergeEvery секунд
         for (int i = 0; i < _parts.Length; i++) {
@@ -566,7 +569,9 @@ public sealed class GuardianState {
                 };
             }
             _geyserPendingT = Def.GeyserTelegraph;
-            _geyserCd = _phase == GuardianPhase.Phase3 ? Def.GeyserEvery3 : Def.GeyserEvery1;
+            // «каждые N с» — от удара до удара: вычитаем время телеграфа
+            double every = _phase == GuardianPhase.Phase3 ? Def.GeyserEvery3 : Def.GeyserEvery1;
+            _geyserCd = System.Math.Max(0.1, every - Def.GeyserTelegraph);
         }
         o.Telegraphs = _geysers; // Seconds = 0 — круги погашены
     }
@@ -632,7 +637,9 @@ public sealed class GuardianState {
                     Seconds = Def.PulseTelegraph, Window = Def.PulseTelegraph,
                 };
                 _pulsePendingT = Def.PulseTelegraph;
-                _pulseCd = _phase == GuardianPhase.Phase3 ? Def.PulseEvery3 : Def.PulseEvery1;
+                // «каждые N с» — от удара до удара: вычитаем время телеграфа
+                double every = _phase == GuardianPhase.Phase3 ? Def.PulseEvery3 : Def.PulseEvery1;
+                _pulseCd = System.Math.Max(0.1, every - Def.PulseTelegraph);
                 o.Telegraph = _pulse;
             }
         }
