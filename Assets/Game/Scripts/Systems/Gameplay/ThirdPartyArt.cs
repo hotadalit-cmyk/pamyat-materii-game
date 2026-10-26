@@ -175,7 +175,7 @@ public sealed class MonsterModel : MonoBehaviour {
     private void Play(AnimationClip clip) {
         if (clip == null || Animator == null) return;
         if (_graph.IsValid()) _graph.Destroy();
-        UnityEngine.Animations.AnimationPlayableUtilities.PlayClip(Animator, clip, out _graph);
+        UnityEngine.Playables.AnimationPlayableUtilities.PlayClip(Animator, clip, out _graph);
     }
 
     public void PlayLoop(bool moving) { _moving = moving; Play(moving ? Loop : (IdleClip ?? Loop)); }
