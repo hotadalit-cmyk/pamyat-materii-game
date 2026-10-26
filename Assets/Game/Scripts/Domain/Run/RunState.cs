@@ -40,6 +40,11 @@ public sealed class RunState {
     public const double SpringMassBonus = 0.35;  // родник: +35% массы (не выше пика)
     public const double EvapFloorMass = 1.05;    // ниже этой массы испарение не опускает
     public const double BiomeCompletionEssence = 5.0;  // v0.10: за полное исследование биома в забеге
+    // v0.11: стражи глубин
+    public const double GuardianRetreatPenalty = 0.25; // отступление в фазе 1: −25% текущей массы героя
+    public const double GuardianPityMult = 0.85;       // после 2 поражений от стража его HP ×0.85
+    public const int GuardianPityAfterDefeats = 2;
+    private static readonly double[] GuardianEssenceByDepth = { 8.0, 14.0, 22.0, 32.0, 40.0 };
 
     private static readonly double[] GrowthThresholds = BuildThresholds(); // 6,9,13,18,24,31,40,(×~1.3)
 
@@ -105,16 +110,40 @@ public sealed class RunState {
     public MutationSet Mutations { get; }
     public RoomPlan Room { get; private set; }
     public double RoomAbsorbed { get; private set; }
-    /// <summary>В комнате босса выход открыт только после поглощения стража.</summary>
+    /// <summary>
+    /// v0.11: в открытом мире выход открыт, только когда набрана цель глубины И страж поглощён;
+    /// в комнатном режиме — как раньше (босс-комната требует стража, обычная — цель).
+    /// </summary>
     public bool ExitOpen => Room != null
-        && (Boss != null ? _bossAbsorbed : RoomAbsorbed >= Room.GoalMass);
+        && (OpenWorld ? _guardianAbsorbed && RoomAbsorbed >= Room.GoalMass
+                      : (Boss != null ? _bossAbsorbed : RoomAbsorbed >= Room.GoalMass));
     public bool IsDead { get; private set; }         // Mass < SizeRule.MinViableMass
     public bool IsVictory { get; private set; }      // прошёл последнюю комнату MaxDepth
     public MutationOffer PendingOffer { get; private set; }
     public int DashCharges { get; private set; }
     public int MaxDashCharges { get; private set; }
     public RoomLayout Layout { get; private set; }   // раскладка текущей комнаты
-    public BossState Boss { get; private set; }      // не null только в комнате босса
+    public BossState Boss { get; private set; }      // v0.11: только в комнатном режиме; в открытом мире — Guardian
+    // v0.11: страж каждой глубины открытого мира; спит, пока не набрана цель глубины
+    public GuardianState Guardian { get; private set; }
+    public bool GuardianAwake { get; private set; }
+    public bool GuardianAbsorbed => _guardianAbsorbed;
+    private bool _guardianAbsorbed;
+    private readonly Dictionary<int, int> _guardianDefeats = new Dictionary<int, int>();
+    /// <summary>HP стража по формуле max(8, GoalMass × HpMult) — без поправки на жалость.</summary>
+    public double GuardianFormulaHp { get; private set; }
+    /// <summary>Текущий максимум HP стража (формула × жалость после 2 поражений).</summary>
+    public double GuardianMaxHp { get; private set; }
+
+    /// <summary>Эссенция за стража глубины: Г1 8, Г2 14, Г3 22, Г4 32, Г5 40.</summary>
+    public static double GuardianEssenceFor(int depth) {
+        if (depth < 1) depth = 1;
+        if (depth > GuardianEssenceByDepth.Length) depth = GuardianEssenceByDepth.Length;
+        return GuardianEssenceByDepth[depth - 1];
+    }
+
+    /// <summary>Сколько раз герой погибал/отступал в бою со стражем этой глубины в этом забеге.</summary>
+    public int GuardianDefeats(int depth) => _guardianDefeats.TryGetValue(depth, out int n) ? n : 0;
     public ComboTracker Combo { get; private set; }  // цепочки поглощений за рывок
     public bool AltarUsed { get; private set; }      // алтарь использован в этой комнате
     public bool OpenWorld { get; }                   // v0.6: каждая глубина — одно огромное подземелье
@@ -203,6 +232,7 @@ public sealed class RunState {
         Mass += mass + bonus;
         RoomAbsorbed += mass + bonus;
         if (Mass > PeakMass) PeakMass = Mass;
+        CheckGuardianWake(); // v0.11: цель глубины набрана — страж пробуждается у шахты
         var sp = SpeciesCatalog.Get(speciesId);
         if (sp != null) {
             _speciesThisRun.Add(sp.Id);
@@ -232,19 +262,68 @@ public sealed class RunState {
         return bonus;
     }
 
-    /// <summary>Страж глубины поглощён: +масса, +40 эссенции, WardenSlain, выход открыт.</summary>
+    /// <summary>
+    /// Страж поглощён касанием (только обнажённый). Открытый мир: награда эссенцией по глубине
+    /// и жетон эволюции, выход открыт. Комнатный режим: как раньше — +40 эссенции.
+    /// </summary>
     public void OnBossAbsorbed() {
+        if (OpenWorld) {
+            if (Guardian == null || _guardianAbsorbed || !Guardian.IsExposed) return;
+            _guardianAbsorbed = true;
+            _wardenSlain = true;
+            double m = Guardian.Hp;
+            if (m > 0.0) {
+                Mass += m;
+                RoomAbsorbed += m;
+                if (Mass > PeakMass) PeakMass = Mass;
+            }
+            _bonusEssence += GuardianEssenceFor(Depth);
+            if (Evolution != null) Evolution.FreeTokens++; // жетон эволюции за стража
+            SyncOffers();
+            return;
+        }
         if (Boss == null || _bossAbsorbed) return;
         _bossAbsorbed = true;
         _wardenSlain = true;
-        double m = Boss.Mass;
-        if (m > 0.0) {
-            Mass += m;
-            RoomAbsorbed += m;
+        double mb = Boss.Mass;
+        if (mb > 0.0) {
+            Mass += mb;
+            RoomAbsorbed += mb;
             if (Mass > PeakMass) PeakMass = Mass;
         }
         _bonusEssence += BossEssence;
         SyncOffers();
+    }
+
+    /// <summary>
+    /// v0.11: игрок отступил от стража в фазе 1 (выход из арены). Счёт поражений +1,
+    /// штраф −25% текущей массы героя; после 2 поражений страж этой глубины оживает с HP ×0.85.
+    /// </summary>
+    public void OnGuardianFightReset() {
+        if (!OpenWorld || Guardian == null || !GuardianAwake || _guardianAbsorbed || IsDead) return;
+        _guardianDefeats[Depth] = GuardianDefeats(Depth) + 1;
+        double penalty = Mass * GuardianRetreatPenalty;
+        if (penalty > 0.0) {
+            Mass -= penalty;
+            if (!IsDead && Mass < SizeRule.MinViableMass) { IsDead = true; _killedBy = "guardian_retreat"; }
+        }
+        GuardianMaxHp = GuardianFormulaHp *
+            (GuardianDefeats(Depth) >= GuardianPityAfterDefeats ? GuardianPityMult : 1.0);
+        Guardian.Restore(GuardianMaxHp);
+    }
+
+    /// <summary>Цель глубины набрана — страж пробуждается у шахты (World.ExitPos).</summary>
+    private void CheckGuardianWake() {
+        if (OpenWorld && Guardian != null && !GuardianAwake && !_guardianAbsorbed
+            && Room != null && RoomAbsorbed >= Room.GoalMass)
+            GuardianAwake = true;
+    }
+
+    /// <summary>Смерть от стража этой глубины тоже считается поражением (для жалости ×0.85).</summary>
+    private void CountGuardianDefeat(string sourceId) {
+        if (OpenWorld && GuardianAwake && !_guardianAbsorbed && Guardian != null
+            && sourceId == Guardian.Def.SpeciesId)
+            _guardianDefeats[Depth] = GuardianDefeats(Depth) + 1;
     }
 
     /// <summary>Алтарь (один раз на комнату): Shrine — дар вне порогов, Spring — +35% массы.</summary>
@@ -399,6 +478,7 @@ public sealed class RunState {
         if (!IsDead && Mass < SizeRule.MinViableMass) {
             IsDead = true;
             _killedBy = sourceId;
+            CountGuardianDefeat(sourceId); // v0.11
         }
     }
 
@@ -572,6 +652,7 @@ public sealed class RunState {
         if (!IsDead && Mass < SizeRule.MinViableMass) {
             IsDead = true;
             _killedBy = sourceId;
+            CountGuardianDefeat(sourceId); // v0.11
         }
         return dissolved;
     }
@@ -725,7 +806,14 @@ public sealed class RunState {
             Kind = boss ? RoomKind.Boss : RoomKind.Normal, Biome = biome,
             Obstacles = World.Obstacles, Title = biome.Name, Hint = biome.Subtitle, AltarPos = Vec2.Zero
         };
-        Boss = boss ? new BossState(BossStartMass, _rng.NextUInt()) : null;
+        Boss = null; // v0.11: в открытом мире стражей всех глубин ведёт GuardianState
+        var gdef = GuardianCatalog.ForDepth(Depth);
+        GuardianFormulaHp = System.Math.Max(8.0, World.GoalMass * gdef.HpMult);
+        GuardianMaxHp = GuardianFormulaHp *
+            (GuardianDefeats(Depth) >= GuardianPityAfterDefeats ? GuardianPityMult : 1.0);
+        Guardian = new GuardianState(gdef, GuardianMaxHp, _rng.NextUInt());
+        GuardianAwake = false;
+        _guardianAbsorbed = false;
         _altarUsed = new bool[World.Altars.Count];
         _regionsSeen.Clear();
         AltarUsed = false;

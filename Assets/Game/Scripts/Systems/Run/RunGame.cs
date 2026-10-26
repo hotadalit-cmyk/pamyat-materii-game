@@ -60,6 +60,12 @@ public sealed partial class RunGame : MonoBehaviour {
     private SpriteRenderer _exitRing, _exitGlow, _exitPointer, _altarRing;
     private RunCreature _boss;
     private SpriteRenderer _shockRing;
+    // v0.11: страж глубины у шахты (открытый мир)
+    private RunCreature _guardian;
+    private readonly SpriteRenderer[] _guardianZones = new SpriteRenderer[4];
+    private SpriteRenderer _guardianTelegraph, _guardianWeakRing;
+    private bool _guardianBannerShown;
+    private float _guardianZoneSlow;
     private float _shockT = -1f;
     private DarknessMask _dark;
     private RunUi _ui;
@@ -292,7 +298,7 @@ public sealed partial class RunGame : MonoBehaviour {
         var biome = layout != null && layout.Biome != null ? layout.Biome : BiomeCatalog.ForDepth(plan.Depth);
         _builtRoomKey = plan.Depth * 100 + plan.RoomIndex;
         _world = new WorldView(map, _roomRoot, biome, WallMaterial);
-        _audio?.SetBiome(biome.Id, Run.Boss != null);
+        _audio?.SetBiome(biome.Id, Run.Boss != null || Run.GuardianAwake);
         if (Camera.main != null) Camera.main.backgroundColor = RunWorldBuilder.Hex(biome.WallColor) * 0.3f;
         for (int i = 0; i < map.Obstacles.Count; i++)
             _obstacles.Add(RunWorldBuilder.BuildObstacle(_roomRoot, map.Obstacles[i], biome));
@@ -310,7 +316,11 @@ public sealed partial class RunGame : MonoBehaviour {
         _exitPointer = SpriteUtil.AddSprite(_roomRoot, SpriteUtil.CircleSprite, 0.22f, 0.22f, GameBootstrap.CFood, DarknessMask.Order + 8);
         _shockRing = SpriteUtil.AddSprite(_roomRoot, SpriteUtil.RingSprite, 1f, 1f, new Color(1f, 0.5f, 0.4f, 0f), DarknessMask.Order + 9);
         for (int i = 0; i < plan.Spawns.Count; i++) { _pending.Add(plan.Spawns[i]); _pendingIndex.Add(i); }
-        if (Run.Boss != null) SpawnBossAt(map.BossPos);
+        // v0.11: страж появится у шахты сам, когда набрана цель глубины (GuardianStep)
+        _guardian = null;
+        _guardianBannerShown = false;
+        _guardianZoneSlow = 0f;
+        ClearGuardianVisuals();
 
         PlaceFragmentsAt(ToV2(plan.PlayerStart));
         FollowCamera.Snap = true;
@@ -585,7 +595,10 @@ public sealed partial class RunGame : MonoBehaviour {
         if (obstacle != null) { OnObstacleHit(obstacle, rel, point); return; }
         var c = col.collider.GetComponent<RunCreature>();
         if (c == null || c.IsFood) return;
-        if (c.IsBoss) { OnBossContact(c, rel, point); return; }
+        if (c.IsBoss) {
+            if (Run.OpenWorld && _guardian == c) { OnGuardianContact(c, rel, point); return; } // v0.11
+            OnBossContact(c, rel, point); return;
+        }
         var res = SizeRule.Resolve(Run.FragmentMass(fragmentId), Run.Mutations, c.Mass, c.Mutations, rel);
         ResolveContact(c, res, point, rel);
     }
@@ -897,6 +910,7 @@ public sealed partial class RunGame : MonoBehaviour {
         }
         _hitFrag = -1;
         BossStep(dt, pPos);
+        GuardianStep(dt, pPos); // v0.11: страж у шахты (открытый мир)
         WorldStep(pPos, pr);
         CrackHintStep();
         ZoneStep(dt, pPos, pr);
@@ -947,6 +961,205 @@ public sealed partial class RunGame : MonoBehaviour {
             _boss.View.Body.color = Color.Lerp(GameBootstrap.CDanger, Color.white, 0.4f + 0.3f * Mathf.Sin(_time * 8f));
     }
 
+    // ---------- Страж глубины (v0.11): спит у шахты, пока не набрана цель ----------
+
+    private void GuardianStep(float dt, Vector2 pPos) {
+        var g = Run.Guardian;
+        _guardianZoneSlow = 0f;
+        if (g == null || !Run.GuardianAwake || Run.GuardianAbsorbed) { HideGuardianVisuals(); return; }
+        if (_guardian == null) {
+            SpawnGuardianAt(ToV2(Run.Room.ExitPos)); // страж ждёт у шахты
+            if (_guardian == null) return;
+        }
+        if (!_guardianBannerShown) {
+            _guardianBannerShown = true;
+            _ui.Banner(g.Def.Name + " пробуждается…", 3f);
+            ProceduralSfx.Instance?.Play("shock");
+            GameFeel.Shake(0.3f);
+        }
+        var rb = _guardian.View.Rb;
+        var o = g.Think(new GuardianInput {
+            SelfPos = new Vec2(rb.position.x, rb.position.y), PlayerPos = new Vec2(pPos.x, pPos.y),
+            PlayerMass = Run.Mass, Dt = dt
+        });
+        if (o.ResetFight) { // отступление в фазе 1: штраф и восстановление — в Domain
+            Run.OnGuardianFightReset();
+            _ui.Banner(g.Def.Name + ": отступление — страж восстанавливает силы (−25% массы)", 3f);
+            ProceduralSfx.Instance?.Play("deny");
+            if (Run.IsDead) { EndRun(); return; }
+        }
+        if (o.Impulse) {
+            rb.linearVelocity += new Vector2((float)o.Direction.X, (float)o.Direction.Y) * (9f * (float)o.Strength01);
+            GameFeel.Shake(0.12f);
+        }
+        for (int i = 0; i < o.SpawnMinions; i++) {
+            float a = i * 2.1f + _time;
+            var p = rb.position + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (_guardian.Radius + 0.8f);
+            SpawnCreature(new SpawnSpec { SpeciesId = o.MinionSpecies, Pos = new Vec2(p.x, p.y), Mass = o.MinionMass }, 3000 + _creatures.Count);
+        }
+        if (o.SpawnMinions > 0) _ui.Flash(g.Def.Name + " выпускает выводок!");
+        if (o.Shockwave) {
+            _shockT = 0f;
+            _shockRing.transform.position = rb.position;
+            GameFeel.Shake(0.5f);
+            ProceduralSfx.Instance?.Play("shock");
+            for (int f = 0; f < _fragList.Count; f++) {
+                var frb = _fragList[f].View.Rb;
+                Vector2 away = frb.position - rb.position;
+                if (away.magnitude < 5f) frb.linearVelocity += away.normalized * (10f * (1f - away.magnitude / 5f) + 3f);
+            }
+        }
+        if (o.Strike) { // удар корней: доля массы героя (Domain отдал телеграф заранее)
+            _hitFrag = Run.Fragments.LeadId;
+            HurtFragment(Run.Mass * o.StrikeDamageFrac, g.Def.SpeciesId);
+            _hitFrag = -1;
+            GameFeel.Shake(0.5f);
+            GameFeel.Text(pPos + Vector2.up * 0.8f, "Корни бьют!", new Color(0.65f, 1f, 0.55f), 1.1f);
+            ProceduralSfx.Instance?.Play("hit");
+            if (Run.IsDead) { EndRun(); return; }
+        }
+        GuardianZonesStep(dt, pPos, o);
+        GuardianTelegraphStep(o);
+        DrawGuardianZones(o);
+        if (_guardianWeakRing != null) _guardianWeakRing.enabled = o.WeakPointOpen; // зелёное кольцо — бей сейчас
+        _guardian.Mass = g.Hp;
+        _guardian.ApplySize();
+        if (g.IsExposed && _guardian.View.Body != null)
+            _guardian.View.Body.color = Color.Lerp(GameBootstrap.CDanger, Color.white, 0.4f + 0.3f * Mathf.Sin(_time * 8f));
+    }
+
+    /// <summary>Урон и замедление зон стража по ведущему фрагменту (замедление применит ZoneStepOne).</summary>
+    private void GuardianZonesStep(float dt, Vector2 pPos, GuardianOutput o) {
+        if (o.Zones == null) return;
+        for (int i = 0; i < o.Zones.Length && i < _guardianZones.Length; i++) {
+            var z = o.Zones[i];
+            if (z.Radius <= 0.0 || z.Life <= 0.0) continue;
+            var zp = new Vector2((float)z.Pos.X, (float)z.Pos.Y);
+            if (Vector2.Distance(pPos, zp) > (float)z.Radius) continue;
+            _guardianZoneSlow = Mathf.Max(_guardianZoneSlow, (float)z.Slow01);
+            _hitFrag = Run.Fragments.LeadId;
+            HurtFragment(z.DamagePerSec * dt, Run.Guardian.Def.SpeciesId);
+            _hitFrag = -1;
+            if (Run.IsDead) { EndRun(); return; }
+        }
+    }
+
+    /// <summary>Красное кольцо телеграфа: растёт от нуля до полного радиуса за окно предупреждения.</summary>
+    private void GuardianTelegraphStep(GuardianOutput o) {
+        bool show = o.Telegraph.Seconds > 0.0 && o.Telegraph.Radius > 0.0;
+        if (!show) { if (_guardianTelegraph != null) _guardianTelegraph.enabled = false; return; }
+        if (_guardianTelegraph == null) {
+            var go = new GameObject("guardian_telegraph");
+            go.transform.SetParent(_roomRoot, false);
+            _guardianTelegraph = SpriteUtil.AddSprite(go.transform, SpriteUtil.RingSprite, 1f, 1f,
+                new Color(1f, 0.25f, 0.2f, 0.85f), DarknessMask.Order + 9);
+        }
+        _guardianTelegraph.enabled = true;
+        _guardianTelegraph.transform.position = new Vector3((float)o.Telegraph.Pos.X, (float)o.Telegraph.Pos.Y, 0f);
+        float full = (float)o.Telegraph.Radius * 2f;
+        float window = Run.Guardian != null && Run.Guardian.Def.RootTelegraph > 0.0 ? (float)Run.Guardian.Def.RootTelegraph : 0.8f;
+        float frac = 1f - Mathf.Clamp01((float)o.Telegraph.Seconds / window);
+        _guardianTelegraph.transform.localScale = new Vector3(full * frac, full * frac, 1f);
+    }
+
+    /// <summary>Полупрозрачные круги зон спор.</summary>
+    private void DrawGuardianZones(GuardianOutput o) {
+        if (o.Zones == null) return;
+        for (int i = 0; i < o.Zones.Length && i < _guardianZones.Length; i++) {
+            var z = o.Zones[i];
+            var sr = _guardianZones[i];
+            if (z.Radius <= 0.0 || z.Life <= 0.0) { if (sr != null) sr.enabled = false; continue; }
+            if (sr == null) {
+                var go = new GameObject("guardian_zone");
+                go.transform.SetParent(_roomRoot, false);
+                sr = SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, 1f, 1f,
+                    new Color(0.45f, 1f, 0.5f, 0.16f), DarknessMask.Order + 3);
+                _guardianZones[i] = sr;
+            }
+            sr.enabled = true;
+            sr.transform.position = new Vector3((float)z.Pos.X, (float)z.Pos.Y, 0f);
+            sr.transform.localScale = new Vector3((float)z.Radius * 2f, (float)z.Radius * 2f, 1f);
+        }
+    }
+
+    private void HideGuardianVisuals() {
+        if (_guardianTelegraph != null) _guardianTelegraph.enabled = false;
+        if (_guardianWeakRing != null) _guardianWeakRing.enabled = false;
+        for (int i = 0; i < _guardianZones.Length; i++) if (_guardianZones[i] != null) _guardianZones[i].enabled = false;
+    }
+
+    private void ClearGuardianVisuals() {
+        HideGuardianVisuals();
+        for (int i = 0; i < _guardianZones.Length; i++) {
+            if (_guardianZones[i] != null) Destroy(_guardianZones[i].gameObject);
+            _guardianZones[i] = null;
+        }
+        if (_guardianTelegraph != null) { Destroy(_guardianTelegraph.gameObject); _guardianTelegraph = null; }
+        _guardianWeakRing = null;
+    }
+
+    private void SpawnGuardianAt(Vec2 pos) {
+        var g = Run.Guardian;
+        if (g == null) return;
+        var c = SpawnCreature(new SpawnSpec { SpeciesId = g.Def.SpeciesId, Pos = pos, Mass = g.Hp }, 9001);
+        if (c == null) return;
+        c.IsBoss = true; // общий путь стража: не спит, не съедается, контакт через OnGuardianContact
+        c.View.Rb.linearDamping = 1.6f;
+        var tint = RunWorldBuilder.Hex(g.Def.Tint);
+        var glow = new Color(tint.r, tint.g, tint.b, 0.45f);
+        SpriteUtil.AddSprite(c.transform, SpriteUtil.GlowSprite, c.Radius * 4.5f / c.transform.localScale.x,
+            c.Radius * 4.5f / c.transform.localScale.x, glow, DarknessMask.Order + 1);
+        _guardianWeakRing = SpriteUtil.AddSprite(c.transform, SpriteUtil.RingSprite,
+            c.Radius * 2.6f / c.transform.localScale.x, c.Radius * 2.6f / c.transform.localScale.x,
+            new Color(0.4f, 1f, 0.5f, 0.9f), DarknessMask.Order + 5);
+        _guardianWeakRing.enabled = false;
+        AddLabel(c.transform, (float)SizeRule.RadiusForMass(g.Hp) / c.transform.localScale.x,
+            g.Def.Name, tint);
+        _guardian = c;
+    }
+
+    private void OnGuardianContact(RunCreature c, float rel, Vector2 point) {
+        var g = Run.Guardian;
+        if (g == null) return;
+        double fragMass = Run.FragmentMass(_hitFrag >= 0 ? _hitFrag : Run.Fragments.LeadId);
+        if (g.IsExposed && fragMass >= g.Hp * 0.6) {
+            Run.OnBossAbsorbed(); // Domain: награда по глубине, жетон, выход открыт
+            CodexOnAbsorb(g.Def.SpeciesId);
+            GameFeel.HitStop(0.25f);
+            GameFeel.Shake(1f);
+            _ui.Banner(g.Def.Name + " поглощён! Шахта открыта", 4f);
+            ProceduralSfx.Instance?.Play("capture");
+            SplashBurst2D.Instance?.Burst(c.transform.position, Vector2.up, 20);
+            KillCreature(c);
+            _guardian = null;
+            HideGuardianVisuals();
+            return;
+        }
+        double loss = g.ApplyHit(rel, fragMass, Run.Mutations, _ricochets);
+        if (loss > 0) {
+            Run.OnHit(loss);
+            if (Run.Mutations.LifestealFrac > 0) Run.OnLifesteal(loss);
+            c.Mass = g.Hp;
+            c.ApplySize();
+            SpawnDroplets(point, loss * 0.6);
+            GameFeel.Text(c.transform.position, "−" + loss.ToString("0.0"), new Color(1f, 0.8f, 0.3f), 1.3f);
+            GameFeel.Shake(0.55f);
+            GameFeel.HitStop(0.09f);
+            ProceduralSfx.Instance?.Play("weaken");
+            if (g.IsExposed) _ui.Banner(g.Def.Name + " обнажён — поглотите его!", 3f);
+        } else if (rel > 1.5f) {
+            GameFeel.Text(point, "Броня! Нужна скорость и рикошеты", new Color(0.7f, 0.85f, 1f), 0.8f);
+            ProceduralSfx.Instance?.Play("glass", 0.9f, 0f, 0.45f);
+        }
+        // страж бьёт в ответ своей массой
+        var res = SizeRule.Resolve(fragMass, Run.Mutations, g.Hp, new MutationSet(), rel);
+        if (res.MassLossA > 0 && !g.IsExposed) {
+            HurtFragment(res.MassLossA, g.Def.SpeciesId);
+            GameFeel.Text(_player.transform.position, "−" + res.MassLossA.ToString("0.0"), GameBootstrap.CDanger);
+            if (Run.IsDead) EndRun();
+        }
+    }
+
     private void ZoneStep(float dt, Vector2 leadPos, float leadR) {
         for (int f = 0; f < _fragList.Count; f++) {
             var fv = _fragList[f];
@@ -977,6 +1190,7 @@ public sealed partial class RunGame : MonoBehaviour {
             if (o.Kind == ObstacleKind.Vent && dist > 0.01f)
                 body.AddForce(d / dist * ((float)ObstacleRules.VentPush(dist, o.Radius) * body.mass), ForceMode2D.Force);
         }
+        if (body == _player.Rb) extraDamping = Mathf.Max(extraDamping, _guardianZoneSlow); // v0.11: споры стража тормозят
         body.linearDamping = PlayerBaseDamping + extraDamping;
     }
 

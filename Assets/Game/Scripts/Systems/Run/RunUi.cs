@@ -181,6 +181,18 @@ public sealed class RunUi : MonoBehaviour {
         }
     }
 
+    /// <summary>v0.11: фазы стража открытого мира (GuardianState).</summary>
+    private static string GuardianPhaseName(GuardianPhase p) {
+        switch (p) {
+            case GuardianPhase.Dormant: return "дремлет у шахты";
+            case GuardianPhase.Phase1: return "охраняет шахту";
+            case GuardianPhase.Phase2: return "вторая фаза";
+            case GuardianPhase.Phase3: return "ярость";
+            case GuardianPhase.Exposed: return "обнажён — поглотите!";
+            default: return "";
+        }
+    }
+
     /// <summary>Миникарта открытого мира (создаётся один раз, привязывается к каждой новой глубине).</summary>
     public void SetMinimap(WorldView view) {
         if (_minimap == null) _minimap = RunMinimap.Build(_root, _game);
@@ -364,8 +376,13 @@ public sealed class RunUi : MonoBehaviour {
                 _mutations.text = sbm.ToString();
             } else _mutations.text = "";
             var boss = run.Boss;
-            _bossBar.SetActive(boss != null && !run.ExitOpen);
-            if (boss != null) {
+            var gd = run.OpenWorld && run.Guardian != null && run.GuardianAwake && !run.GuardianAbsorbed ? run.Guardian : null; // v0.11
+            _bossBar.SetActive(boss != null ? !run.ExitOpen : gd != null);
+            if (gd != null) {
+                float gf = Mathf.Clamp01((float)(gd.Hp / System.Math.Max(0.01, gd.MaxHp)));
+                _bossFill.sizeDelta = new Vector2(Mathf.Max(18f, 940f * gf), 18f);
+                _bossLabel.text = gd.Def.Name + " — " + GuardianPhaseName(gd.Phase);
+            } else if (boss != null) {
                 float f = Mathf.Clamp01((float)(boss.Mass / System.Math.Max(0.01, boss.StartMass)));
                 _bossFill.sizeDelta = new Vector2(Mathf.Max(18f, 940f * f), 18f);
                 _bossLabel.text = "Страж глубины — " + PhaseName(boss.Phase);
@@ -594,7 +611,7 @@ public sealed class RunUi : MonoBehaviour {
                "• Добыча даёт ресурсы. На них — «Эволюция» (новые способности) и «Показатели» (прокачка силы, ловкости…).\n" +
                "• Рост массы дарит жетоны: любой открытый узел эволюции бесплатно.\n" +
                "• «Деление» в эволюции: клоны охотятся сами и несут добычу — соберитесь, чтобы сдать её. Далеко уйдут — лопнут.\n" +
-               "• Наберите массу — откроется шахта вниз. 5 глубин, на дне — Страж.\n" +
+               "• Наберите массу — у шахты пробудится страж. Поглотите его, чтобы спуститься.\n" +
                "• Рикошет от стен разгоняет; броню пробивает только скорость.\n" +
                "• После смерти эссенция души усиливает следующие жизни. Всё увиденное — в «Энциклопедии».\n" +
                "• «Меню» (или кнопка «Назад») — пауза, энциклопедия, настройки.";
