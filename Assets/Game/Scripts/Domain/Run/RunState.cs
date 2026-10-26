@@ -17,6 +17,7 @@ public sealed class LifeImprint {
     public string BiomeReached;      // имя биома самой глубокой достигнутой глубины
     public int BestCombo;            // самая длинная цепочка поглощений
     public bool WardenSlain;         // страж глубины поглощён
+    public int RegionsDiscovered;    // v0.6: сколько областей подземелья открыто
 }
 
 /// <summary>
@@ -58,6 +59,11 @@ public sealed class RunState {
     private double _bonusEssence;   // элита +4, страж +40
     private bool _bossAbsorbed;
     private bool _wardenSlain;
+    // v0.6 открытый мир
+    private bool[] _altarUsed = new bool[0];
+    private readonly HashSet<int> _regionsSeen = new HashSet<int>();
+    private double _relicEssence;
+    private int _regionsTotal;
 
     public int Depth { get; private set; }
     public int RoomIndex { get; private set; }
@@ -78,8 +84,15 @@ public sealed class RunState {
     public BossState Boss { get; private set; }      // не null только в комнате босса
     public ComboTracker Combo { get; private set; }  // цепочки поглощений за рывок
     public bool AltarUsed { get; private set; }      // алтарь использован в этой комнате
+    public bool OpenWorld { get; }                   // v0.6: каждая глубина — одно огромное подземелье
+    public WorldMap World { get; private set; }
+    public int RegionsDiscovered => _regionsTotal;
+    public const double RelicEssence = 15.0;
 
-    public RunState(SoulMeta meta, ulong seed) {
+    public RunState(SoulMeta meta, ulong seed) : this(meta, seed, false) { }
+
+    public RunState(SoulMeta meta, ulong seed, bool openWorld) {
+        OpenWorld = openWorld;
         _meta = meta ?? new SoulMeta();
         _rng = new PmRandom(seed);
         Mutations = new MutationSet();
@@ -88,7 +101,7 @@ public sealed class RunState {
         Mass = StartMass + _meta.StartMassBonus;
         PeakMass = Mass;
         Combo = new ComboTracker();
-        SetupRoom();
+        if (OpenWorld) SetupWorld(); else SetupRoom();
         MaxDashCharges = Mutations.DashCharges + _meta.BonusDashCharges;
         DashCharges = MaxDashCharges;
         SyncOffers();
@@ -150,7 +163,10 @@ public sealed class RunState {
     public void UseAltar() {
         if (AltarUsed || Layout == null || IsDead || IsVictory) return;
         if (Layout.Kind == RoomKind.Shrine) {
-            if (PendingOffer == null) PendingOffer = MakeOffer();
+            if (PendingOffer == null) {
+                PendingOffer = MakeOffer();
+                if (PendingOffer.Options.Length == 0) PendingOffer = null;
+            }
             AltarUsed = true;
         } else if (Layout.Kind == RoomKind.Spring) {
             double target = Mass * (1.0 + SpringMassBonus);
@@ -248,6 +264,14 @@ public sealed class RunState {
     /// <summary>Если ExitOpen: следующая комната/глубина (новый RoomPlan); на последней — победа.</summary>
     public bool TryEnterExit() {
         if (!ExitOpen || IsDead || IsVictory) return false;
+        if (OpenWorld) {
+            _roomsCleared++;
+            if (Depth >= MaxDepth) { IsVictory = true; return true; }
+            Depth++;
+            SetupWorld();
+            RoomAbsorbed = 0.0;
+            return true;
+        }
         bool wasElite = Layout != null && Layout.Kind == RoomKind.Elite;
         _roomsCleared++;
         if (wasElite) {
@@ -267,6 +291,55 @@ public sealed class RunState {
         RoomAbsorbed = 0.0;
         if (wasElite) SyncOffers();
         return true;
+    }
+
+    /// <summary>Открытый мир: огромная карта глубины; Room/Layout строятся из неё для совместимости.</summary>
+    private void SetupWorld() {
+        World = WorldGenerator.Generate(Depth, _rng.NextUInt(), _meta.Nemeses);
+        var biome = BiomeCatalog.ForDepth(Depth);
+        Room = new RoomPlan {
+            Depth = Depth, RoomIndex = 0,
+            HalfWidth = World.Width * 0.5, HalfHeight = World.Height * 0.5,
+            Spawns = World.Spawns, GoalMass = World.GoalMass,
+            ExitPos = World.ExitPos, PlayerStart = World.PlayerStart,
+            Darkness01 = biome.Darkness01
+        };
+        bool boss = Depth >= MaxDepth;
+        Layout = new RoomLayout {
+            Kind = boss ? RoomKind.Boss : RoomKind.Normal, Biome = biome,
+            Obstacles = World.Obstacles, Title = biome.Name, Hint = biome.Subtitle, AltarPos = Vec2.Zero
+        };
+        Boss = boss ? new BossState(BossStartMass, _rng.NextUInt()) : null;
+        _altarUsed = new bool[World.Altars.Count];
+        _regionsSeen.Clear();
+        AltarUsed = false;
+        _bossAbsorbed = false;
+    }
+
+    public bool IsAltarUsed(int index) => index < 0 || index >= _altarUsed.Length || _altarUsed[index];
+
+    /// <summary>Алтарь открытого мира: Shrine — дар, Spring — +35% массы, Relic — дар + 15 эссенции.</summary>
+    public void UseAltarAt(int index) {
+        if (World == null || IsAltarUsed(index) || IsDead || IsVictory) return;
+        var a = World.Altars[index];
+        if (a.Kind == AltarKind.Spring) {
+            double target = Mass * (1.0 + SpringMassBonus);
+            if (target > PeakMass) target = PeakMass;
+            if (target > Mass) Mass = target;
+        } else {
+            if (PendingOffer == null) {
+                PendingOffer = MakeOffer();
+                if (PendingOffer.Options.Length == 0) PendingOffer = null;
+            } else _offersDue++;
+            if (a.Kind == AltarKind.Relic) _relicEssence += RelicEssence;
+        }
+        _altarUsed[index] = true;
+    }
+
+    /// <summary>Первое посещение региона; исследование вознаграждается эссенцией в итоге жизни.</summary>
+    public void OnRegionEntered(int regionId) {
+        if (regionId < 0 || !_regionsSeen.Add(regionId)) return;
+        _regionsTotal++;
     }
 
     /// <summary>Комната + раскладка; элита усиливается после генерации, у босса — только споры.</summary>
@@ -308,13 +381,14 @@ public sealed class RunState {
         int newSpecies = 0;
         foreach (string s in _speciesThisRun)
             if (_meta.SeenSpecies == null || !_meta.SeenSpecies.Contains(s)) newSpecies++;
-        double essence = 10.0 * (Depth - 1)
+        double essence = (OpenWorld ? 20.0 : 10.0) * (Depth - 1)
                        + 3.0 * _roomsCleared
                        + 0.5 * _absorbedCount
                        + 5.0 * newSpecies;
         if (IsVictory) essence += VictoryEssence;
         essence += NemesisEssence * _nemesisAbsorbedCount;
         essence += _bonusEssence;
+        essence += _relicEssence + _regionsTotal / 3;
         _finished = new LifeImprint {
             DepthReached = Depth,
             RoomsCleared = _roomsCleared,
@@ -328,6 +402,7 @@ public sealed class RunState {
             BiomeReached = BiomeCatalog.ForDepth(Depth).Name,
             BestCombo = Combo.Best,
             WardenSlain = _wardenSlain,
+            RegionsDiscovered = _regionsTotal,
         };
         return _finished;
     }
@@ -340,6 +415,8 @@ public sealed class RunState {
         if (PendingOffer == null && _offersDue > 0) {
             _offersDue--;
             PendingOffer = MakeOffer();
+            // все мутации уже взяты до предела — пустое «выберите 1 из 0» не показываем
+            if (PendingOffer.Options.Length == 0) { PendingOffer = null; _offersDue = 0; }
         }
     }
 
