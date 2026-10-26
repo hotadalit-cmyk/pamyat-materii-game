@@ -39,6 +39,7 @@ public sealed class RunState {
     public const double EliteExitEssence = 4.0;  // бонус за выход из элитной комнаты
     public const double SpringMassBonus = 0.35;  // родник: +35% массы (не выше пика)
     public const double EvapFloorMass = 1.05;    // ниже этой массы испарение не опускает
+    public const double BiomeCompletionEssence = 5.0;  // v0.10: за полное исследование биома в забеге
 
     private static readonly double[] GrowthThresholds = BuildThresholds(); // 6,9,13,18,24,31,40,(×~1.3)
 
@@ -61,6 +62,8 @@ public sealed class RunState {
     private double _bonusEssence;   // элита +4, страж +40
     private bool _bossAbsorbed;
     private bool _wardenSlain;
+    // v0.10: завершённые в этом забеге биомы — за полное исследование их пула видов даётся +5 эссенции.
+    private readonly HashSet<BiomeId> _completedBiomes = new HashSet<BiomeId>();
     // v0.6 открытый мир
     private bool[] _altarUsed = new bool[0];
     private readonly HashSet<int> _regionsSeen = new HashSet<int>();
@@ -204,6 +207,7 @@ public sealed class RunState {
         if (sp != null) {
             _speciesThisRun.Add(sp.Id);
             if (sp.Behavior != CreatureBehavior.Food) _absorbedCount++;
+            CheckBiomeCompletions();  // v0.10: новый вид может завершить пул биома
         } else if (IsNemesisName(speciesId)) {
             _absorbedCount++;
             _nemesisAbsorbedCount++;
@@ -277,6 +281,31 @@ public sealed class RunState {
 
     /// <summary>Последняя трансмутация — для UI-всплеска «3 Хитин → 1 Психея».</summary>
     public TransmuteResult LastTransmute { get; private set; }
+
+    // ---------- v0.10: Завершение биомов ----------
+    /// <summary>Сколько биомов полностью исследовано в этом забеге.</summary>
+    public int CompletedBiomesCount => _completedBiomes.Count;
+    /// <summary>Имя последнего завершённого биома — для UI-флеша «Грибной коридор исследован!».</summary>
+    public string LastBiomeCompleted { get; private set; }
+
+    /// <summary>Проверяет все биомы: если их пул видов целиком поглощён в этом забеге — даёт +5 эссенции.</summary>
+    private void CheckBiomeCompletions() {
+        var all = BiomeCatalog.All();
+        for (int i = 0; i < all.Length; i++) {
+            var b = all[i];
+            if (_completedBiomes.Contains(b.Id)) continue;
+            if (b.SpeciesPool == null || b.SpeciesPool.Length == 0) continue;
+            bool complete = true;
+            for (int j = 0; j < b.SpeciesPool.Length; j++) {
+                if (!_speciesThisRun.Contains(b.SpeciesPool[j])) { complete = false; break; }
+            }
+            if (complete) {
+                _completedBiomes.Add(b.Id);
+                _bonusEssence += BiomeCompletionEssence;
+                LastBiomeCompleted = b.Name;
+            }
+        }
+    }
 
     /// <summary>
     /// Конвертировать 3 единицы ресурса <paramref name="from"/> в 1 единицу <paramref name="to"/>.
