@@ -71,6 +71,18 @@ public sealed class MutationSet {
     /// <summary>Кристалл: скорость рывка ×0.85.</summary>
     public double DashSpeedMult => Stacks("m_crystal") > 0 ? 0.85 : 1.0;
 
+    /// <summary>Жаростойкость: шипы, жар и испарение ×0.4.</summary>
+    public double HazardMult => Stacks("m_heatproof") > 0 ? 0.4 : 1.0;
+
+    /// <summary>Вампиризм: доля нанесённого урона, возвращаемая массой (0.35 за стак).</summary>
+    public double LifestealFrac => 0.35 * Stacks("m_vampire");
+
+    /// <summary>Рикошет: +0.25 к урону за каждый отскок в текущем рывке (за стак).</summary>
+    public double RicochetBonus => 0.25 * Stacks("m_ricochet");
+
+    /// <summary>Эхолокация: радиус чувства существ вне света (9 с мутацией, иначе 0).</summary>
+    public double SenseRadius => Stacks("m_echo") > 0 ? 9.0 : 0.0;
+
     public string[] ToArray() => _stacks.ToArray();
 
     public static MutationSet FromArray(string[] ids) {

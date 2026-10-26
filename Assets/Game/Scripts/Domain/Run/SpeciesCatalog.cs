@@ -26,6 +26,14 @@ public static class SpeciesCatalog {
         new SpeciesDef { Id = "jelly",         Name = "Медуза",     BaseMass = 3.0, Behavior = CreatureBehavior.Drift,   GeneMutationId = "m_sticky",  MinDepth = 3, MaxDepth = 5, ColorIndex = 1 },
         new SpeciesDef { Id = "crystal_mite",  Name = "Кристоклещ", BaseMass = 6.0, Behavior = CreatureBehavior.Chase,   GeneMutationId = "m_crystal", MinDepth = 4, MaxDepth = 5, ColorIndex = 4 },
         new SpeciesDef { Id = "soul_slime",    Name = "Душеслизень",BaseMass = 4.0, Behavior = CreatureBehavior.Chase,   GeneMutationId = "m_hunger",  MinDepth = 1, MaxDepth = 5, ColorIndex = 3 },
+        // v0.5: виды биомов (MinDepth/MaxDepth = глубина биома)
+        new SpeciesDef { Id = "ember_beetle",  Name = "Углежук",        BaseMass = 3.5,  Behavior = CreatureBehavior.Charger, GeneMutationId = "m_heatproof", MinDepth = 2, MaxDepth = 2, ColorIndex = 2 },
+        new SpeciesDef { Id = "salamander",    Name = "Саламандра",     BaseMass = 3.0,  Behavior = CreatureBehavior.Chase,   GeneMutationId = "m_vampire",  MinDepth = 2, MaxDepth = 2, ColorIndex = 2 },
+        new SpeciesDef { Id = "leech",         Name = "Пиявка",         BaseMass = 1.2,  Behavior = CreatureBehavior.Chase,   GeneMutationId = null,         MinDepth = 3, MaxDepth = 3, ColorIndex = 2 },
+        new SpeciesDef { Id = "bubble_jelly",  Name = "Пузыремедуза",   BaseMass = 3.5,  Behavior = CreatureBehavior.Drift,   GeneMutationId = "m_echo",     MinDepth = 3, MaxDepth = 3, ColorIndex = 1 },
+        new SpeciesDef { Id = "shard_crab",    Name = "Осколочный краб",BaseMass = 5.0,  Behavior = CreatureBehavior.Drift,   GeneMutationId = "m_ricochet", MinDepth = 4, MaxDepth = 4, ColorIndex = 4 },
+        new SpeciesDef { Id = "wisp",          Name = "Огонёк",         BaseMass = 2.0,  Behavior = CreatureBehavior.Flee,    GeneMutationId = "m_echo",     MinDepth = 5, MaxDepth = 5, ColorIndex = 1 },
+        new SpeciesDef { Id = "warden",        Name = "Страж глубины",  BaseMass = 30.0, Behavior = CreatureBehavior.Charger, GeneMutationId = null,         MinDepth = 5, MaxDepth = 5, ColorIndex = 2 },
     };
 
     /// <summary>Все виды. Возвращаемое значение считать read-only.</summary>
