@@ -105,6 +105,9 @@ public sealed class RunSettingsUi : MonoBehaviour {
         Rebuild();
     }
 
+    /// <summary>Кнопка «Назад»: закрыть, если открыто.</summary>
+    public bool CloseIfOpen() { if (!IsOpen) return false; Close(); return true; }
+
     private void Close() {
         _modal.SetActive(false);
         if (_pausedByMe) _game.SetPaused(false);

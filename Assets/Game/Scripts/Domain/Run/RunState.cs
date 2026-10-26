@@ -51,6 +51,8 @@ public sealed class RunState {
     private string _killedBy;
     private double _bestHit;
     private double _chargeTimer;
+    /// <summary>Сколько накопилось до следующего заряда рывка (0..1; 1 — все заряды полны).</summary>
+    public double ChargeProgress01 => DashCharges >= MaxDashCharges ? 1.0 : _chargeTimer / ChargeRestoreSeconds;
     private int _absorbedCount;        // поглощения не-спор
     private int _nemesisAbsorbedCount; // поглощённые немезиды (+15 эссенции каждая)
     private int _roomsCleared;

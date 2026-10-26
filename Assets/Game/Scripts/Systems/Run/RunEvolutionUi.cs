@@ -205,6 +205,13 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         RefreshEvolution();
     }
 
+    /// <summary>Кнопка «Назад»: закрыть верхнее окно (показатели или эволюцию).</summary>
+    public bool CloseTop() {
+        if (_statsModal != null && _statsModal.activeSelf) { _statsModal.SetActive(false); _game.SetPaused(false); return true; }
+        if (_evoModal != null && _evoModal.activeSelf) { CloseEvolution(); return true; }
+        return false;
+    }
+
     private void CloseEvolution() {
         _evoModal.SetActive(false);
         _game.SetPaused(false);

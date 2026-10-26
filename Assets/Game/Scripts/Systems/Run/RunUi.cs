@@ -44,6 +44,11 @@ public sealed class RunUi : MonoBehaviour {
     private Image _splitBtn, _gatherBtn;
     private Text _splitLabel, _gatherLabel;
     private RectTransform _dashRt, _soulRt;
+    private Text _dashLabel;
+    private Image _dashFill, _dashImg;
+    private GameObject _pauseModal;
+    private RawImage _vignette;
+    private float _hurtT;
 
     public bool ModalOpen => (_offerModal != null && _offerModal.activeSelf) ||
                              (_imprintModal != null && _imprintModal.activeSelf) ||
@@ -52,7 +57,8 @@ public sealed class RunUi : MonoBehaviour {
                              (_minimap != null && _minimap.IsBig) ||
                              (_evo != null && _evo.ModalOpen) ||
                              (_settings != null && _settings.IsOpen) ||
-                             (_codex != null && _codex.IsOpen);
+                             (_codex != null && _codex.IsOpen) ||
+                             (_pauseModal != null && _pauseModal.activeSelf);
 
     public static RunUi Build(RunGame game) {
         var canvasGo = new GameObject("run_ui");
@@ -74,19 +80,15 @@ public sealed class RunUi : MonoBehaviour {
         ui.BuildImprint();
         ui._evo = RunEvolutionUi.Build(ui._root, game);
         ui._settings = RunSettingsUi.Build(ui._root, game);
-        // «Настройки» — маленькая кнопка слева от миникарты
-        var set = Button(ui._root, "settings_btn", Vector2.zero, new Vector2(200, 80), GameBootstrap.COutline, 0.35f, "Настройки", 26);
-        var setRt = (RectTransform)set.transform;
-        setRt.anchorMin = setRt.anchorMax = setRt.pivot = new Vector2(1, 1);
-        setRt.anchoredPosition = new Vector2(-480, -28);
-        set.GetComponent<Button>().onClick.AddListener(() => { if (!ui.ModalOpen) ui._settings.Open(); });
-        // «Энциклопедия» — рядом с настройками
-        var book = Button(ui._root, "codex_btn", Vector2.zero, new Vector2(230, 80), GameBootstrap.CSoul, 0.45f, "Энциклопедия", 24);
-        var bookRt = (RectTransform)book.transform;
-        bookRt.anchorMin = bookRt.anchorMax = bookRt.pivot = new Vector2(1, 1);
-        bookRt.anchoredPosition = new Vector2(-695, -28);
-        book.GetComponent<Button>().onClick.AddListener(() => { if (!ui.ModalOpen) ui._codex.Open(); });
+        // «Меню» — одна кнопка слева от миникарты: пауза, энциклопедия, настройки (v0.9)
+        var menu = Button(ui._root, "menu_btn", Vector2.zero, new Vector2(180, 80), GameBootstrap.COutline, 0.45f, "Меню", 28);
+        var menuRt = (RectTransform)menu.transform;
+        menuRt.anchorMin = menuRt.anchorMax = menuRt.pivot = new Vector2(1, 1);
+        menuRt.anchoredPosition = new Vector2(-480, -28);
+        menu.GetComponent<Button>().onClick.AddListener(() => { if (!ui.ModalOpen) ui.OpenPause(); });
         ui._codex = RunCodexUi.Build(ui._root, game);
+        ui.BuildPause();
+        ui.BuildVignette();
         GameSettings.Changed += ui.ApplyHandedness;
         ui.BuildTitle();
         ui.BuildInfo();
@@ -140,9 +142,21 @@ public sealed class RunUi : MonoBehaviour {
         var dash = Box(_root, "dash_btn", Vector2.zero, new Vector2(230, 230), new Color(GameBootstrap.CSlime.r, GameBootstrap.CSlime.g, GameBootstrap.CSlime.b, 0.55f), new Vector2(1, 0));
         dash.GetComponent<Image>().sprite = SpriteUtil.UiCircleSprite;
         dash.GetComponent<Image>().type = Image.Type.Simple;
+        _dashImg = dash.GetComponent<Image>();
+        var chargeGo = new GameObject("charge_fill");
+        chargeGo.transform.SetParent(dash, false);
+        _dashFill = chargeGo.AddComponent<Image>();
+        _dashFill.sprite = SpriteUtil.UiCircleSprite;
+        _dashFill.type = Image.Type.Filled;
+        _dashFill.fillMethod = Image.FillMethod.Radial360;
+        _dashFill.fillOrigin = (int)Image.Origin360.Top;
+        _dashFill.color = new Color(1f, 1f, 1f, 0.22f);
+        _dashFill.raycastTarget = false;
+        _dashFill.rectTransform.sizeDelta = new Vector2(230, 230);
         var dl = UiUtil.AddText(dash, "РЫВОК", 34, TextAnchor.MiddleCenter, TextColor);
-        dl.rectTransform.sizeDelta = new Vector2(220, 80);
+        dl.rectTransform.sizeDelta = new Vector2(220, 120);
         dl.raycastTarget = false;
+        _dashLabel = dl;
         dash.gameObject.AddComponent<PressButton>().OnPress = () => _game.JoystickDash();
         _dashRt = dash;
         RunJoystick.Build(_root);
@@ -212,6 +226,93 @@ public sealed class RunUi : MonoBehaviour {
         _biomeTimer = 3.2f;
     }
 
+    // ---------- Пауза и «Назад» ----------
+    private void BuildPause() {
+        _pauseModal = FullScreen("pause_modal");
+        _pauseModal.GetComponent<Image>().color = new Color(0f, 0.01f, 0.03f, 0.8f);
+        var box = Box(_pauseModal.transform, "pause_box", Vector2.zero, new Vector2(760, 930), Modal, new Vector2(0.5f, 0.5f));
+        var t = Label(box, "ПАУЗА", 56, TextAnchor.MiddleCenter, new Vector2(0, 390), new Vector2(700, 80), new Vector2(0.5f, 0.5f));
+        t.color = GameBootstrap.COutline;
+        string[] names = { "Продолжить", "Эволюция", "Показатели", "Энциклопедия", "Настройки", "Как играть" };
+        Color[] cols = { GameBootstrap.CFood, GameBootstrap.CSoul, GameBootstrap.CSlime, GameBootstrap.CSoul, GameBootstrap.COutline, GameBootstrap.COutline };
+        for (int i = 0; i < names.Length; i++) {
+            int idx = i;
+            var b = Button(box, "p" + i, new Vector2(0, 260 - i * 118), new Vector2(620, 100), cols[i], i == 0 ? 0.95f : 0.75f, names[i], 34);
+            b.GetComponent<Button>().onClick.AddListener(() => PauseChoice(idx));
+        }
+        _pauseModal.SetActive(false);
+    }
+
+    public void OpenPause() {
+        if (_game == null || !_game.InRun) return;
+        _pauseModal.SetActive(true);
+        _pauseModal.transform.SetAsLastSibling();
+        _game.SetPaused(true);
+    }
+
+    private void ClosePause() {
+        _pauseModal.SetActive(false);
+        _game.SetPaused(false);
+    }
+
+    private void PauseChoice(int i) {
+        ClosePause();
+        switch (i) {
+            case 1: _evo.OpenEvolution(); break;
+            case 2: _evo.OpenStats(); break;
+            case 3: _codex.Open(); break;
+            case 4: _settings.Open(); break;
+            case 5: ShowInfo("Как играть", HowToPlay()); break;
+        }
+    }
+
+    /// <summary>«Назад»: закрыть верхнее окно; в игре без окон — пауза.</summary>
+    private void OnBack() {
+        if (_codex != null && _codex.CloseTop()) return;
+        if (_settings != null && _settings.CloseIfOpen()) return;
+        if (_evo != null && _evo.CloseTop()) return;
+        if (_infoModal != null && _infoModal.activeSelf) { _infoModal.SetActive(false); return; }
+        if (_pauseModal != null && _pauseModal.activeSelf) { ClosePause(); return; }
+        if (ModalOpen) return;                                   // выбор мутации, итог жизни, титул — решаются кнопками
+        if (_game != null && _game.InRun) OpenPause();
+    }
+
+    // ---------- Виньетка опасности ----------
+    private void BuildVignette() {
+        const int n = 128;
+        var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+        var px = new Color32[n * n];
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++) {
+                float dx = (x + 0.5f) / n * 2f - 1f, dy = (y + 0.5f) / n * 2f - 1f;
+                float d = Mathf.Sqrt(dx * dx * 0.8f + dy * dy * 1.2f);
+                float a = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.62f, 1.25f, d));
+                px[y * n + x] = new Color32(255, 30, 40, (byte)(a * 255));
+            }
+        tex.SetPixels32(px); tex.Apply(false, true);
+        var go = new GameObject("danger_vignette");
+        go.transform.SetParent(_root, false);
+        go.transform.SetAsFirstSibling();                         // под всем интерфейсом, над миром
+        _vignette = go.AddComponent<RawImage>();
+        _vignette.texture = tex;
+        _vignette.raycastTarget = false;
+        var rt = _vignette.rectTransform;
+        rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; rt.offsetMin = new Vector2(-200, -200); rt.offsetMax = new Vector2(200, 200);
+        _vignette.color = new Color(1f, 1f, 1f, 0f);
+    }
+
+    /// <summary>Красная вспышка по краям экрана при ударе (сила 0..1).</summary>
+    public void HurtFlash(float strength) { _hurtT = Mathf.Max(_hurtT, 0.25f + 0.55f * strength); }
+
+    private void UpdateVignette(RunState run) {
+        if (_vignette == null) return;
+        _hurtT = Mathf.Max(0f, _hurtT - Time.unscaledDeltaTime * 1.6f);
+        float low = 0f;
+        if (run != null && _game.InRun && run.Mass < SizeRule.MinViableMass * 1.6)
+            low = 0.35f + 0.2f * Mathf.Sin(Time.unscaledTime * 6f);   // мало массы — пульс тревоги
+        _vignette.color = new Color(1f, 1f, 1f, Mathf.Clamp01(Mathf.Max(low, _hurtT)));
+    }
+
     /// <summary>Обучающая подсказка — показывается, только если подсказки включены в настройках.</summary>
     public void Hint(string text, float seconds = 3f) { if (GameSettings.Hints) Flash(text, seconds); }
 
@@ -242,7 +343,17 @@ public sealed class RunUi : MonoBehaviour {
     public void Flash(string text, float seconds = 1.4f) { _flash.text = text; _flashTimer = seconds; }
 
     void Update() {
+        if (UnityEngine.Input.GetKeyDown(KeyCode.Escape)) OnBack();   // «Назад» на Android
         var run = _game != null ? _game.Run : null;
+        UpdateVignette(run);
+        if (run != null && _dashLabel != null) {
+            // круглая кнопка рывка: число зарядов и заполнение до следующего
+            _dashLabel.text = "РЫВОК\n<size=26>" + run.DashCharges + " / " + run.MaxDashCharges + "</size>";
+            _dashLabel.supportRichText = true;
+            _dashFill.fillAmount = run.DashCharges >= run.MaxDashCharges ? 0f : (float)run.ChargeProgress01;
+            var dc = GameBootstrap.CSlime; dc.a = run.DashCharges > 0 ? 0.6f : 0.25f;
+            _dashImg.color = dc;
+        }
         if (run != null) {
             _mass.text = string.Format("Масса {0:0.0}", run.Mass);
             _mass.color = run.Mass < SizeRule.MinViableMass * 1.6 ? GameBootstrap.CDanger : TextColor;
@@ -498,15 +609,16 @@ public sealed class RunUi : MonoBehaviour {
     }
 
     private static string HowToPlay() {
-        return "• Коснитесь экрана, оттяните палец ПРОТИВ нужного направления и отпустите — рывок.\n" +
-               "• Кто меньше вас — поглощается касанием. Кто больше — ранит. Сильный удар отрывает массу.\n" +
-               "• Масса — это всё: здоровье, размер, сила удара. Рывок стоит капли массы.\n" +
-               "• Поглотите достаточно — откроется светящийся выход. 5 глубин по 3 комнаты, на дне — Страж.\n" +
-               "• Рост массы даёт мутацию: выберите одну из трёх. Гены съеденных видов попадают в выбор.\n" +
-               "• Отскакивайте от колонн и грибов: рикошет разгоняет, а броню пробивает только скорость.\n" +
-               "• Несколько поглощений за один рывок — цепочка: каждое следующее даёт больше массы.\n" +
-               "• Святилище дарит мутацию, родник восстанавливает массу. Шипы и жар — берегитесь.\n" +
-               "• После смерти эссенция души усиливает следующие жизни. Душа, что убила вас, — запомнит.";
+        return "• Движение: оттяните палец ПРОТИВ направления и отпустите — рывок. Или включите джойстик в «Настройках».\n" +
+               "• Кто меньше вас — поглощается касанием. Кто больше — ранит. Зелёное кольцо — можно съесть, красное — беги.\n" +
+               "• Масса — это всё: здоровье, размер, сила. Рывок стоит капли массы, заряды копятся сами.\n" +
+               "• Добыча даёт ресурсы. На них — «Эволюция» (новые способности) и «Показатели» (прокачка силы, ловкости…).\n" +
+               "• Рост массы дарит жетоны: любой открытый узел эволюции бесплатно.\n" +
+               "• «Деление» в эволюции: клоны охотятся сами и несут добычу — соберитесь, чтобы сдать её. Далеко уйдут — лопнут.\n" +
+               "• Наберите массу — откроется шахта вниз. 5 глубин, на дне — Страж.\n" +
+               "• Рикошет от стен разгоняет; броню пробивает только скорость.\n" +
+               "• После смерти эссенция души усиливает следующие жизни. Всё увиденное — в «Энциклопедии».\n" +
+               "• «Меню» (или кнопка «Назад») — пауза, энциклопедия, настройки.";
     }
 
     private string BestiaryText() {

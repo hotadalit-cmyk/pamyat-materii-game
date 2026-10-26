@@ -88,6 +88,13 @@ public sealed class RunCodexUi : MonoBehaviour {
         ProceduralSfx.Instance?.Play("evolve");
     }
 
+    /// <summary>Кнопка «Назад»: карточка → следующая, книга → закрыть.</summary>
+    public bool CloseTop() {
+        if (_card.activeSelf) { NextCard(); return true; }
+        if (_book.activeSelf) { Close(); return true; }
+        return false;
+    }
+
     private void NextCard() {
         CloseCard();
         if (_queue.Count > 0) ShowCard(_queue.Dequeue());

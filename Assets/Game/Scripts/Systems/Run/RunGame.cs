@@ -562,6 +562,7 @@ public sealed partial class RunGame : MonoBehaviour {
 
     /// <summary>Урон по фрагменту, участвующему в контакте; растворившийся — убрать тело.</summary>
     private void HurtFragment(double amount, string source) {
+        if (amount > 0.02) _ui.HurtFlash(Mathf.Clamp01((float)amount / 1.2f));
         int id = _hitFrag >= 0 && _frags.ContainsKey(_hitFrag) ? _hitFrag : Run.Fragments.LeadId;
         _lastHitSource = source;
         Vector2 at = _frags.TryGetValue(id, out var hv) ? hv.View.Rb.position : (Vector2)_player.transform.position;
