@@ -10,7 +10,7 @@ namespace PM.Systems.Run {
 /// Начало координат мира — левый нижний угол карты, клетка = 1 единица.
 /// </summary>
 public sealed class WorldView {
-    public const int PxPerCell = 6;
+    public const int PxPerCell = 8;
     public readonly WorldMap Map;
     public readonly Texture2D MiniTex;      // 1 px = 1 клетка; неоткрытое прозрачно
     public readonly bool[] Explored;
@@ -22,6 +22,7 @@ public sealed class WorldView {
     public WorldView(WorldMap map, Transform root, BiomeDef biome, PhysicsMaterial2D wallMat) {
         Map = map;
         BuildTexture(root, biome);
+        BuildProps(root, biome);
         BuildColliders(root, wallMat);
         Explored = new bool[map.Width * map.Height];
         _mini = new Color32[map.Width * map.Height];
@@ -61,30 +62,41 @@ public sealed class WorldView {
         var regionTint = new Color[Map.Regions.Count];
         for (int r = 0; r < Map.Regions.Count; r++) regionTint[r] = TintFor(Map.Regions[r].Kind, floorC, accent);
         int P = PxPerCell, tw = w * P, th = h * P;
+        // оттенок клеток пола — для плавного (билинейного) перехода между регионами
+        _cellTint = new Color[w * h];
+        Color tunnel = Color.Lerp(floorC, wallC, 0.2f);
+        for (int i = 0; i < _cellTint.Length; i++) {
+            int reg = Map.RegionOf != null ? Map.RegionOf[i] : -1;
+            _cellTint[i] = reg >= 0 && reg < regionTint.Length ? regionTint[reg] : tunnel;
+        }
+        var bid = biome.Id;
         var px = new Color32[tw * th];
         for (int ty = 0; ty < th; ty++) {
             int cy = ty / P;
             float fy = (ty + 0.5f) / P - 0.5f;               // координата в «центрах клеток»
             for (int tx = 0; tx < tw; tx++) {
                 int cx = tx / P, ci = cy * w + cx;
-                Color c;
-                float n = Noise(tx * 0.06f, ty * 0.06f) * 0.6f + Noise(tx * 0.21f, ty * 0.21f) * 0.4f;
-                // органичный край: билинейная интерполяция пола между центрами клеток + порог с шумом
                 float fx = (tx + 0.5f) / P - 0.5f;
-                float soft = FloorAt(fx, fy, w, h);
-                bool isFloor = soft > 0.5f + (n - 0.5f) * 0.25f;
-                if (isFloor && Map.Cells[ci] == 0) ci = NearestFloorCell(cx, cy, w, h, ci);
-                if (isFloor) {
-                    int reg = Map.RegionOf != null ? Map.RegionOf[ci] : -1;
-                    c = reg >= 0 && reg < regionTint.Length ? regionTint[reg] : Color.Lerp(floorC, wallC, 0.25f);
-                    c = Color.Lerp(c, glow, 0.12f + 0.18f * n);
-                    c *= 0.88f + 0.24f * n;
+                float n1 = Noise(tx * 0.045f, ty * 0.045f);      // крупные пятна
+                float n2 = Noise(tx * 0.19f, ty * 0.19f);        // зерно
+                // органичный край: билинейная интерполяция пола между центрами клеток + порог с шумом
+                float edgeT = FloorAt(fx, fy, w, h) - 0.5f + (n1 - 0.5f) * 0.22f;
+                Color c;
+                if (edgeT > 0f) {
+                    c = TintAt(fx, fy, w, h);
+                    c = Color.Lerp(c, glow, 0.08f + 0.16f * n1) * (0.8f + 0.32f * n2);
+                    float ao = Mathf.Clamp01(edgeT * 3.4f);         // затенение у стен — объём
+                    c *= 0.58f + 0.42f * ao;
+                    c = FloorDetail(bid, c, accent, tx, ty, n1, n2);
                 } else {
                     if (Map.Cells[ci] == 1) ci = NearestWallCell(cx, cy, w, h, ci);
                     int d = dist[ci] == 0 ? 1 : dist[ci];
-                    float k = d >= 4 ? 0f : (4 - d) / 3f;          // 1 у самого пола
-                    c = Color.Lerp(wallC * 0.45f, wallC, k) * (0.85f + 0.3f * n);
-                    if (d == 1) c = Color.Lerp(c, accent, 0.18f + 0.12f * n); // светящаяся кромка стены
+                    float depthK = Mathf.Clamp01((d - 1) / 3f + (-edgeT) * 0.6f); // 0 у кромки → 1 в толще
+                    float strata = Mathf.Sin(ty * 0.11f + tx * 0.02f + n1 * 7f) * 0.5f + 0.5f;  // слои породы
+                    c = Color.Lerp(wallC * 1.25f, wallC * 0.35f, depthK) * (0.78f + 0.18f * strata + 0.16f * n2);
+                    if (depthK < 0.14f) c = Color.Lerp(c, accent, (0.14f - depthK) / 0.14f * (0.35f + 0.2f * n2)); // светящаяся кромка
+                    float ridge = 1f - Mathf.Abs(2f * Noise(tx * 0.07f + 31f, ty * 0.07f) - 1f);
+                    if (ridge > 0.93f) c = Color.Lerp(c, accent * 1.2f, (ridge - 0.93f) / 0.07f * (0.8f - 0.5f * depthK)); // жилы
                 }
                 c.a = 1f;
                 px[ty * tw + tx] = c;
@@ -99,6 +111,69 @@ public sealed class WorldView {
         sr.sprite = Sprite.Create(tex, new Rect(0, 0, tw, th), Vector2.zero, P);
         sr.sortingOrder = 0;
         go.transform.position = Vector3.zero;
+    }
+
+    private Color[] _cellTint;
+
+    /// <summary>Плавный оттенок пола: билинейно между центрами клеток (без «ступенек» на границах регионов).</summary>
+    private Color TintAt(float fx, float fy, int w, int h) {
+        int x0 = Mathf.FloorToInt(fx), y0 = Mathf.FloorToInt(fy);
+        float tx = fx - x0, ty = fy - y0;
+        Color a = TintCell(x0, y0, w, h), b = TintCell(x0 + 1, y0, w, h), c = TintCell(x0, y0 + 1, w, h), d = TintCell(x0 + 1, y0 + 1, w, h);
+        return Color.Lerp(Color.Lerp(a, b, tx), Color.Lerp(c, d, tx), ty);
+    }
+    private Color TintCell(int x, int y, int w, int h) {
+        x = Mathf.Clamp(x, 0, w - 1); y = Mathf.Clamp(y, 0, h - 1);
+        int i = y * w + x;
+        if (Map.Cells[i] == 1) return _cellTint[i];
+        // стеновая клетка у пола: берём оттенок соседнего пола, чтобы край не темнел полосой
+        for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+            int xx = x + dx, yy = y + dy;
+            if (xx >= 0 && yy >= 0 && xx < w && yy < h && Map.Cells[yy * w + xx] == 1) return _cellTint[yy * w + xx];
+        }
+        return _cellTint[i];
+    }
+
+    /// <summary>Фактура пола по биому: мох и споры, лавовые трещины, лужи, грани кристаллов, жилы сердца.</summary>
+    private static Color FloorDetail(BiomeId b, Color c, Color accent, int tx, int ty, float n1, float n2) {
+        // общая галька
+        float peb = Hash(tx / 3, ty / 3);
+        if (peb > 0.986f) c *= peb > 0.993f ? 1.25f : 0.7f;
+        switch (b) {
+            case BiomeId.Fungal: {
+                float moss = Noise(tx * 0.03f + 50f, ty * 0.03f);
+                if (moss > 0.6f) c = Color.Lerp(c, new Color(0.22f, 0.42f, 0.24f), Mathf.Clamp01((moss - 0.6f) * 3f) * 0.45f);
+                if (Hash(tx / 2 + 7, ty / 2) > 0.997f) c = Color.Lerp(c, accent * 1.4f, 0.8f);   // светящиеся споры
+                break;
+            }
+            case BiomeId.Warm: {
+                float r = 1f - Mathf.Abs(2f * Noise(tx * 0.05f + 9f, ty * 0.05f) - 1f);
+                if (r > 0.94f) c = Color.Lerp(c, new Color(1f, 0.42f, 0.08f), (r - 0.94f) / 0.06f * 0.9f); // лавовые трещины
+                else c = Color.Lerp(c, new Color(0.18f, 0.12f, 0.1f), (1f - n1) * 0.15f);              // пепел
+                break;
+            }
+            case BiomeId.Ponds: {
+                float wet = Noise(tx * 0.025f + 3f, ty * 0.025f);
+                if (wet > 0.58f) {
+                    float k = Mathf.Clamp01((wet - 0.58f) * 4f);
+                    c = Color.Lerp(c, new Color(0.12f, 0.28f, 0.48f), k * 0.55f);
+                    float ripple = Mathf.Sin((tx + ty * 0.7f) * 0.35f + n1 * 9f);
+                    if (ripple > 0.92f) c = Color.Lerp(c, new Color(0.5f, 0.75f, 1f), k * 0.35f);       // блик воды
+                }
+                break;
+            }
+            case BiomeId.Crystal: {
+                c *= 0.88f + 0.24f * Hash(tx / 6, ty / 6);                                              // грани
+                if (Hash(tx, ty + 13) > 0.9975f) c = Color.Lerp(c, new Color(0.8f, 1f, 1f), 0.9f);      // искры
+                break;
+            }
+            case BiomeId.Heart: {
+                float r = 1f - Mathf.Abs(2f * Noise(tx * 0.06f + 17f, ty * 0.06f) - 1f);
+                if (r > 0.9f) c = Color.Lerp(c, new Color(0.62f, 0.08f, 0.14f), (r - 0.9f) / 0.1f * 0.7f); // жилы
+                break;
+            }
+        }
+        return c;
     }
 
     private float FloorAt(float fx, float fy, int w, int h) {
@@ -121,6 +196,69 @@ public sealed class WorldView {
             if (x >= 0 && y >= 0 && x < w && y < h && Map.Cells[y * w + x] == 0) return y * w + x;
         }
         return fallback;
+    }
+
+    /// <summary>
+    /// Декор у стен (не мешает движению): грибы, угли, пузырьки, кристаллы, узлы-сердца.
+    /// Светящиеся части рисуются поверх тьмы — пещера мерцает, как в биолюминесцентном гроте.
+    /// </summary>
+    private void BuildProps(Transform root, BiomeDef biome) {
+        var propsRoot = new GameObject("props").transform;
+        propsRoot.SetParent(root, false);
+        Color accent = RunWorldBuilder.Hex(biome.AccentColor);
+        int w = Map.Width, h = Map.Height, placed = 0;
+        for (int y = 1; y < h - 1; y++)
+            for (int x = 1; x < w - 1; x++) {
+                if (Map.Cells[y * w + x] != 1) continue;
+                // только у стены, ~1 из 12 таких клеток
+                int wx = 0, wy = 0, walls = 0;
+                if (Map.Cells[y * w + x - 1] == 0) { wx -= 1; walls++; }
+                if (Map.Cells[y * w + x + 1] == 0) { wx += 1; walls++; }
+                if (Map.Cells[(y - 1) * w + x] == 0) { wy -= 1; walls++; }
+                if (Map.Cells[(y + 1) * w + x] == 0) { wy += 1; walls++; }
+                if (walls == 0 || walls >= 3) continue;                    // не в тупиках-трещинах
+                float hsh = Hash(x * 7 + 3, y * 13 + 1);
+                if (hsh > 0.085f) continue;
+                var pos = new Vector3(x + 0.5f + wx * 0.28f, y + 0.5f + wy * 0.28f, 0);
+                float sc = 0.6f + Hash(x, y + 99) * 0.7f;
+                var go = new GameObject("prop");
+                go.transform.SetParent(propsRoot, false);
+                go.transform.position = pos;
+                switch (biome.Id) {
+                    case BiomeId.Fungal: {
+                        var cap = Color.Lerp(new Color(0.9f, 0.45f, 0.8f), accent, Hash(x, y) );
+                        SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, 0.12f * sc, 0.3f * sc, new Color(0.85f, 0.8f, 0.7f), 2)
+                            .transform.localPosition = new Vector3(0, -0.1f * sc, 0);
+                        SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, 0.36f * sc, 0.22f * sc, cap, 2);
+                        SpriteUtil.AddSprite(go.transform, SpriteUtil.GlowSprite, 1.1f * sc, 1.1f * sc, new Color(cap.r, cap.g, cap.b, 0.32f), DarknessMask.Order + 1);
+                        break;
+                    }
+                    case BiomeId.Warm: {
+                        var ember = new Color(1f, 0.5f + 0.3f * hsh * 10f, 0.15f);
+                        SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, 0.16f * sc, 0.16f * sc, ember, 2);
+                        SpriteUtil.AddSprite(go.transform, SpriteUtil.GlowSprite, 1.0f * sc, 1.0f * sc, new Color(1f, 0.45f, 0.1f, 0.4f), DarknessMask.Order + 1);
+                        break;
+                    }
+                    case BiomeId.Ponds:
+                        SpriteUtil.AddSprite(go.transform, SpriteUtil.RingSprite, 0.34f * sc, 0.34f * sc, new Color(0.55f, 0.8f, 1f, 0.55f), 2);
+                        SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, 0.12f * sc, 0.12f * sc, new Color(0.85f, 0.95f, 1f, 0.8f), 2)
+                            .transform.localPosition = new Vector3(0.18f * sc, 0.1f * sc, 0);
+                        SpriteUtil.AddSprite(go.transform, SpriteUtil.GlowSprite, 0.9f * sc, 0.9f * sc, new Color(0.4f, 0.7f, 1f, 0.25f), DarknessMask.Order + 1);
+                        break;
+                    case BiomeId.Crystal: {
+                        var cr = SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, 0.18f * sc, 0.5f * sc, new Color(0.6f, 0.95f, 1f, 0.9f), 2);
+                        cr.transform.localRotation = Quaternion.Euler(0, 0, Mathf.Atan2(-wy, -wx) * Mathf.Rad2Deg - 90f + (hsh * 400f - 17f));
+                        SpriteUtil.AddSprite(go.transform, SpriteUtil.GlowSprite, 1.2f * sc, 1.2f * sc, new Color(0.5f, 0.9f, 1f, 0.38f), DarknessMask.Order + 1);
+                        break;
+                    }
+                    default:
+                        SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, 0.26f * sc, 0.26f * sc, new Color(0.7f, 0.1f, 0.18f), 2);
+                        SpriteUtil.AddSprite(go.transform, SpriteUtil.RingSprite, 0.34f * sc, 0.34f * sc, new Color(1f, 0.3f, 0.35f, 0.6f), 2);
+                        SpriteUtil.AddSprite(go.transform, SpriteUtil.GlowSprite, 1.0f * sc, 1.0f * sc, new Color(1f, 0.2f, 0.25f, 0.3f), DarknessMask.Order + 1);
+                        break;
+                }
+                placed++;
+            }
     }
 
     private static Color TintFor(RegionKind k, Color floor, Color accent) {

@@ -15,7 +15,7 @@ namespace PM.Systems.Run {
 /// Сцена строится целиком в рантайме: ничего не запекается, слушатели не теряются.
 /// </summary>
 [DefaultExecutionOrder(-50)]
-public sealed class RunGame : MonoBehaviour {
+public sealed partial class RunGame : MonoBehaviour {
     public static RunGame Instance { get; private set; }
     private const string SoulPrefKey = "pm_soul_v4";
     private const float DashSpeed = 10f;
@@ -31,7 +31,6 @@ public sealed class RunGame : MonoBehaviour {
     public Vector2 PlayerPosition => _player != null ? (Vector2)_player.transform.position : Vector2.zero;
 
     private SimEntityView2D _player;
-    private float _playerBaseRadius;
     private PhysicsMaterial2D _playerMat;
     private Transform _roomRoot;
     private readonly List<RunCreature> _creatures = new List<RunCreature>();
@@ -105,7 +104,6 @@ public sealed class RunGame : MonoBehaviour {
         _builtRoomKey = -1;
         _lastDepthShown = 0;
         EnsurePlayer();
-        _player.gameObject.SetActive(true);
         BuildRoom();
     }
 
@@ -131,7 +129,7 @@ public sealed class RunGame : MonoBehaviour {
         SplashBurst2D.Instance?.Burst(_player.transform.position, Vector2.up, 14);
         GameFeel.Shake(0.7f);
         ProceduralSfx.Instance?.Play("death");
-        _player.gameObject.SetActive(false);
+        for (int i = 0; i < _fragList.Count; i++) _fragList[i].View.gameObject.SetActive(false);
         PullGestureInput.Blocked = true;
         _ui.ShowImprint(imprint, victory, killer);
     }
@@ -214,9 +212,7 @@ public sealed class RunGame : MonoBehaviour {
         for (int i = 0; i < plan.Spawns.Count; i++) SpawnCreature(plan.Spawns[i], i);
         if (Run.Boss != null) SpawnBoss(plan);
 
-        _player.transform.position = ToV3(plan.PlayerStart);
-        _player.Rb.position = ToV2(plan.PlayerStart);
-        _player.Rb.linearVelocity = Vector2.zero;
+        PlaceFragmentsAt(ToV2(plan.PlayerStart));
         FollowCamera.Snap = true;
         _dark.Set((float)biome.Darkness01, (float)Run.Mutations.LightRadius);
 
@@ -268,9 +264,7 @@ public sealed class RunGame : MonoBehaviour {
         for (int i = 0; i < plan.Spawns.Count; i++) { _pending.Add(plan.Spawns[i]); _pendingIndex.Add(i); }
         if (Run.Boss != null) SpawnBossAt(map.BossPos);
 
-        _player.transform.position = ToV3(plan.PlayerStart);
-        _player.Rb.position = ToV2(plan.PlayerStart);
-        _player.Rb.linearVelocity = Vector2.zero;
+        PlaceFragmentsAt(ToV2(plan.PlayerStart));
         FollowCamera.Snap = true;
         _dark.Set((float)biome.Darkness01, (float)Run.Mutations.LightRadius);
         StreamCreatures(true);
@@ -433,54 +427,29 @@ public sealed class RunGame : MonoBehaviour {
 
     // ---------- Игрок ----------
     private void EnsurePlayer() {
-        if (_player != null) {
-            _player.Rb.linearVelocity = Vector2.zero;
-            ApplyPlayerSize();
-            return;
-        }
-        _playerBaseRadius = (float)SizeRule.RadiusForMass(4.0);
-        _player = SimEntityView2D.Create(transform, "player_slime", SimEntityKind.Player, 1, _playerBaseRadius, GameBootstrap.CSlime);
-        _player.Body.sortingOrder = 8;
-        _player.Rb.linearDamping = PlayerBaseDamping;
-        _playerMat = new PhysicsMaterial2D("player") { bounciness = 0.8f, friction = 0f };
-        _player.GetComponent<CircleCollider2D>().sharedMaterial = _playerMat;
-        VisualFactory.DecorateSlime(_player);
-        var slime = _player.gameObject.AddComponent<SlimeVisual>();
-        slime.BodyRoot = _player.Body.transform;
-        slime.Membrane = _player.Membrane;
-        slime.Core = _player.Core;
-        _player.gameObject.AddComponent<RunContactRelay>().Game = this;
-        var aim = new GameObject("aim_indicator");
-        aim.transform.SetParent(_player.transform, false);
-        aim.AddComponent<LineRenderer>();
-        aim.AddComponent<AimIndicator>();
-        _dark.Follow = _player.transform;
-        var cam = Camera.main;
-        if (cam != null) {
-            var follow = cam.GetComponent<FollowCamera>();
-            if (follow == null) follow = cam.gameObject.AddComponent<FollowCamera>(); // не «??»: Unity-null
-            follow.Target = _player.transform;
-        }
+        if (_playerMat == null) _playerMat = new PhysicsMaterial2D("player") { bounciness = 0.8f, friction = 0f };
+        ResetFragments(ToV2(Run.Room.PlayerStart)); // новая жизнь — одно тело
         ApplyPlayerSize();
     }
 
     private void ApplyPlayerSize() {
-        float r = (float)SizeRule.RadiusForMass(Run.Mass);
-        float s = r / _playerBaseRadius;
-        _player.transform.localScale = new Vector3(s, s, 1f);
-        _player.Rb.mass = Mathf.Max(0.1f, (float)Run.Mass);
+        SizeFragments();
         float b = (float)Run.Mutations.Bounciness;
         if (_playerMat != null && !Mathf.Approximately(_playerMat.bounciness, b)) {
             _playerMat.bounciness = b;
-            var col = _player.GetComponent<CircleCollider2D>();
-            col.sharedMaterial = null; col.sharedMaterial = _playerMat; // применить изменённый материал
+            for (int i = 0; i < _fragList.Count; i++) { // применить изменённый материал
+                var col = _fragList[i].View.GetComponent<CircleCollider2D>();
+                col.sharedMaterial = null; col.sharedMaterial = _playerMat;
+            }
         }
-        // крупное тело — камера отъезжает, чтобы видеть больше пещеры
-        FollowCamera.ZoomMult = Mathf.Clamp(0.75f + 0.125f * Mathf.Sqrt((float)Run.Mass), 0.95f, 1.6f)
-                                * (Run.OpenWorld ? 1.9f : 1f); // в открытом мире видно больше пещеры
+        // крупное тело или разбежавшаяся стая — камера отъезжает
+        float zoom = Mathf.Clamp(0.75f + 0.125f * Mathf.Sqrt((float)Run.Mass), 0.95f, 1.6f) * (Run.OpenWorld ? 1.9f : 1f);
+        if (_player != null && _fragList.Count > 1) zoom = Mathf.Max(zoom, Mathf.Min(3.2f, FragmentSpread() / 4.5f));
+        FollowCamera.ZoomMult = zoom;
     }
 
-    private float PlayerRadius => (float)SizeRule.RadiusForMass(Run.Mass);
+    /// <summary>Радиус ведущего фрагмента.</summary>
+    private float PlayerRadius => (float)SizeRule.RadiusForMass(Run.Fragments.Count > 0 ? Run.Fragments[0].Mass : Run.Mass);
 
     private void OnDashRelease(Vec2 dir, double charge) {
         if (!InRun || _ui.ModalOpen) return;
@@ -492,7 +461,8 @@ public sealed class RunGame : MonoBehaviour {
         _ricochets = 0;
         _sinceDash = 0f;
         float speed = DashSpeed * (float)Run.Mutations.DashSpeedMult * (float)charge;
-        _player.Rb.linearVelocity += new Vector2((float)dir.X, (float)dir.Y) * speed;
+        var impulse = new Vector2((float)dir.X, (float)dir.Y) * speed;
+        for (int i = 0; i < _fragList.Count; i++) _fragList[i].View.Rb.linearVelocity += impulse; // стая рвётся вместе
         ProceduralSfx.Instance?.Play("jet");
         GameFeel.Shake(0.08f * (float)charge);
         // капля влаги остаётся позади — видно, что рывок стоит массы
@@ -501,8 +471,12 @@ public sealed class RunGame : MonoBehaviour {
     }
 
     // ---------- Контакты ----------
-    public void OnPlayerCollision(Collision2D col) {
+    private int _hitFrag = -1;   // фрагмент, участвующий в текущем контакте
+
+    public void OnPlayerCollision(Collision2D col, int fragmentId) {
         if (!InRun) return;
+        if (!_frags.ContainsKey(fragmentId)) return;
+        _hitFrag = fragmentId;
         float rel = col.relativeVelocity.magnitude;
         Vector2 point = col.contactCount > 0 ? col.GetContact(0).point : (Vector2)_player.transform.position;
         var obstacle = col.collider.GetComponent<RunObstacle>();
@@ -516,16 +490,25 @@ public sealed class RunGame : MonoBehaviour {
         var c = col.collider.GetComponent<RunCreature>();
         if (c == null || c.IsFood) return;
         if (c.IsBoss) { OnBossContact(c, rel, point); return; }
-        var res = SizeRule.Resolve(Run.Mass, Run.Mutations, c.Mass, c.Mutations, rel);
+        var res = SizeRule.Resolve(Run.FragmentMass(fragmentId), Run.Mutations, c.Mass, c.Mutations, rel);
         ResolveContact(c, res, point, rel);
+    }
+
+    /// <summary>Урон по фрагменту, участвующему в контакте; растворившийся — убрать тело.</summary>
+    private void HurtFragment(double amount, string source) {
+        int id = _hitFrag >= 0 && _frags.ContainsKey(_hitFrag) ? _hitFrag : Run.Fragments.LeadId;
+        _lastHitSource = source;
+        if (Run.OnMassLostAt(id, amount, source)) {
+            _ui.Flash("Фрагмент растворился", 1.4f);
+            SyncFragments();
+        }
     }
 
     private void OnObstacleHit(RunObstacle o, float rel, Vector2 point) {
         switch (o.Kind) {
             case ObstacleKind.Thorns: {
                 double loss = ObstacleRules.ThornLoss(rel, Run.Mutations);
-                _lastHitSource = "thorns";
-                Run.OnMassLost(loss, "thorns");
+                HurtFragment(loss, "thorns");
                 SpawnDroplets(point, loss * 0.5);
                 GameFeel.Text(point, "−" + loss.ToString("0.0"), GameBootstrap.CDanger);
                 GameFeel.Shake(0.25f);
@@ -572,9 +555,11 @@ public sealed class RunGame : MonoBehaviour {
     private void ResolveContact(RunCreature c, ContactResult res, Vector2 point, float rel) {
         if (res.Absorbed == 1) { Absorb(c); return; }
         if (res.Absorbed == 2) {
-            _lastHitSource = c.SourceId;
-            Run.OnMassLost(Run.Mass, c.SourceId);
-            EndRun();
+            // существо проглотило фрагмент целиком; если это было всё тело — конец
+            HurtFragment(Run.FragmentMass(_hitFrag >= 0 ? _hitFrag : Run.Fragments.LeadId) + 0.01, c.SourceId);
+            c.Mass += 0.5;
+            c.ApplySize();
+            if (Run.IsDead) EndRun();
             return;
         }
         double lossB = res.MassLossB;
@@ -599,8 +584,7 @@ public sealed class RunGame : MonoBehaviour {
             else c.ApplySize();
         }
         if (res.MassLossA > 0) {
-            _lastHitSource = c.SourceId;
-            Run.OnMassLost(res.MassLossA, c.SourceId);
+            HurtFragment(res.MassLossA, c.SourceId);
             SpawnDroplets(point, res.MassLossA);
             GameFeel.Text(_player.transform.position, "−" + res.MassLossA.ToString("0.0"), GameBootstrap.CDanger);
             GameFeel.Shake(0.3f);
@@ -612,7 +596,8 @@ public sealed class RunGame : MonoBehaviour {
     private void OnBossContact(RunCreature c, float rel, Vector2 point) {
         var boss = Run.Boss;
         if (boss == null) return;
-        if (boss.IsExposed && Run.Mass >= boss.Mass * 0.6) {
+        double fragMass = Run.FragmentMass(_hitFrag >= 0 ? _hitFrag : Run.Fragments.LeadId);
+        if (boss.IsExposed && fragMass >= boss.Mass * 0.6) {
             Run.OnBossAbsorbed();
             GameFeel.HitStop(0.25f);
             GameFeel.Shake(1f);
@@ -623,7 +608,7 @@ public sealed class RunGame : MonoBehaviour {
             _boss = null;
             return;
         }
-        double loss = boss.ApplyHit(rel, Run.Mass, Run.Mutations, _ricochets);
+        double loss = boss.ApplyHit(rel, fragMass, Run.Mutations, _ricochets);
         if (loss > 0) {
             Run.OnHit(loss);
             if (Run.Mutations.LifestealFrac > 0) Run.OnLifesteal(loss);
@@ -640,10 +625,9 @@ public sealed class RunGame : MonoBehaviour {
             ProceduralSfx.Instance?.Play("hit");
         }
         // страж бьёт в ответ своей массой
-        var res = SizeRule.Resolve(Run.Mass, Run.Mutations, boss.Mass, new MutationSet(), rel);
+        var res = SizeRule.Resolve(fragMass, Run.Mutations, boss.Mass, new MutationSet(), rel);
         if (res.MassLossA > 0 && !boss.IsExposed) {
-            _lastHitSource = BossState.SpeciesId;
-            Run.OnMassLost(res.MassLossA, BossState.SpeciesId);
+            HurtFragment(res.MassLossA, BossState.SpeciesId);
             GameFeel.Text(_player.transform.position, "−" + res.MassLossA.ToString("0.0"), GameBootstrap.CDanger);
             if (Run.IsDead) EndRun();
         }
@@ -660,7 +644,7 @@ public sealed class RunGame : MonoBehaviour {
     }
 
     private void Absorb(RunCreature c) {
-        double bonus = Run.OnAbsorbEx(c.Species.Id, c.Mass);
+        double bonus = _hitFrag >= 0 ? Run.OnAbsorbAt(_hitFrag, c.Species.Id, c.Mass) : Run.OnAbsorbEx(c.Species.Id, c.Mass);
         var pos = c.transform.position;
         if (c.IsNemesis) {
             Meta.Nemeses.OnSoulAbsorbed(c.SoulName);
@@ -706,41 +690,53 @@ public sealed class RunGame : MonoBehaviour {
         _sinceDash += dt;
         var pPos = _player.Rb.position;
         float pr = PlayerRadius;
-        float pull = (1.6f + 0.45f * Mathf.Sqrt((float)Run.Mass)) * (float)Run.Mutations.PullRadiusMult;
+        FragmentsStep(dt);
+        if (!InRun) return;
+        pPos = _player.Rb.position;
+        pr = PlayerRadius;
         for (int i = _creatures.Count - 1; i >= 0; i--) {
             var c = _creatures[i];
             if (c == null) { _creatures.RemoveAt(i); continue; }
             if (c.IsBoss || !c.gameObject.activeSelf) continue; // спящие далеко — не думают
             var rb = c.View.Rb;
-            Vector2 d = pPos - rb.position;
+            // каждое существо видит ближайший фрагмент: мелкий фрагмент слабее — его едят крупные
+            var fv = NearestFragment(rb.position, out _);
+            if (fv == null) continue;
+            _hitFrag = fv.Id;
+            Vector2 fPos = fv.View.Rb.position;
+            float fr = FragRadius(fv);
+            double fMass = Run.FragmentMass(fv.Id);
+            Vector2 d = fPos - rb.position;
             float dist = d.magnitude;
             if (c.IsFood) {
-                // биогравитация: споры тянутся к слизню, касание — поглощение
+                // биогравитация: споры тянутся к фрагменту, касание — поглощение
+                float pull = (1.6f + 0.45f * Mathf.Sqrt((float)fMass)) * (float)Run.Mutations.PullRadiusMult;
                 if (dist < pull && dist > 0.001f)
                     rb.AddForce(d / dist * (9f * rb.mass * (1f - dist / pull)), ForceMode2D.Force);
-                if (dist <= pr + c.Radius * 0.6f) Absorb(c);
+                if (dist <= fr + c.Radius * 0.6f) Absorb(c);
                 continue;
             }
-            bool touching = dist <= pr + c.Radius + 0.06f;
-            // крупное, но уже меньше нас после роста — съедаем при касании без удара
-            if (touching && Run.Mass >= c.Mass * Run.Mutations.AbsorbRatio) { Absorb(c); continue; }
+            bool touching = dist <= fr + c.Radius + 0.06f;
+            // крупное, но уже меньше этого фрагмента — съедаем при касании без удара
+            if (touching && fMass >= c.Mass * Run.Mutations.AbsorbRatio) { Absorb(c); continue; }
             if (touching && c.Traits.LeechPerSec > 0) {
                 double drain = c.Traits.LeechPerSec * dt;
-                _lastHitSource = "leech";
-                Run.OnMassLost(drain, "leech");
+                HurtFragment(drain, "leech");
                 c.Mass += drain;
                 c.ApplySize();
                 if (Run.IsDead) { EndRun(); return; }
             }
             var o = c.Brain.Think(new BrainInput {
                 SelfPos = new Vec2(rb.position.x, rb.position.y), SelfMass = c.Mass, Behavior = c.Species.Behavior,
-                PlayerPos = new Vec2(pPos.x, pPos.y), PlayerMass = Run.Mass, Time = _time
+                PlayerPos = new Vec2(fPos.x, fPos.y), PlayerMass = fMass, Time = _time
             });
             if (o.Impulse)
                 rb.linearVelocity += new Vector2((float)o.Direction.X, (float)o.Direction.Y) * (CreatureSpeed * (float)o.Strength01);
         }
+        _hitFrag = -1;
         BossStep(dt, pPos);
         WorldStep(pPos, pr);
+        CrackHintStep();
         ZoneStep(dt, pPos, pr);
         ToxicStep(dt, pPos, pr);
         AltarStep(pPos, pr);
@@ -777,9 +773,11 @@ public sealed class RunGame : MonoBehaviour {
             _shockRing.transform.position = rb.position;
             GameFeel.Shake(0.5f);
             ProceduralSfx.Instance?.Play("death");
-            Vector2 away = pPos - rb.position;
-            if (away.magnitude < 5f)
-                _player.Rb.linearVelocity += away.normalized * (10f * (1f - away.magnitude / 5f) + 3f);
+            for (int f = 0; f < _fragList.Count; f++) {
+                var frb = _fragList[f].View.Rb;
+                Vector2 away = frb.position - rb.position;
+                if (away.magnitude < 5f) frb.linearVelocity += away.normalized * (10f * (1f - away.magnitude / 5f) + 3f);
+            }
         }
         _boss.Mass = boss.Mass;
         _boss.ApplySize();
@@ -787,7 +785,18 @@ public sealed class RunGame : MonoBehaviour {
             _boss.View.Body.color = Color.Lerp(GameBootstrap.CDanger, Color.white, 0.4f + 0.3f * Mathf.Sin(_time * 8f));
     }
 
-    private void ZoneStep(float dt, Vector2 pPos, float pr) {
+    private void ZoneStep(float dt, Vector2 leadPos, float leadR) {
+        for (int f = 0; f < _fragList.Count; f++) {
+            var fv = _fragList[f];
+            if (fv.View == null) continue;
+            _hitFrag = fv.Id;
+            ZoneStepOne(dt, fv.View.Rb, fv.View.Rb.position, FragRadius(fv));
+            if (!InRun) return;
+        }
+        _hitFrag = -1;
+    }
+
+    private void ZoneStepOne(float dt, Rigidbody2D body, Vector2 pPos, float pr) {
         float extraDamping = 0f;
         for (int i = 0; i < _obstacles.Count; i++) {
             var o = _obstacles[i];
@@ -798,15 +807,15 @@ public sealed class RunGame : MonoBehaviour {
             double perSec = ObstacleRules.ZoneMassPerSec(o.Kind, Run.Mass, Run.Mutations);
             if (perSec > 0) Run.Heal(perSec * dt);
             else if (perSec < 0) {
-                _lastHitSource = "vent";
-                Run.OnMassLost(-perSec * dt, "vent");
+                HurtFragment(-perSec * dt, "vent");
                 if (Run.IsDead) { EndRun(); return; }
+                if (body == null) return; // фрагмент растворился
             }
             extraDamping = Mathf.Max(extraDamping, (float)ObstacleRules.ZoneDamping(o.Kind));
             if (o.Kind == ObstacleKind.Vent && dist > 0.01f)
-                _player.Rb.AddForce(d / dist * ((float)ObstacleRules.VentPush(dist, o.Radius) * _player.Rb.mass), ForceMode2D.Force);
+                body.AddForce(d / dist * ((float)ObstacleRules.VentPush(dist, o.Radius) * body.mass), ForceMode2D.Force);
         }
-        _player.Rb.linearDamping = PlayerBaseDamping + extraDamping;
+        body.linearDamping = PlayerBaseDamping + extraDamping;
     }
 
     private void ToxicStep(float dt, Vector2 pPos, float pr) {
@@ -842,6 +851,7 @@ public sealed class RunGame : MonoBehaviour {
         _dark.Set((float)(biome != null ? biome.Darkness01 : Run.Room.Darkness01),
                   (float)Run.Mutations.LightRadius * (Run.OpenWorld ? 1.8f : 1f));
         UpdateExitVisual();
+        if (!_ui.ModalOpen) TwoFingerStep();
         if (_world != null) {
             _miniTimer -= Time.unscaledDeltaTime;
             if (_miniTimer <= 0f) { _miniTimer = 0.2f; _world.FlushMini(); }
@@ -953,6 +963,7 @@ public sealed class RunGame : MonoBehaviour {
 /// <summary>Передаёт столкновения слизня в RunGame (OnCollisionEnter2D живёт только на теле).</summary>
 public sealed class RunContactRelay : MonoBehaviour {
     public RunGame Game;
-    void OnCollisionEnter2D(Collision2D col) { if (Game != null) Game.OnPlayerCollision(col); }
+    public int FragmentId;
+    void OnCollisionEnter2D(Collision2D col) { if (Game != null) Game.OnPlayerCollision(col, FragmentId); }
 }
 }

@@ -232,6 +232,10 @@ public static class VisualFactory {
             GameBootstrap.CCore, 10, Vector2.zero);
         AddChild(body, SpriteUtil.CircleSprite, 0.15f,
             new Color(1f, 1f, 1f, 0.35f), 10, new Vector2(-0.10f, 0.14f));
+        // второй, мягкий блик и пузырьки внутри — тело выглядит жидким и живым
+        AddChild(body, SpriteUtil.CircleSprite, 0.32f,
+            new Color(1f, 1f, 1f, 0.08f), 10, new Vector2(-0.14f, 0.18f));
+        SlimeBubbles.Attach(body, 5);
     }
 
     /// <summary>Жук: тёмный ободок панциря, голова, глаза.</summary>
@@ -247,6 +251,10 @@ public static class VisualFactory {
             new Color(1f, 1f, 1f, 0.92f), 8, new Vector2(0.13f, 0.15f));
         v.EyeL = el != null ? el.transform : null;
         v.EyeR = er != null ? er.transform : null;
+        // шов панциря и лапки
+        var seam = AddChild(body, SpriteUtil.CircleSprite, 1f, new Color(0f, 0f, 0f, 0.28f), 8, new Vector2(0f, -0.12f));
+        seam.transform.localScale = new Vector3(0.05f, 0.62f, 1f);
+        LegWiggle.Attach(body, v.Rb, GameBootstrap.CDanger * 0.45f);
     }
 
     /// <summary>ИИ-душа: светлый ободок по цвету тела.</summary>

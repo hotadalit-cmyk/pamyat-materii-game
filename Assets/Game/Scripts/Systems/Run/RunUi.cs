@@ -34,6 +34,8 @@ public sealed class RunUi : MonoBehaviour {
     private GameObject _titleModal, _infoModal;
     private Text _titleSoul, _infoTitle, _infoBody;
     private RunMinimap _minimap;
+    private Image _splitBtn, _gatherBtn;
+    private Text _splitLabel, _gatherLabel;
 
     public bool ModalOpen => (_offerModal != null && _offerModal.activeSelf) ||
                              (_imprintModal != null && _imprintModal.activeSelf) ||
@@ -86,6 +88,22 @@ public sealed class RunUi : MonoBehaviour {
         _bossFill = Box(bossBg, "boss_fill", Vector2.zero, new Vector2(940, 18), GameBootstrap.CDanger, new Vector2(0, 0.5f));
         _bossLabel = Label(_bossBar.transform, "Страж глубины", 28, TextAnchor.MiddleCenter, new Vector2(0, -6), new Vector2(940, 40), new Vector2(0.5f, 1));
         _bossBar.SetActive(false);
+
+        // деление/слияние — крупные кнопки под правый большой палец
+        var split = Button(_root, "split_btn", Vector2.zero, new Vector2(250, 120), GameBootstrap.CSlime, 0.8f, "Разделиться", 30);
+        var srt = (RectTransform)split.transform;
+        srt.anchorMin = srt.anchorMax = srt.pivot = new Vector2(1, 0);
+        srt.anchoredPosition = new Vector2(-28, 168);
+        split.GetComponent<Button>().onClick.AddListener(() => _game.RequestSplit());
+        _splitBtn = split.GetComponent<Image>();
+        _splitLabel = split.GetComponentInChildren<Text>();
+        var gather = Button(_root, "gather_btn", Vector2.zero, new Vector2(250, 120), GameBootstrap.CSoul, 0.8f, "Собраться", 30);
+        var grt = (RectTransform)gather.transform;
+        grt.anchorMin = grt.anchorMax = grt.pivot = new Vector2(1, 0);
+        grt.anchoredPosition = new Vector2(-28, 28);
+        gather.GetComponent<Button>().onClick.AddListener(() => _game.RequestGather());
+        _gatherBtn = gather.GetComponent<Image>();
+        _gatherLabel = gather.GetComponentInChildren<Text>();
 
         _biomeTitle = Label(_root, "", 72, TextAnchor.MiddleCenter, new Vector2(0, 120), new Vector2(1600, 100), new Vector2(0.5f, 0.5f));
         _biomeSub = Label(_root, "", 32, TextAnchor.MiddleCenter, new Vector2(0, 40), new Vector2(1600, 60), new Vector2(0.5f, 0.5f));
@@ -141,6 +159,15 @@ public sealed class RunUi : MonoBehaviour {
                 c.a = i < run.DashCharges ? 1f : 0.22f;
                 _dashDots[i].color = c;
             }
+            int frags = _game.FragmentCount;
+            bool canSplit = _game.CanSplit;
+            _splitBtn.color = new Color(GameBootstrap.CSlime.r, GameBootstrap.CSlime.g, GameBootstrap.CSlime.b, canSplit ? 0.8f : 0.25f);
+            _splitLabel.text = frags > 1 ? "Разделиться
+(" + frags + ")" : "Разделиться";
+            _gatherBtn.gameObject.SetActive(frags > 1);
+            bool g = _game.Gathering;
+            _gatherBtn.color = g ? new Color(1f, 0.85f, 0.4f, 0.9f) : new Color(GameBootstrap.CSoul.r, GameBootstrap.CSoul.g, GameBootstrap.CSoul.b, 0.8f);
+            _gatherLabel.text = g ? "Собираемся…" : "Собраться";
             _combo.text = run.Combo != null && run.Combo.Chain >= 2 ? "Цепочка ×" + run.Combo.Chain : "";
             var ids = run.Mutations.ToArray();
             if (ids.Length > 0) {
