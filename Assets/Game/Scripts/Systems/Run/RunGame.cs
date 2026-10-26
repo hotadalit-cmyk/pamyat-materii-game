@@ -151,7 +151,7 @@ public sealed partial class RunGame : MonoBehaviour {
     public void OnTitleClosed() {
         if (Run == null || Run.Room == null) return;
         var biome = Run.Layout != null ? Run.Layout.Biome : BiomeCatalog.ForDepth(Run.Depth);
-        _ui.BiomeCard(Run.Depth, biome.Name, biome.Subtitle, RunWorldBuilder.Hex(biome.AccentColor));
+        _ui.BiomeCard(Run.Depth, biome.Name, biome.Subtitle, RunWorldBuilder.Hex(biome.AccentColor), biome.Id.ToString().ToLowerInvariant());
     }
 
     /// <summary>Пауза для экранов эволюции и показателей (мир замирает, жест рывка выключен).</summary>
@@ -239,7 +239,7 @@ public sealed partial class RunGame : MonoBehaviour {
 
         if (plan.Depth != _lastDepthShown) {
             _lastDepthShown = plan.Depth;
-            _ui.BiomeCard(plan.Depth, biome.Name, biome.Subtitle, RunWorldBuilder.Hex(biome.AccentColor));
+            _ui.BiomeCard(plan.Depth, biome.Name, biome.Subtitle, RunWorldBuilder.Hex(biome.AccentColor), biome.Id.ToString().ToLowerInvariant());
         } else if (layout != null && layout.Kind != RoomKind.Normal) {
             _ui.Banner(layout.Title, 2.4f);
             if (!string.IsNullOrEmpty(layout.Hint)) _ui.Flash(layout.Hint, 3f);
@@ -292,7 +292,7 @@ public sealed partial class RunGame : MonoBehaviour {
         StreamCreatures(true);
         _ui.SetMinimap(_world);
         _lastDepthShown = plan.Depth;
-        _ui.BiomeCard(plan.Depth, biome.Name, biome.Subtitle, RunWorldBuilder.Hex(biome.AccentColor));
+        _ui.BiomeCard(plan.Depth, biome.Name, biome.Subtitle, RunWorldBuilder.Hex(biome.AccentColor), biome.Id.ToString().ToLowerInvariant());
         _ui.Hint("Найдите шахту вниз. Поглощайте — чтобы её открыть", 4f);
     }
 

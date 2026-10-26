@@ -1,0 +1,100 @@
+=== portrait_spore.jpg ===
+size_bytes: 54615
+sha256: d3f929d15e2fa2e3b16895e86199e296cc703289827d38e14f1e9a7161a8bec4
+prompt: Cute stylized soft 3D render in the style of modern mobile fantasy RPG and Pixar, smooth rounded clay-like shapes, big expressive cute eyes, adorable cartoonish character, soft bioluminescent glow, dark blurred cave background with soft vignette, viewed 3/4 from above, creature centered in frame, rich saturated colors, soft cinematic lighting, depth of field. NOT realistic, NOT photorealistic. No text, no letters, no logo, no watermark, no border, no frame. Subject: glowing green fluffy mold spore creature with big cute curious eyes, floating gently in the air, soft green bioluminescent aura, dark green-tinted cave background
+
+=== portrait_mite.jpg ===
+size_bytes: 44544
+sha256: 545b31985d9bb2c6d39c4258dfd554909752b89a633679a7cc3cc87369ab9735
+prompt: Cute stylized soft 3D render in the style of modern mobile fantasy RPG and Pixar, smooth rounded clay-like shapes, big expressive cute eyes, adorable cartoonish character, soft bioluminescent glow, dark blurred cave background with soft vignette, viewed 3/4 from above, creature centered in frame, rich saturated colors, soft cinematic lighting, depth of field. NOT realistic, NOT photorealistic. No text, no letters, no logo, no watermark, no border, no frame. Subject: small timid cute tick creature with shiny amber glossy shell and thin delicate legs, big nervous adorable eyes, warm amber glow on dark cave background
+
+=== portrait_beetle.jpg ===
+size_bytes: 53795
+sha256: 7b0f66464c1a24e918bfd90d25307ea8b8edbd78f98d765898ab033eed97a3c2
+prompt: Cute stylized soft 3D render in the style of modern mobile fantasy RPG and Pixar, smooth rounded clay-like shapes, big expressive cute eyes, adorable cartoonish character, soft bioluminescent glow, dark blurred cave background with soft vignette, viewed 3/4 from above, creature centered in frame, rich saturated colors, soft cinematic lighting, depth of field. NOT realistic, NOT photorealistic. No text, no letters, no logo, no watermark, no border, no frame. Subject: thick slow chubby cute beetle with sturdy brown-bronze shell, big friendly sleepy eyes, warm bronze glow on dark cave background
+
+=== portrait_glowworm.jpg ===
+size_bytes: 44256
+sha256: a9bab06b302e9c120abf0589bb5dd26e4e87e54dbb055d044f378f9de2aeb803
+prompt: Cute stylized soft 3D render in the style of modern mobile fantasy RPG and Pixar, smooth rounded clay-like shapes, big expressive cute eyes, adorable cartoonish character, soft bioluminescent glow, dark blurred cave background with soft vignette, viewed 3/4 from above, creature centered in frame, rich saturated colors, soft cinematic lighting, depth of field. NOT realistic, NOT photorealistic. No text, no letters, no logo, no watermark, no border, no frame. Subject: soft cute glowworm with big friendly eyes and a brightly glowing yellow-green tail tip, warm yellow-green bioluminescence on dark cave background
+
+=== portrait_spikeback.jpg ===
+size_bytes: 39763
+sha256: 39b8fe0772b36ba74c5ab9c27afdfcf57c4cc526bd2746292f91ee75199bed57
+prompt: Cute stylized soft 3D render in the style of modern mobile fantasy RPG and Pixar, smooth rounded clay-like shapes, big expressive cute eyes, adorable cartoonish character, soft bioluminescent glow, dark blurred cave background with soft vignette, viewed 3/4 from above, creature centered in frame, rich saturated colors, soft cinematic lighting, depth of field. NOT realistic, NOT photorealistic. No text, no letters, no logo, no watermark, no border, no frame. Subject: aggressive but cute little beast with sharp spikes on its back, charging forward, big determined angry eyes, orange-red glow on dark cave background
+
+=== portrait_jelly.jpg ===
+size_bytes: 41141
+sha256: 90d503d980731eec9626f4d3a5f288eb63a8e7bf7974a5d421d351588c73e769
+prompt: Cute stylized soft 3D render in the style of modern mobile fantasy RPG and Pixar, smooth rounded clay-like shapes, big expressive cute eyes, adorable cartoonish character, soft bioluminescent glow, dark blurred cave background with soft vignette, viewed 3/4 from above, creature centered in frame, rich saturated colors, soft cinematic lighting, depth of field. NOT realistic, NOT photorealistic. No text, no letters, no logo, no watermark, no border, no frame. Subject: translucent pink-violet cute jellyfish floating gently, big soft dreamy eyes, pink-violet bioluminescent glow on dark cave background
+
+=== portrait_crystal_mite.jpg ===
+size_bytes: 57570
+sha256: 2b7902907629abf6d0829bf716732da780a3c67447853bbf234a15ec18934163
+prompt: Cute stylized soft 3D render in the style of modern mobile fantasy RPG and Pixar, smooth rounded clay-like shapes, big expressive cute eyes, adorable cartoonish character, soft bioluminescent glow, dark blurred cave background with soft vignette, viewed 3/4 from above, creature centered in frame, rich saturated colors, soft cinematic lighting, depth of field. NOT realistic, NOT photorealistic. No text, no letters, no logo, no watermark, no border, no frame. Subject: cute tick creature covered in turquoise crystal armor plates, big curious sparkling eyes, turquoise bioluminescent glow on dark cave background
+
+=== portrait_soul_slime.jpg ===
+size_bytes: 36071
+sha256: e6fbda86e6c2d4ed21ed00b4db5eb6099770285847dac91032ecb92541457980
+prompt: Cute stylized soft 3D render in the style of modern mobile fantasy RPG and Pixar, smooth rounded clay-like shapes, big expressive cute eyes, adorable cartoonish character, soft bioluminescent glow, dark blurred cave background with soft vignette, viewed 3/4 from above, creature centered in frame, rich saturated colors, soft cinematic lighting, depth of field. NOT realistic, NOT photorealistic. No text, no letters, no logo, no watermark, no border, no frame. Subject: ghostly purple cute slime-twin with empty glowing eyes, eerie but still stylized and adorable, deep violet bioluminescent glow on dark cave background
+
+=== portrait_ember_beetle.jpg ===
+size_bytes: 48381
+sha256: 7eb0ee643c227dc34254513da57bd2cf8caa3b9b75863b0094e883804010809c
+prompt: Cute stylized soft 3D render in the style of modern mobile fantasy RPG and Pixar, smooth rounded clay-like shapes, big expressive cute eyes, adorable cartoonish character, soft bioluminescent glow, dark blurred cave background with soft vignette, viewed 3/4 from above, creature centered in frame, rich saturated colors, soft cinematic lighting, depth of field. NOT realistic, NOT photorealistic. No text, no letters, no logo, no watermark, no border, no frame. Subject: cute beetle with a glowing orange forehead like a hot coal, embers and sparks floating around it, big expressive eyes, orange bioluminescent glow on dark cave background
+
+=== portrait_salamander.jpg ===
+size_bytes: 46329
+sha256: 4c11ed9f72fb82c035c6600cbdcfa2c83ea2c94648461346e749af1260d37375
+prompt: Cute stylized soft 3D render in the style of modern mobile fantasy RPG and Pixar, smooth rounded clay-like shapes, big expressive cute eyes, adorable cartoonish character, soft bioluminescent glow, dark blurred cave background with soft vignette, viewed 3/4 from above, creature centered in frame, rich saturated colors, soft cinematic lighting, depth of field. NOT realistic, NOT photorealistic. No text, no letters, no logo, no watermark, no border, no frame. Subject: cute fire salamander, red-orange with little flame patterns, stylized predatory but adorable, big fierce eyes, red-orange bioluminescent glow on dark cave background
+
+=== portrait_leech.jpg ===
+size_bytes: 39011
+sha256: b50b79d815c5f0bb155205ce3ceff318eadfeebdc93e3ec48509e1065c1e03c4
+prompt: Cute stylized soft 3D render in the style of modern mobile fantasy RPG and Pixar, smooth rounded clay-like shapes, big expressive cute eyes, adorable cartoonish character, soft bioluminescent glow, dark blurred cave background with soft vignette, viewed 3/4 from above, creature centered in frame, rich saturated colors, soft cinematic lighting, depth of field. NOT realistic, NOT photorealistic. No text, no letters, no logo, no watermark, no border, no frame. Subject: cute dark teal leech with a round sucker mouth, slimy but adorable, big simple cute eyes, dark teal-green bioluminescent glow on dark cave background
+
+=== portrait_bubble_jelly.jpg ===
+size_bytes: 43931
+sha256: 8d2fae6d4ea0fa71b641aeaa128a79e2e3ea8ff78fbbe5216dc972f41453fb81
+prompt: Cute stylized soft 3D render in the style of modern mobile fantasy RPG and Pixar, smooth rounded clay-like shapes, big expressive cute eyes, adorable cartoonish character, soft bioluminescent glow, dark blurred cave background with soft vignette, viewed 3/4 from above, creature centered in frame, rich saturated colors, soft cinematic lighting, depth of field. NOT realistic, NOT photorealistic. No text, no letters, no logo, no watermark, no border, no frame. Subject: cute jellyfish made of translucent blue-cyan bubbles, about to pop, big curious eyes, blue-cyan bioluminescent glow on dark cave background
+
+=== portrait_shard_crab.jpg ===
+size_bytes: 52023
+sha256: 90a546ce06010dd88fa0cd99028ec2bd1191425202c741b6cd9815f9c7310198
+prompt: Cute stylized soft 3D render in the style of modern mobile fantasy RPG and Pixar, smooth rounded clay-like shapes, big expressive cute eyes, adorable cartoonish character, soft bioluminescent glow, dark blurred cave background with soft vignette, viewed 3/4 from above, creature centered in frame, rich saturated colors, soft cinematic lighting, depth of field. NOT realistic, NOT photorealistic. No text, no letters, no logo, no watermark, no border, no frame. Subject: cute crab with a shell made of sharp pale glass shards, big curious eyes, pale icy blue glow on dark cave background
+
+=== portrait_wisp.jpg ===
+size_bytes: 36748
+sha256: cfa5c235735e81f1e30dce313b395c3ed99c8ea4306f478bbbe9370da170126b
+prompt: Cute stylized soft 3D render in the style of modern mobile fantasy RPG and Pixar, smooth rounded clay-like shapes, big expressive cute eyes, adorable cartoonish character, soft bioluminescent glow, dark blurred cave background with soft vignette, viewed 3/4 from above, creature centered in frame, rich saturated colors, soft cinematic lighting, depth of field. NOT realistic, NOT photorealistic. No text, no letters, no logo, no watermark, no border, no frame. Subject: cute wandering wisp, small bluish flame with little eyes, ethereal and adorable, blue bioluminescent glow on dark cave background
+
+=== portrait_warden.jpg ===
+size_bytes: 55868
+sha256: b580a8180cbeeabb6ad5e4b4ba958266a5fd8a80a89f643096b72a470953d319
+prompt: Cute stylized soft 3D render in the style of modern mobile fantasy RPG and Pixar, smooth rounded clay-like shapes, big expressive cute eyes, adorable cartoonish character, soft bioluminescent glow, dark blurred cave background with soft vignette, viewed 3/4 from above, creature centered in frame, rich saturated colors, soft cinematic lighting, depth of field. NOT realistic, NOT photorealistic. No text, no letters, no logo, no watermark, no border, no frame. Subject: huge ancient depth guardian boss: stone-chitinous monster with glowing red cracks across its body, threatening and imposing but still in stylized mobile-RPG art style, big intense eyes, deep red bioluminescent glow on dark cave background
+
+=== biome_fungal.jpg ===
+size_bytes: 148455
+sha256: 7710e6593dbc10c2e852dd2b7f6bf30f28bfaff8c3d4505395b9639ea3b0ddb2
+prompt: Mobile fantasy RPG environment art, cute stylized soft 3D render in the style of modern mobile RPG and Pixar, smooth rounded shapes, bioluminescent glow, dark underground cave, rich saturated colors, atmospheric, depth of field, cinematic volumetric lighting. No creatures, no characters. Upper third of the frame is darker and calmer. No text, no letters, no logo, no watermark, no border, no frame. Scene: Fungal corridor: a long underground cave corridor filled with violet glowing mushrooms of various sizes, floating spores drifting in the air, soft volumetric fog, purple bioluminescent ambient light
+
+=== biome_warm.jpg ===
+size_bytes: 166727
+sha256: 5207da09bc49abd1c05260afaa2270a0b4f9488734c6c417a5dcaddebea44317
+prompt: Mobile fantasy RPG environment art, cute stylized soft 3D render in the style of modern mobile RPG and Pixar, smooth rounded shapes, bioluminescent glow, dark underground cave, rich saturated colors, atmospheric, depth of field, cinematic volumetric lighting. No creatures, no characters. Upper third of the frame is darker and calmer. No text, no letters, no logo, no watermark, no border, no frame. Scene: Warm voids: a cave chamber with warm red-orange rocks, rising steam vents, smoldering glowing cracks in the ground, orange-red ambient glow
+
+=== biome_ponds.jpg ===
+size_bytes: 154194
+sha256: 0ee55b95c11a883fde31fcf3c2b7cc16b461b4cafd2ef4cc47dd4d6bb3150f15
+prompt: Mobile fantasy RPG environment art, cute stylized soft 3D render in the style of modern mobile RPG and Pixar, smooth rounded shapes, bioluminescent glow, dark underground cave, rich saturated colors, atmospheric, depth of field, cinematic volumetric lighting. No creatures, no characters. Upper third of the frame is darker and calmer. No text, no letters, no logo, no watermark, no border, no frame. Scene: Flooded halls: a cave hall with dark still water and mirror-like reflections on the surface, cyan-green bioluminescent light coming from above, calm mysterious atmosphere
+
+=== biome_crystal.jpg ===
+size_bytes: 171632
+sha256: 6b37c9771b39a8586f08b15a50b47296ae103aea7ea5203933c1edb8c5a4ebe9
+prompt: Mobile fantasy RPG environment art, cute stylized soft 3D render in the style of modern mobile RPG and Pixar, smooth rounded shapes, bioluminescent glow, dark underground cave, rich saturated colors, atmospheric, depth of field, cinematic volumetric lighting. No creatures, no characters. Upper third of the frame is darker and calmer. No text, no letters, no logo, no watermark, no border, no frame. Scene: Crystal deposits: a cave filled with turquoise and pink crystals growing from the walls and floor, bright glints and sparkles, mixed cyan and pink bioluminescent glow
+
+=== biome_heart.jpg ===
+size_bytes: 118838
+sha256: b9e6493040893d4523376a05d89bbd785aee370a46ad3b7afeb1cd27fb8bd82c
+prompt: Mobile fantasy RPG environment art, cute stylized soft 3D render in the style of modern mobile RPG and Pixar, smooth rounded shapes, bioluminescent glow, dark underground cave, rich saturated colors, atmospheric, depth of field, cinematic volumetric lighting. No creatures, no characters. Upper third of the frame is darker and calmer. No text, no letters, no logo, no watermark, no border, no frame. Scene: Heart of the cave: a giant pulsing dark-red organic cave chamber, fleshy organic walls, deep red bioluminescent pulse, ominous and grand atmosphere
+

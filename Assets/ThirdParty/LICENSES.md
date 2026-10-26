@@ -22,3 +22,8 @@
 Иконки: Lorc и Delapouite, https://game-icons.net (CC BY 3.0).
 Шрифты: Russo One (Jovanny Lemonad), Rubik (Hubert & Fischer) — SIL Open Font License 1.1.
 Модели монстров: Quaternius (CC0). Интерфейс и звуки: Kenney (CC0). Музыка: Paul Wortmann, JaggedStone (CC0).
+
+## Иллюстрации, созданные ИИ
+
+`Assets/Game/Resources/AiArt/*` — сгенерированы нейросетью Z.ai (chat.z.ai, инструмент image-generation) по описаниям автора игры, 2026-10-26.
+По условиям Z.ai (Terms of Service, разд. IV.4) права на результаты принадлежат пользователю; при этом созданное ИИ нужно помечать (разд. III.5.d) — пометка есть в «Титрах».

@@ -21,6 +21,17 @@ public sealed class ThirdPartyModelImport : AssetPostprocessor {
         mi.materialImportMode = ModelImporterMaterialImportMode.ImportStandard;
     }
 
+    /// <summary>Иллюстрации ИИ (AiArt): без подгонки к степени двойки (иначе 1344×768 растягивается) и без мип-карт.</summary>
+    void OnPreprocessTexture() {
+        if (!assetPath.Replace('\\', '/').StartsWith("Assets/Game/Resources/AiArt")) return;
+        var ti = (TextureImporter)assetImporter;
+        ti.textureType = TextureImporterType.Default;
+        ti.npotScale = TextureImporterNPOTScale.None;
+        ti.mipmapEnabled = false;
+        ti.maxTextureSize = 2048;
+        ti.wrapMode = TextureWrapMode.Clamp;
+    }
+
     void OnPreprocessAnimation() {
         if (!IsMonster) return;
         var mi = (ModelImporter)assetImporter;

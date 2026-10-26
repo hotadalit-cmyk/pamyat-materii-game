@@ -31,6 +31,8 @@ public sealed class RunUi : MonoBehaviour {
     private RectTransform _bossFill;
     private GameObject _bossBar;
     private float _biomeTimer;
+    private RawImage _biomeArt;
+    private CanvasGroup _biomeArtGroup;          // иллюстрация области (ИИ Z.ai) за карточкой новой глубины
     private GameObject _titleModal, _infoModal;
     private Text _titleSoul, _infoTitle, _infoBody;
     private RunMinimap _minimap;
@@ -133,6 +135,27 @@ public sealed class RunUi : MonoBehaviour {
         RunJoystick.Build(_root);
         ApplyHandedness();
 
+        var artGo = new GameObject("biome_art");
+        artGo.transform.SetParent(_root, false);
+        _biomeArt = artGo.AddComponent<RawImage>();
+        _biomeArt.raycastTarget = false;
+        var art = _biomeArt.rectTransform;
+        art.anchorMin = art.anchorMax = art.pivot = new Vector2(0.5f, 0.5f);
+        art.anchoredPosition = new Vector2(0, 90);
+        art.sizeDelta = new Vector2(1100, 1100f * 768f / 1344f);
+        _biomeArtGroup = artGo.AddComponent<CanvasGroup>();
+        _biomeArtGroup.blocksRaycasts = false;
+        // тёмная полоса под заголовком — текст читается на любой картинке
+        var band = new GameObject("biome_band");
+        band.transform.SetParent(artGo.transform, false);
+        var bimg = band.AddComponent<Image>();
+        bimg.color = new Color(0f, 0f, 0.02f, 0.82f);
+        bimg.raycastTarget = false;
+        var brt = bimg.rectTransform;
+        brt.anchorMin = brt.anchorMax = brt.pivot = new Vector2(0.5f, 0.5f);
+        brt.sizeDelta = new Vector2(1100f, 190f);
+        brt.anchoredPosition = new Vector2(0f, -10f);
+        _biomeArt.gameObject.SetActive(false);
         _biomeTitle = Label(_root, "", 72, TextAnchor.MiddleCenter, new Vector2(0, 120), new Vector2(1600, 100), new Vector2(0.5f, 0.5f));
         _biomeSub = Label(_root, "", 32, TextAnchor.MiddleCenter, new Vector2(0, 40), new Vector2(1600, 60), new Vector2(0.5f, 0.5f));
 
@@ -165,7 +188,10 @@ public sealed class RunUi : MonoBehaviour {
     }
 
     /// <summary>Карточка новой глубины: «Глубина 2 · Тёплые тоннели» + подзаголовок.</summary>
-    public void BiomeCard(int depth, string name, string subtitle, Color accent) {
+    public void BiomeCard(int depth, string name, string subtitle, Color accent, string artKey = null) {
+        var tex = artKey != null ? Resources.Load<Texture2D>("AiArt/biome_" + artKey) : null;
+        _biomeArt.texture = tex;
+        _biomeArt.gameObject.SetActive(tex != null);
         _biomeTitle.text = "Глубина " + depth + " · " + name;
         _biomeTitle.color = new Color(accent.r, accent.g, accent.b, 1f);
         _biomeSub.text = subtitle;
@@ -256,6 +282,11 @@ public sealed class RunUi : MonoBehaviour {
         Fade(_banner, ref _bannerTimer);
         Fade(_biomeTitle, ref _biomeTimer);
         var bc = _biomeSub.color; bc.a = _biomeTitle.color.a; _biomeSub.color = bc;
+        if (_biomeArt.gameObject.activeSelf) {
+            float a = _biomeTitle.color.a;
+            _biomeArtGroup.alpha = a;
+            if (a <= 0f) _biomeArt.gameObject.SetActive(false);
+        }
         Fade(_flash, ref _flashTimer);
     }
 
@@ -362,26 +393,48 @@ public sealed class RunUi : MonoBehaviour {
     private void BuildTitle() {
         _titleModal = FullScreen("title_modal");
         _titleModal.GetComponent<Image>().color = new Color(0f, 0.01f, 0.03f, 0.72f);
-        var t = Label(_titleModal.transform, "ПАМЯТЬ МАТЕРИИ", 110, TextAnchor.MiddleCenter, new Vector2(0, 280), new Vector2(1800, 140), new Vector2(0.5f, 0.5f));
+        // заставка (сгенерирована ИИ Z.ai по нашему описанию): слизень в грибной пещере — в центре, кнопки вокруг
+        var art = Resources.Load<Texture2D>("AiArt/title");
+        if (art != null) {
+            _titleModal.GetComponent<Image>().color = new Color(0f, 0.01f, 0.03f, 1f);
+            var artGo = new GameObject("title_art");
+            artGo.transform.SetParent(_titleModal.transform, false);
+            var raw = artGo.AddComponent<RawImage>();
+            raw.texture = art;
+            raw.raycastTarget = false;
+            var art_rt = raw.rectTransform;
+            art_rt.anchorMin = art_rt.anchorMax = art_rt.pivot = new Vector2(0.5f, 0.5f);
+            // «обложка» на всю ширину; сдвинута вверх, чтобы мордочка слизня была над кнопкой «Начать жизнь»
+            art_rt.sizeDelta = new Vector2(2500f, 2500f * art.height / art.width);
+            art_rt.anchoredPosition = new Vector2(0f, 150f);
+            var shade = new GameObject("title_shade");
+            shade.transform.SetParent(_titleModal.transform, false);
+            var sh = shade.AddComponent<Image>();
+            sh.color = new Color(0f, 0.01f, 0.04f, 0.38f);
+            sh.raycastTarget = false;
+            var shrt = sh.rectTransform;
+            shrt.anchorMin = Vector2.zero; shrt.anchorMax = Vector2.one; shrt.offsetMin = shrt.offsetMax = Vector2.zero;
+        }
+        var t = Label(_titleModal.transform, "ПАМЯТЬ МАТЕРИИ", 110, TextAnchor.MiddleCenter, new Vector2(0, 370), new Vector2(1800, 140), new Vector2(0.5f, 0.5f));
         t.color = GameBootstrap.COutline;
         Label(_titleModal.transform, "Ты — капля живой материи на дне тёмной пещеры.\nЕшь меньших. Бойся больших. Умри — и вернись сильнее.",
-            34, TextAnchor.MiddleCenter, new Vector2(0, 150), new Vector2(1600, 110), new Vector2(0.5f, 0.5f));
-        _titleSoul = Label(_titleModal.transform, "", 28, TextAnchor.MiddleCenter, new Vector2(0, 60), new Vector2(1600, 50), new Vector2(0.5f, 0.5f));
+            34, TextAnchor.MiddleCenter, new Vector2(0, 250), new Vector2(1600, 110), new Vector2(0.5f, 0.5f));
+        _titleSoul = Label(_titleModal.transform, "", 28, TextAnchor.MiddleCenter, new Vector2(0, 178), new Vector2(1600, 50), new Vector2(0.5f, 0.5f));
         _titleSoul.color = GameBootstrap.CSoul;
-        var play = Button(_titleModal.transform, "play", new Vector2(0, -70), new Vector2(620, 130), GameBootstrap.CFood, 0.92f, "НАЧАТЬ ЖИЗНЬ", 44);
+        var play = Button(_titleModal.transform, "play", new Vector2(0, -420), new Vector2(620, 130), GameBootstrap.CFood, 0.95f, "НАЧАТЬ ЖИЗНЬ", 44);
         play.GetComponent<Button>().onClick.AddListener(() => {
             _titleModal.SetActive(false);
             PM.Systems.Input.PullGestureInput.Blocked = false;
             _game.OnTitleClosed();
             Hint("Тяните ПРОТИВ движения и отпустите", 4f);
         });
-        var how = Button(_titleModal.transform, "how", new Vector2(-330, -230), new Vector2(560, 100), GameBootstrap.CSlime, 0.55f, "Как играть", 34);
+        var how = Button(_titleModal.transform, "how", new Vector2(-660, -60), new Vector2(460, 100), GameBootstrap.CSlime, 0.8f, "Как играть", 34);
         how.GetComponent<Button>().onClick.AddListener(() => ShowInfo("Как играть", HowToPlay()));
-        var best = Button(_titleModal.transform, "bestiary", new Vector2(330, -230), new Vector2(560, 100), GameBootstrap.CSoul, 0.55f, "Бестиарий", 34);
+        var best = Button(_titleModal.transform, "bestiary", new Vector2(-660, -190), new Vector2(460, 100), GameBootstrap.CSoul, 0.8f, "Бестиарий", 34);
         best.GetComponent<Button>().onClick.AddListener(() => ShowInfo("Бестиарий", BestiaryText()));
-        var settings = Button(_titleModal.transform, "settings", new Vector2(-330, -360), new Vector2(560, 90), GameBootstrap.COutline, 0.35f, "Настройки", 32);
+        var settings = Button(_titleModal.transform, "settings", new Vector2(660, -60), new Vector2(460, 100), GameBootstrap.COutline, 0.6f, "Настройки", 32);
         settings.GetComponent<Button>().onClick.AddListener(() => _settings.Open());
-        var credits = Button(_titleModal.transform, "credits", new Vector2(330, -360), new Vector2(560, 90), GameBootstrap.COutline, 0.35f, "Титры", 32);
+        var credits = Button(_titleModal.transform, "credits", new Vector2(660, -190), new Vector2(460, 100), GameBootstrap.COutline, 0.6f, "Титры", 32);
         credits.GetComponent<Button>().onClick.AddListener(() => ShowInfo("Титры", CreditsText()));
         _titleModal.SetActive(false);
     }
@@ -420,6 +473,7 @@ public sealed class RunUi : MonoBehaviour {
                "Шрифты: Russo One (Jovanny Lemonad), Rubik (Hubert & Fischer, Cyreal) — SIL Open Font License 1.1\n" +
                "3D-монстры: Quaternius (quaternius.com) — CC0\n" +
                "Интерфейс и звуки: Kenney (kenney.nl) — CC0\n" +
+               "Иллюстрации: созданы ИИ (генератор изображений Z.ai) по описаниям автора игры\n" +
                "Музыка: Paul Wortmann, JaggedStone (OpenGameArt.org) — CC0\n\n" +
                "Спасибо всем, кто делится своим творчеством свободно.";
     }
