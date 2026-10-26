@@ -106,8 +106,18 @@ public static class ThirdPartyArt {
         tilt.localRotation = Quaternion.Euler(-58f, 0f, 0f);                // 3/4 сверху, как в мобильных RPG
         var yaw = new GameObject("model_yaw").transform;
         yaw.SetParent(tilt, false);
-        var inst = Object.Instantiate(prefab, yaw, false);
+        // габариты считаем у живого экземпляра в начале координат: у неоткрытого префаба в сборке bounds пустые
+        var inst = Object.Instantiate(prefab);
+        inst.transform.position = Vector3.zero;
         inst.name = model;
+        if (!_footprint.ContainsKey(model)) {
+            var bb = new Bounds(); bool f0 = true;
+            foreach (var r in inst.GetComponentsInChildren<Renderer>()) {
+                if (f0) { bb = r.bounds; f0 = false; } else bb.Encapsulate(r.bounds);
+            }
+            _footprint[model] = Mathf.Max(0.01f, Mathf.Max(bb.size.x, bb.size.z));
+        }
+        inst.transform.SetParent(yaw, false);
         var mat = Resources.Load<Material>("Monsters/Materials/" + model);
         foreach (var r in inst.GetComponentsInChildren<Renderer>()) {
             if (mat != null) { var arr = r.sharedMaterials; for (int i = 0; i < arr.Length; i++) arr[i] = mat; r.sharedMaterials = arr; }
@@ -116,15 +126,7 @@ public static class ThirdPartyArt {
             r.receiveShadows = false;
             if (r is SkinnedMeshRenderer smr) smr.updateWhenOffscreen = false;
         }
-        // масштаб по «следу» модели на полу (наибольшая из ширины и глубины)
-        if (!_footprint.TryGetValue(model, out float fp)) {
-            var b = new Bounds(); bool first = true;
-            foreach (var r in prefab.GetComponentsInChildren<Renderer>()) {
-                if (first) { b = r.bounds; first = false; } else b.Encapsulate(r.bounds); // мировые габариты ассета
-            }
-            fp = Mathf.Max(0.01f, Mathf.Max(b.size.x, b.size.z));
-            _footprint[model] = fp;
-        }
+        float fp = _footprint[model];
         float scale = diameter * 1.5f / fp;
         inst.transform.localScale = inst.transform.localScale * scale;
         var anim = inst.GetComponentInChildren<Animation>();
