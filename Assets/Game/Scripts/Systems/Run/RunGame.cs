@@ -968,7 +968,7 @@ public sealed partial class RunGame : MonoBehaviour {
         _guardianZoneSlow = 0f;
         if (g == null || !Run.GuardianAwake || Run.GuardianAbsorbed) { HideGuardianVisuals(); return; }
         if (_guardian == null) {
-            SpawnGuardianAt(ToV2(Run.Room.ExitPos)); // страж ждёт у шахты
+            SpawnGuardianAt(Run.Room.ExitPos); // страж ждёт у шахты
             if (_guardian == null) return;
         }
         if (!_guardianBannerShown) {

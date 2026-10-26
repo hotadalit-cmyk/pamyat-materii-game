@@ -401,7 +401,9 @@ public sealed class RunUi : MonoBehaviour {
                 _goalFill.rectTransform.sizeDelta = new Vector2(Mathf.Max(16f, 400f * frac), 16f);
                 _goal.text = run.ExitOpen
                     ? (run.OpenWorld ? "Шахта вниз открыта — следуйте за огоньком" : "Выход открыт — ищите светящуюся трещину")
-                    : string.Format(run.OpenWorld ? "Шахта откроется: {0:0.0} / {1:0.0}" : "Поглощено {0:0.0} / {1:0.0}", run.RoomAbsorbed, goal);
+                    : run.OpenWorld && run.GuardianAwake && run.Guardian != null
+                        ? run.Guardian.Def.Name + " стережёт шахту — победите стража"
+                        : string.Format(run.OpenWorld ? "Страж пробудится: {0:0.0} / {1:0.0}" : "Поглощено {0:0.0} / {1:0.0}", run.RoomAbsorbed, goal);
                 _goal.color = run.ExitOpen ? GameBootstrap.CFood : TextColor;
             }
         }
