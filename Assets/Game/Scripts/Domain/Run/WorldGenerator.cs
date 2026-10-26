@@ -29,6 +29,7 @@ public sealed class WorldMap {
     public List<SpawnSpec> Spawns = new List<SpawnSpec>();
     public List<ObstacleSpec> Obstacles = new List<ObstacleSpec>();
     public List<WallRect> WallRects = new List<WallRect>();
+    public List<Vec2> CrackMouths = new List<Vec2>();   // входы в узкие трещины (подсказка: «разделитесь»)
     public double GoalMass;
 
     public bool IsFloor(int x, int y) => x >= 0 && y >= 0 && x < Width && y < Height && Cells[y * Width + x] == 1;
@@ -153,9 +154,20 @@ public static class WorldGenerator {
                 Center = new Vec2(cx + 0.5, cy + 0.5), Radius = r });
             CarveDisc(m, cx, cy, r, region);
             var near = NearestChamber(chambers, cx, cy);
-            if (near != null) CarveTunnel(m, cx, cy, near.Cx, near.Cy, 1, rng, false); // узкий, прямой-ish
+            // тайник доступен только через трещину шириной 1 клетку — целым телом не пролезть
+            if (near != null) CarveCrack(m, cx, cy, near.Cx, near.Cy, rng, true);
             secretRegions.Add(region);
             k++;
+        }
+
+        // ---------- 4б. Трещины-срезки между залами (только для фрагментов) ----------
+        int cracks = 2 + depth;
+        for (int k = 0, tries = 0; k < cracks && tries < 200 && chambers.Count > 2; tries++) {
+            var a = chambers[rng.NextInt(chambers.Count)];
+            var b = chambers[NearestOther(chambers, chambers.IndexOf(a), 1 + rng.NextInt(2))];
+            double d = System.Math.Sqrt(Dist2(a, b));
+            if (d > 34 || HasEdge(edges, chambers.IndexOf(a), chambers.IndexOf(b))) continue;
+            if (CarveCrack(m, a.Cx, a.Cy, b.Cx, b.Cy, rng, false)) k++;
         }
 
         // ---------- 5. Старт и связность ----------
@@ -418,6 +430,46 @@ public static class WorldGenerator {
             CarveDisc(m, (int)x, (int)y, r, -1);
         }
         CarveDisc(m, bx, by, radius, -1);
+    }
+
+    /// <summary>
+    /// Трещина шириной ровно 1 клетка, 4-связная (по диагонали физика не пропустит), через случайную
+    /// середину — слегка изломанная. Не режет лабиринты. Отмечает входы (CrackMouths).
+    /// </summary>
+    private static bool CarveCrack(WorldMap m, int ax, int ay, int bx, int by, PmRandom rng, bool force) {
+        int mx = (ax + bx) / 2 + rng.NextInt(7) - 3, my = (ay + by) / 2 + rng.NextInt(7) - 3;
+        var cells = new List<int>();
+        CrackPath(m, ax, ay, mx, my, cells);
+        CrackPath(m, mx, my, bx, by, cells);
+        for (int i = 0; i < cells.Count; i++) {
+            int reg = m.RegionOf[cells[i]];
+            if (reg >= 0 && m.Regions[reg].Kind == RegionKind.Maze) return false; // лабиринт не портим
+        }
+        bool wasWall = false, mouthsAdded = false;
+        for (int i = 0; i < cells.Count; i++) {
+            int c = cells[i];
+            int x = c % m.Width, y = c / m.Width;
+            if (x < Border || y < Border || x >= m.Width - Border || y >= m.Height - Border) continue;
+            bool wall = m.Cells[c] == 0;
+            if (wall && !wasWall && i > 0) { m.CrackMouths.Add(new Vec2(x + 0.5, y + 0.5)); mouthsAdded = true; }
+            if (!wall && wasWall) m.CrackMouths.Add(new Vec2(x + 0.5, y + 0.5));
+            m.Cells[c] = 1;
+            wasWall = wall;
+        }
+        return mouthsAdded || force;
+    }
+
+    private static void CrackPath(WorldMap m, int x0, int y0, int x1, int y1, List<int> cells) {
+        int x = x0, y = y0;
+        int dx0 = System.Math.Abs(x1 - x0), dy0 = System.Math.Abs(y1 - y0);
+        int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+        cells.Add(y * m.Width + x);
+        while (x != x1 || y != y1) {
+            int rx = System.Math.Abs(x1 - x), ry = System.Math.Abs(y1 - y);
+            // ровно один шаг за раз — по оси x или y, никогда диагонально; доля пути по осям выравнивается
+            if (ry == 0 || (rx > 0 && (long)rx * dy0 >= (long)ry * dx0)) x += sx; else y += sy;
+            cells.Add(y * m.Width + x);
+        }
     }
 
     private static void CarveLine(WorldMap m, int ax, int ay, int bx, int by, int radius) {

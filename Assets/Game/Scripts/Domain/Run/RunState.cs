@@ -67,7 +67,19 @@ public sealed class RunState {
 
     public int Depth { get; private set; }
     public int RoomIndex { get; private set; }
-    public double Mass { get; private set; }
+    /// <summary>Масса тела = сумма фрагментов (v0.7). Прибавка идёт ведущему (или фрагменту-поглотителю),
+    /// убыль — пропорционально всем фрагментам.</summary>
+    public double Mass {
+        get => Fragments != null ? Fragments.Total : 0.0;
+        private set {
+            if (Fragments == null) return;
+            double delta = value - Fragments.Total;
+            if (delta > 0 && _creditId >= 0) Fragments.Add(_creditId, delta);
+            else Fragments.ApplyDelta(delta);
+        }
+    }
+    public FragmentSet Fragments { get; private set; }
+    private int _creditId = -1;   // какой фрагмент получает прибавку (поглощение конкретным фрагментом)
     public double PeakMass { get; private set; }
     public MutationSet Mutations { get; }
     public RoomPlan Room { get; private set; }
@@ -98,7 +110,7 @@ public sealed class RunState {
         Mutations = new MutationSet();
         Depth = 1;
         RoomIndex = 0;
-        Mass = StartMass + _meta.StartMassBonus;
+        Fragments = new FragmentSet(StartMass + _meta.StartMassBonus);
         PeakMass = Mass;
         Combo = new ComboTracker();
         if (OpenWorld) SetupWorld(); else SetupRoom();
@@ -205,6 +217,35 @@ public sealed class RunState {
             _killedBy = sourceId;
         }
     }
+
+    // ---------- Фрагменты (v0.7) ----------
+    /// <summary>Разделиться: каждый достаточно крупный фрагмент — пополам. Пары (родитель, новый) или пусто.</summary>
+    public List<int[]> TrySplit() {
+        if (IsDead || IsVictory || !Fragments.CanSplit) return new List<int[]>();
+        return Fragments.SplitAll();
+    }
+
+    /// <summary>Слияние двух фрагментов (касание в режиме сбора).</summary>
+    public bool MergeFragments(int keepId, int otherId) => !IsDead && Fragments.Merge(keepId, otherId);
+
+    /// <summary>Поглощение конкретным фрагментом: масса и бонус цепочки достаются ему.</summary>
+    public double OnAbsorbAt(int fragmentId, string speciesId, double mass) {
+        _creditId = Fragments.IndexOf(fragmentId) >= 0 ? fragmentId : -1;
+        try { return OnAbsorbEx(speciesId, mass); } finally { _creditId = -1; }
+    }
+
+    /// <summary>Удар по конкретному фрагменту. Возвращает true, если фрагмент растворился.</summary>
+    public bool OnMassLostAt(int fragmentId, double amount, string sourceId) {
+        if (amount <= 0.0) return false;
+        bool dissolved = Fragments.Remove(fragmentId, amount);
+        if (!IsDead && Mass < SizeRule.MinViableMass) {
+            IsDead = true;
+            _killedBy = sourceId;
+        }
+        return dissolved;
+    }
+
+    public double FragmentMass(int id) => Fragments.MassOf(id);
 
     /// <summary>Учитывает лучший удар игрока (для BestHit в LifeImprint).</summary>
     public void OnHit(double dealtMassLoss) {
