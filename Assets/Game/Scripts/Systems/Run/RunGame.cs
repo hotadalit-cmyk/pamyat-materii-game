@@ -27,6 +27,8 @@ public sealed class RunGame : MonoBehaviour {
     public SoulMeta Meta { get; private set; }
     public RunState Run { get; private set; }
     public bool InRun => Run != null && !_ended;
+    public bool UiModalOpen => _ui != null && _ui.ModalOpen;
+    public Vector2 PlayerPosition => _player != null ? (Vector2)_player.transform.position : Vector2.zero;
 
     private SimEntityView2D _player;
     private float _playerBaseRadius;
@@ -50,6 +52,15 @@ public sealed class RunGame : MonoBehaviour {
     private float _time;
     private int _ricochets;            // отскоков в текущем рывке (m_ricochet)
     private float _sinceDash = 99f;
+    // v0.6 открытый мир: ленивое появление существ рядом с игроком, усыпление дальних, туман войны
+    private const float SpawnRadius = 24f, SleepRadius = 30f, WakeRadius = 25f, RevealRadius = 9f;
+    private WorldView _world;
+    public WorldView World => _world;
+    private readonly List<SpawnSpec> _pending = new List<SpawnSpec>();
+    private readonly List<int> _pendingIndex = new List<int>();
+    private readonly List<SpriteRenderer> _altarRings = new List<SpriteRenderer>();
+    private readonly HashSet<int> _visitedRegions = new HashSet<int>();
+    private float _streamTimer, _miniTimer;
 
     void Awake() {
         Instance = this;
@@ -87,7 +98,7 @@ public sealed class RunGame : MonoBehaviour {
         PullGestureInput.Blocked = false;
         _seed = (ulong)System.DateTime.UtcNow.Ticks;
         _rng = new PmRandom(_seed ^ 0x5DEECE66DUL);
-        Run = new RunState(Meta, _seed);
+        Run = new RunState(Meta, _seed, true); // v0.6: каждая глубина — одно огромное подземелье
         _ended = false;
         _offerShown = false;
         _lastHitSource = null;
@@ -169,6 +180,7 @@ public sealed class RunGame : MonoBehaviour {
 
     // ---------- Комната ----------
     private void BuildRoom() {
+        if (Run.OpenWorld && Run.World != null) { BuildWorld(); return; }
         if (_roomRoot != null) Destroy(_roomRoot.gameObject);
         _creatures.Clear();
         _obstacles.Clear();
@@ -216,6 +228,104 @@ public sealed class RunGame : MonoBehaviour {
             if (!string.IsNullOrEmpty(layout.Hint)) _ui.Flash(layout.Hint, 3f);
         } else _ui.Banner(string.Format("Комната {0}/{1}", plan.RoomIndex + 1, RunState.RoomsPerDepth), 1.2f);
         if (layout != null && layout.Kind == RoomKind.Boss) _ui.Banner("Страж глубины пробуждается…", 3f);
+    }
+
+    /// <summary>Огромное подземелье глубины: карта-текстура, стены, алтари, шахта, отложенные спавны.</summary>
+    private void BuildWorld() {
+        if (_roomRoot != null) Destroy(_roomRoot.gameObject);
+        _creatures.Clear();
+        _obstacles.Clear();
+        _pending.Clear();
+        _pendingIndex.Clear();
+        _altarRings.Clear();
+        _visitedRegions.Clear();
+        _boss = null;
+        _altarRing = null;
+        _roomRoot = new GameObject("world").transform;
+        _roomRoot.SetParent(transform, false);
+        var map = Run.World;
+        var plan = Run.Room;
+        var layout = Run.Layout;
+        var biome = layout != null && layout.Biome != null ? layout.Biome : BiomeCatalog.ForDepth(plan.Depth);
+        _builtRoomKey = plan.Depth * 100 + plan.RoomIndex;
+        _world = new WorldView(map, _roomRoot, biome, WallMaterial);
+        if (Camera.main != null) Camera.main.backgroundColor = RunWorldBuilder.Hex(biome.WallColor) * 0.3f;
+        for (int i = 0; i < map.Obstacles.Count; i++)
+            _obstacles.Add(RunWorldBuilder.BuildObstacle(_roomRoot, map.Obstacles[i], biome));
+        for (int i = 0; i < map.Altars.Count; i++) {
+            var a = map.Altars[i];
+            _altarRings.Add(RunWorldBuilder.BuildAltar(_roomRoot, ToV2(a.Pos), a.Kind == AltarKind.Spring, a.Kind == AltarKind.Relic));
+        }
+        // шахта вниз — крупнее обычного выхода
+        var exitGo = new GameObject("shaft");
+        exitGo.transform.SetParent(_roomRoot, false);
+        exitGo.transform.position = ToV3(plan.ExitPos);
+        _exitGlow = SpriteUtil.AddSprite(exitGo.transform, SpriteUtil.GlowSprite, 5f, 5f, GameBootstrap.CFood, DarknessMask.Order + 6);
+        _exitRing = SpriteUtil.AddSprite(exitGo.transform, SpriteUtil.RingSprite, 2.2f, 2.2f, GameBootstrap.CFood, DarknessMask.Order + 7);
+        SpriteUtil.AddSprite(exitGo.transform, SpriteUtil.CircleSprite, 1.4f, 1.4f, new Color(0, 0, 0, 0.85f), 3);
+        _exitPointer = SpriteUtil.AddSprite(_roomRoot, SpriteUtil.CircleSprite, 0.22f, 0.22f, GameBootstrap.CFood, DarknessMask.Order + 8);
+        _shockRing = SpriteUtil.AddSprite(_roomRoot, SpriteUtil.RingSprite, 1f, 1f, new Color(1f, 0.5f, 0.4f, 0f), DarknessMask.Order + 9);
+        for (int i = 0; i < plan.Spawns.Count; i++) { _pending.Add(plan.Spawns[i]); _pendingIndex.Add(i); }
+        if (Run.Boss != null) SpawnBossAt(map.BossPos);
+
+        _player.transform.position = ToV3(plan.PlayerStart);
+        _player.Rb.position = ToV2(plan.PlayerStart);
+        _player.Rb.linearVelocity = Vector2.zero;
+        FollowCamera.Snap = true;
+        _dark.Set((float)biome.Darkness01, (float)Run.Mutations.LightRadius);
+        StreamCreatures(true);
+        _ui.SetMinimap(_world);
+        _lastDepthShown = plan.Depth;
+        _ui.BiomeCard(plan.Depth, biome.Name, biome.Subtitle, RunWorldBuilder.Hex(biome.AccentColor));
+        _ui.Flash("Найдите шахту вниз. Поглощайте — чтобы её открыть", 4f);
+    }
+
+    /// <summary>Появление отложенных существ рядом и усыпление дальних — сотни существ без потерь FPS.</summary>
+    private void StreamCreatures(bool force) {
+        Vector2 p = _player.Rb.position;
+        for (int i = _pending.Count - 1; i >= 0; i--) {
+            var sp = _pending[i];
+            if (Vector2.Distance(p, ToV2(sp.Pos)) > SpawnRadius) continue;
+            int idx = _pendingIndex[i];
+            _pending.RemoveAt(i);
+            _pendingIndex.RemoveAt(i);
+            SpawnCreature(sp, idx);
+        }
+        for (int i = 0; i < _creatures.Count; i++) {
+            var c = _creatures[i];
+            if (c == null || c.IsBoss) continue;
+            float d = Vector2.Distance(p, c.transform.position);
+            bool active = c.gameObject.activeSelf;
+            if (active && d > SleepRadius) c.gameObject.SetActive(false);
+            else if (!active && d < WakeRadius) c.gameObject.SetActive(true);
+        }
+    }
+
+    private void WorldStep(Vector2 pPos, float pr) {
+        if (_world == null) return;
+        _streamTimer -= Time.fixedDeltaTime;
+        if (_streamTimer <= 0f) { _streamTimer = 0.25f; StreamCreatures(false); }
+        int reg = _world.Reveal(pPos, RevealRadius);
+        if (reg >= 0 && _visitedRegions.Add(reg)) {
+            Run.OnRegionEntered(reg);
+            var info = Run.World.Regions[reg];
+            if (info.Kind != RegionKind.Cavern && info.Kind != RegionKind.Start && !string.IsNullOrEmpty(info.Title))
+                _ui.Banner(info.Title, 2.6f);
+            else if (!string.IsNullOrEmpty(info.Title)) _ui.Flash(info.Title, 2f);
+        }
+        var altars = Run.World.Altars;
+        for (int i = 0; i < altars.Count; i++) {
+            if (Run.IsAltarUsed(i) || Vector2.Distance(pPos, ToV2(altars[i].Pos)) > pr + 0.8f) continue;
+            double before = Run.Mass;
+            Run.UseAltarAt(i);
+            ProceduralSfx.Instance?.Play("unlock");
+            GameFeel.Shake(0.25f);
+            if (altars[i].Kind == AltarKind.Spring)
+                GameFeel.Text(_player.transform.position, "+" + (Run.Mass - before).ToString("0.0") + " родник", new Color(0.5f, 0.85f, 1f), 1.2f);
+            else if (altars[i].Kind == AltarKind.Relic)
+                GameFeel.Text(_player.transform.position, "Реликвия! +15 эссенции", new Color(1f, 0.85f, 0.4f), 1.2f);
+            var c = _altarRings[i].color; c.a = 0.15f; _altarRings[i].color = c;
+        }
     }
 
     private static PhysicsMaterial2D _wallMat;
@@ -275,9 +385,11 @@ public sealed class RunGame : MonoBehaviour {
         return c;
     }
 
-    private void SpawnBoss(RoomPlan plan) {
+    private void SpawnBoss(RoomPlan plan) =>
+        SpawnBossAt(new Vec2(plan.ExitPos.X * 0.35, plan.ExitPos.Y * 0.35)); // ближе к центру, на пути к выходу
+
+    private void SpawnBossAt(Vec2 pos) {
         var sp = SpeciesCatalog.Get(BossState.SpeciesId);
-        var pos = new Vec2(plan.ExitPos.X * 0.35, plan.ExitPos.Y * 0.35); // ближе к центру, на пути к выходу
         var c = SpawnCreature(new SpawnSpec { SpeciesId = BossState.SpeciesId, Pos = pos, Mass = Run.Boss.Mass }, 9000);
         if (c == null) return;
         c.IsBoss = true;
@@ -597,7 +709,7 @@ public sealed class RunGame : MonoBehaviour {
         for (int i = _creatures.Count - 1; i >= 0; i--) {
             var c = _creatures[i];
             if (c == null) { _creatures.RemoveAt(i); continue; }
-            if (c.IsBoss) continue;
+            if (c.IsBoss || !c.gameObject.activeSelf) continue; // спящие далеко — не думают
             var rb = c.View.Rb;
             Vector2 d = pPos - rb.position;
             float dist = d.magnitude;
@@ -627,6 +739,7 @@ public sealed class RunGame : MonoBehaviour {
                 rb.linearVelocity += new Vector2((float)o.Direction.X, (float)o.Direction.Y) * (CreatureSpeed * (float)o.Strength01);
         }
         BossStep(dt, pPos);
+        WorldStep(pPos, pr);
         ZoneStep(dt, pPos, pr);
         ToxicStep(dt, pPos, pr);
         AltarStep(pPos, pr);
@@ -680,7 +793,7 @@ public sealed class RunGame : MonoBehaviour {
             if (o == null || o.Solid) continue;
             Vector2 d = pPos - (Vector2)o.transform.position;
             float dist = d.magnitude;
-            if (dist > o.Radius + pr * 0.5f) continue;
+            if (dist > o.Radius + pr * 0.5f) continue; // дёшево: одна дистанция на зону
             double perSec = ObstacleRules.ZoneMassPerSec(o.Kind, Run.Mass, Run.Mutations);
             if (perSec > 0) Run.Heal(perSec * dt);
             else if (perSec < 0) {
@@ -701,7 +814,7 @@ public sealed class RunGame : MonoBehaviour {
         Vector2 back = pPos - _player.Rb.linearVelocity.normalized * (pr + 0.6f);
         for (int i = _creatures.Count - 1; i >= 0; i--) {
             var c = _creatures[i];
-            if (c.IsFood || c.IsBoss || Vector2.Distance(back, c.View.Rb.position) > c.Radius + 0.7f) continue;
+            if (c.IsFood || c.IsBoss || !c.gameObject.activeSelf || Vector2.Distance(back, c.View.Rb.position) > c.Radius + 0.7f) continue;
             c.Mass -= tox * dt;
             if (c.Mass < 0.35) KillCreature(c); else c.ApplySize();
         }
@@ -727,6 +840,10 @@ public sealed class RunGame : MonoBehaviour {
         var biome = Run.Layout != null ? Run.Layout.Biome : null;
         _dark.Set((float)(biome != null ? biome.Darkness01 : Run.Room.Darkness01), (float)Run.Mutations.LightRadius);
         UpdateExitVisual();
+        if (_world != null) {
+            _miniTimer -= Time.unscaledDeltaTime;
+            if (_miniTimer <= 0f) { _miniTimer = 0.2f; _world.FlushMini(); }
+        }
         UpdateEcho();
         UpdateShockwave();
         if (Run.IsDead) { EndRun(); return; }
@@ -786,6 +903,11 @@ public sealed class RunGame : MonoBehaviour {
                 Vector2 dir = (ToV2(Run.Room.ExitPos) - p).normalized;
                 _exitPointer.transform.position = p + dir * (PlayerRadius + 0.55f);
             }
+        }
+        for (int i = 0; i < _altarRings.Count; i++) {
+            if (_altarRings[i] == null || Run.IsAltarUsed(i)) continue;
+            float s2 = 1.4f + 0.15f * pulse;
+            _altarRings[i].transform.localScale = new Vector3(s2, s2, 1f);
         }
         if (_altarRing != null && !Run.AltarUsed) {
             float s = 1.4f + 0.15f * pulse;

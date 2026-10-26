@@ -33,11 +33,13 @@ public sealed class RunUi : MonoBehaviour {
     private float _biomeTimer;
     private GameObject _titleModal, _infoModal;
     private Text _titleSoul, _infoTitle, _infoBody;
+    private RunMinimap _minimap;
 
     public bool ModalOpen => (_offerModal != null && _offerModal.activeSelf) ||
                              (_imprintModal != null && _imprintModal.activeSelf) ||
                              (_titleModal != null && _titleModal.activeSelf) ||
-                             (_infoModal != null && _infoModal.activeSelf);
+                             (_infoModal != null && _infoModal.activeSelf) ||
+                             (_minimap != null && _minimap.IsBig);
 
     public static RunUi Build(RunGame game) {
         var canvasGo = new GameObject("run_ui");
@@ -109,6 +111,12 @@ public sealed class RunUi : MonoBehaviour {
         }
     }
 
+    /// <summary>Миникарта открытого мира (создаётся один раз, привязывается к каждой новой глубине).</summary>
+    public void SetMinimap(WorldView view) {
+        if (_minimap == null) _minimap = RunMinimap.Build(_root, _game);
+        _minimap.Bind(view);
+    }
+
     /// <summary>Карточка новой глубины: «Глубина 2 · Тёплые тоннели» + подзаголовок.</summary>
     public void BiomeCard(int depth, string name, string subtitle, Color accent) {
         _biomeTitle.text = "Глубина " + depth + " · " + name;
@@ -160,8 +168,8 @@ public sealed class RunUi : MonoBehaviour {
                 float frac = Mathf.Clamp01((float)run.RoomAbsorbed / goal);
                 _goalFill.rectTransform.sizeDelta = new Vector2(Mathf.Max(16f, 660f * frac), 16f);
                 _goal.text = run.ExitOpen
-                    ? "Выход открыт — ищите светящуюся трещину"
-                    : string.Format("Поглощено {0:0.0} / {1:0.0}", run.RoomAbsorbed, goal);
+                    ? (run.OpenWorld ? "Шахта вниз открыта — следуйте за огоньком" : "Выход открыт — ищите светящуюся трещину")
+                    : string.Format(run.OpenWorld ? "Шахта откроется: {0:0.0} / {1:0.0}" : "Поглощено {0:0.0} / {1:0.0}", run.RoomAbsorbed, goal);
                 _goal.color = run.ExitOpen ? GameBootstrap.CFood : TextColor;
             }
         }

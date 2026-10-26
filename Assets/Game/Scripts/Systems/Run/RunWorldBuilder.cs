@@ -151,11 +151,11 @@ public static class RunWorldBuilder {
     }
 
     /// <summary>Алтарь святилища / родник: светящийся круг, к которому надо прикоснуться.</summary>
-    public static SpriteRenderer BuildAltar(Transform root, Vector2 pos, bool spring) {
-        var go = new GameObject(spring ? "spring" : "shrine");
+    public static SpriteRenderer BuildAltar(Transform root, Vector2 pos, bool spring, bool relic = false) {
+        var go = new GameObject(relic ? "relic" : spring ? "spring" : "shrine");
         go.transform.SetParent(root, false);
         go.transform.position = pos;
-        Color c = spring ? new Color(0.35f, 0.75f, 1f) : new Color(0.75f, 0.55f, 1f);
+        Color c = relic ? new Color(1f, 0.82f, 0.35f) : spring ? new Color(0.35f, 0.75f, 1f) : new Color(0.75f, 0.55f, 1f);
         SpriteUtil.AddSprite(go.transform, SpriteUtil.GlowSprite, 3.4f, 3.4f, new Color(c.r, c.g, c.b, 0.45f), DarknessMask.Order + 4);
         var ring = SpriteUtil.AddSprite(go.transform, SpriteUtil.RingSprite, 1.4f, 1.4f, c, DarknessMask.Order + 5);
         SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, 0.6f, 0.6f, Color.Lerp(c, Color.white, 0.5f), DarknessMask.Order + 5);
