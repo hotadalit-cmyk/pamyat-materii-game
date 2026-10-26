@@ -89,14 +89,19 @@ public sealed class WorldView {
                     c *= 0.58f + 0.42f * ao;
                     c = FloorDetail(bid, c, accent, tx, ty, n1, n2);
                 } else {
-                    if (Map.Cells[ci] == 1) ci = NearestWallCell(cx, cy, w, h, ci);
-                    int d = dist[ci] == 0 ? 1 : dist[ci];
-                    float depthK = Mathf.Clamp01((d - 1) / 3f + (-edgeT) * 0.6f); // 0 у кромки → 1 в толще
+                    // глубина в толще — билинейно по полю расстояний (без ступенек по клеткам)
+                    float dd = DistAt(dist, fx, fy, w, h);
+                    float depthK = Mathf.Clamp01((dd - 0.5f) / 3f + (-edgeT) * 0.6f); // 0 у кромки → 1 в толще
                     float strata = Mathf.Sin(ty * 0.11f + tx * 0.02f + n1 * 7f) * 0.5f + 0.5f;  // слои породы
                     c = Color.Lerp(wallC * 1.25f, wallC * 0.35f, depthK) * (0.78f + 0.18f * strata + 0.16f * n2);
                     if (depthK < 0.14f) c = Color.Lerp(c, accent, (0.14f - depthK) / 0.14f * (0.35f + 0.2f * n2)); // светящаяся кромка
-                    float ridge = 1f - Mathf.Abs(2f * Noise(tx * 0.07f + 31f, ty * 0.07f) - 1f);
-                    if (ridge > 0.93f) c = Color.Lerp(c, accent * 1.2f, (ridge - 0.93f) / 0.07f * (0.8f - 0.5f * depthK)); // жилы
+                    // жилы — не везде, а пятнами (маска крупного шума), тоньше и реже
+                    float veinMask = Noise(tx * 0.012f + 77f, ty * 0.012f);
+                    if (veinMask > 0.55f) {
+                        float ridge = 1f - Mathf.Abs(2f * Noise(tx * 0.06f + 31f, ty * 0.06f) - 1f);
+                        if (ridge > 0.965f)
+                            c = Color.Lerp(c, accent * 1.25f, (ridge - 0.965f) / 0.035f * (veinMask - 0.55f) * 2.2f * (0.9f - 0.5f * depthK));
+                    }
                 }
                 c.a = 1f;
                 px[ty * tw + tx] = c;
@@ -114,6 +119,13 @@ public sealed class WorldView {
     }
 
     private Color[] _cellTint;
+
+    private static float DistAt(byte[] dist, float fx, float fy, int w, int h) {
+        int x0 = Mathf.FloorToInt(fx), y0 = Mathf.FloorToInt(fy);
+        float tx = fx - x0, ty = fy - y0;
+        float D(int x, int y) { x = Mathf.Clamp(x, 0, w - 1); y = Mathf.Clamp(y, 0, h - 1); int v = dist[y * w + x]; return v > 4 ? 4 : v; }
+        return Mathf.Lerp(Mathf.Lerp(D(x0, y0), D(x0 + 1, y0), tx), Mathf.Lerp(D(x0, y0 + 1), D(x0 + 1, y0 + 1), tx), ty);
+    }
 
     /// <summary>Плавный оттенок пола: билинейно между центрами клеток (без «ступенек» на границах регионов).</summary>
     private Color TintAt(float fx, float fy, int w, int h) {
@@ -137,8 +149,6 @@ public sealed class WorldView {
     /// <summary>Фактура пола по биому: мох и споры, лавовые трещины, лужи, грани кристаллов, жилы сердца.</summary>
     private static Color FloorDetail(BiomeId b, Color c, Color accent, int tx, int ty, float n1, float n2) {
         // общая галька
-        float peb = Hash(tx / 3, ty / 3);
-        if (peb > 0.986f) c *= peb > 0.993f ? 1.25f : 0.7f;
         switch (b) {
             case BiomeId.Fungal: {
                 float moss = Noise(tx * 0.03f + 50f, ty * 0.03f);
