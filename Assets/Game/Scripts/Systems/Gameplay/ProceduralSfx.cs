@@ -44,7 +44,10 @@ public sealed class ProceduralSfx : MonoBehaviour {
     }
 
     public void Play(string key) {
-        if (_clips.TryGetValue(key, out var c) && _src != null) _src.PlayOneShot(c);
+        if (_src == null) return;
+        var real = ThirdPartyArt.Sfx(key);              // записанные звуки Kenney (CC0), если есть
+        if (real != null) { _src.PlayOneShot(real, 0.9f); return; }
+        if (_clips.TryGetValue(key, out var c)) _src.PlayOneShot(c);
     }
 
     public static float CurrentVolume() => PlayerPrefs.GetFloat(PrefKey, 0.8f);

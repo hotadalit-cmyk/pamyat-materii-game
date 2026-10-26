@@ -171,6 +171,8 @@ public sealed class RunSettingsUi : MonoBehaviour {
         img.sprite = SpriteUtil.UiRoundedSprite; img.type = Image.Type.Sliced; img.color = c;
         var b = go.AddComponent<Button>();
         b.targetGraphic = img;
+        if (ThirdPartyArt.Button != null) img.sprite = ThirdPartyArt.Button;
+        b.onClick.AddListener(() => ProceduralSfx.Instance?.Play("click"));
         var t = UiUtil.AddText(rt, label, 26, TextAnchor.MiddleCenter, TextC);
         t.rectTransform.sizeDelta = size - new Vector2(12, 6);
         t.raycastTarget = false;

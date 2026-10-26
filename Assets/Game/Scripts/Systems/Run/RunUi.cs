@@ -453,6 +453,8 @@ public sealed class RunUi : MonoBehaviour {
         var rt = Box(parent, name, pos, size, new Color(color.r, color.g, color.b, alpha), new Vector2(0.5f, 0.5f));
         var btn = rt.gameObject.AddComponent<Button>();
         btn.targetGraphic = rt.GetComponent<Image>();
+        if (ThirdPartyArt.Button != null && !string.IsNullOrEmpty(label)) rt.GetComponent<Image>().sprite = ThirdPartyArt.Button;
+        btn.onClick.AddListener(() => ProceduralSfx.Instance?.Play("click"));
         var t = UiUtil.AddText(rt, label, labelSize, TextAnchor.MiddleCenter, TextColor);
         t.rectTransform.sizeDelta = size - new Vector2(24, 12);
         return rt.gameObject;

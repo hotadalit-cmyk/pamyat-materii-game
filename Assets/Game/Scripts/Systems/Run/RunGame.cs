@@ -78,6 +78,7 @@ public sealed partial class RunGame : MonoBehaviour {
         splash.transform.SetParent(transform, false);
         splash.AddComponent<SplashBurst2D>();
         GameFeel.Create(transform);
+        SetupLightAndMusic();
         _dark = DarknessMask.Create(transform);
         _ui = RunUi.Build(this);
         // первая комната строится сразу — за титулом видна живая пещера
@@ -264,6 +265,7 @@ public sealed partial class RunGame : MonoBehaviour {
         var biome = layout != null && layout.Biome != null ? layout.Biome : BiomeCatalog.ForDepth(plan.Depth);
         _builtRoomKey = plan.Depth * 100 + plan.RoomIndex;
         _world = new WorldView(map, _roomRoot, biome, WallMaterial);
+        PlayMusicForDepth(plan.Depth);
         if (Camera.main != null) Camera.main.backgroundColor = RunWorldBuilder.Hex(biome.WallColor) * 0.3f;
         for (int i = 0; i < map.Obstacles.Count; i++)
             _obstacles.Add(RunWorldBuilder.BuildObstacle(_roomRoot, map.Obstacles[i], biome));
@@ -355,6 +357,8 @@ public sealed partial class RunGame : MonoBehaviour {
         if (sp.ColorIndex == 3 && string.IsNullOrEmpty(spec.SoulName))
             spec.SoulName = Meta.Nemeses.PickSoulName(_rng); // у каждой души есть имя — иначе не станет немезидой
         var traits = SpeciesTraitsCatalog.Get(sp.Id);
+        MonsterModel pendingModel = null;
+        SpriteRenderer pendingRing = null;
         bool food = sp.Behavior == CreatureBehavior.Food;
         float r = (float)SizeRule.RadiusForMass(spec.Mass);
         var view = SimEntityView2D.Create(_roomRoot, sp.Id + "_" + index,
@@ -376,11 +380,25 @@ public sealed partial class RunGame : MonoBehaviour {
             view.Body.sortingOrder = 6;
             VisualFactory.DecorateBeetle(view);
         }
+        if (!food) {
+            // 3D-модель вместо круга: объёмное существо с анимацией (вид 3/4 сверху)
+            string modelKey = spec.IsNemesis ? "nemesis" : sp.Id;
+            bool tint = spec.IsNemesis || sp.Id == "bubble_jelly" || sp.Id == "shard_crab" || sp.Id == "leech" || sp.Id == "wisp";
+            var mm = ThirdPartyArt.Attach(view.transform, modelKey, r * 2f, ColorFor(sp, spec.IsNemesis), tint);
+            if (mm != null) {
+                view.Body.gameObject.SetActive(false);
+                pendingModel = mm;
+            }
+            // кольцо под существом — сразу видно, кого можно съесть
+            pendingRing = SpriteUtil.AddSprite(view.transform, SpriteUtil.RingSprite, r * 2.5f, r * 2.5f, new Color(1, 1, 1, 0.25f), 5);
+        }
         if (!food && traits.Glows) {
             var g = ColorFor(sp, false); g.a = 0.5f;
             SpriteUtil.AddSprite(view.transform, SpriteUtil.GlowSprite, r * 4f, r * 4f, g, DarknessMask.Order + 1);
         }
         var c = view.gameObject.AddComponent<RunCreature>();
+        c.Model = pendingModel;
+        c.Ring = pendingRing;
         c.IsNemesis = spec.IsNemesis;
         c.SoulName = spec.SoulName;
         c.Traits = traits;
@@ -437,7 +455,7 @@ public sealed partial class RunGame : MonoBehaviour {
         tm.characterSize = 0.07f;
         tm.anchor = TextAnchor.LowerCenter;
         tm.color = color;
-        var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        var font = ThirdPartyArt.Body != null ? ThirdPartyArt.Body : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         tm.font = font;
         var mr = go.GetComponent<MeshRenderer>();
         mr.sharedMaterial = font.material;
@@ -590,6 +608,7 @@ public sealed partial class RunGame : MonoBehaviour {
             } else lossB *= 1.0 + Run.Mutations.RicochetBonus * _ricochets;
         }
         if (lossB > 0) {
+            c.Model?.Flinch();
             c.Mass -= lossB;
             Run.OnHit(lossB);
             if (Run.Mutations.LifestealFrac > 0) Run.OnLifesteal(lossB);
@@ -889,6 +908,7 @@ public sealed partial class RunGame : MonoBehaviour {
             if (_miniTimer <= 0f) { _miniTimer = 0.2f; _world.FlushMini(); }
         }
         UpdateEcho();
+        UpdateRings();
         UpdateShockwave();
         if (Run.IsDead) { EndRun(); return; }
         if (Run.PendingOffer != null && !_offerShown) {
@@ -907,6 +927,54 @@ public sealed partial class RunGame : MonoBehaviour {
         }
         // защита: план комнаты сменился не через выход (не должно случаться) — пересобрать
         if (Run.Room != null && Run.Room.Depth * 100 + Run.Room.RoomIndex != _builtRoomKey) BuildRoom();
+    }
+
+    /// <summary>Кольца: зелёное — ближайший фрагмент может съесть существо, красное — существо съест его.</summary>
+    private void UpdateRings() {
+        for (int i = 0; i < _creatures.Count; i++) {
+            var c = _creatures[i];
+            if (c == null || c.Ring == null || !c.gameObject.activeSelf) continue;
+            var fv = NearestFragment(c.transform.position, out float d);
+            if (fv == null) continue;
+            double fm = Run.FragmentMass(fv.Id);
+            Color col;
+            if (fm >= c.Mass * Run.Mutations.AbsorbRatio) col = new Color(0.4f, 1f, 0.5f, 0.7f);
+            else if (c.Mass >= fm * 1.25 || c.IsBoss) col = new Color(1f, 0.35f, 0.3f, 0.75f);
+            else col = new Color(1f, 0.85f, 0.4f, 0.45f);
+            c.Ring.color = col;
+        }
+    }
+
+    private AudioSource _music;
+    private string _musicName;
+
+    /// <summary>Свет для 3D-моделей (тёплый, сверху-сбоку) и фоновая музыка пещеры.</summary>
+    private void SetupLightAndMusic() {
+        var lightGo = new GameObject("sun");
+        lightGo.transform.SetParent(transform, false);
+        var l = lightGo.AddComponent<Light>();
+        l.type = LightType.Directional;
+        l.color = new Color(1f, 0.95f, 0.86f);
+        l.intensity = 1.15f;
+        l.shadows = LightShadows.None;
+        lightGo.transform.rotation = Quaternion.LookRotation(new Vector3(0.35f, -0.55f, 1f));
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+        RenderSettings.ambientLight = new Color(0.5f, 0.5f, 0.6f);
+        _music = gameObject.AddComponent<AudioSource>();
+        _music.loop = true;
+        _music.playOnAwake = false;
+        _music.volume = 0.45f;
+    }
+
+    private void PlayMusicForDepth(int depth) {
+        if (_music == null) return;
+        string name = depth <= 2 ? "cavern" : "dungeon";
+        if (name == _musicName && _music.isPlaying) return;
+        var clip = ThirdPartyArt.Music(name);
+        if (clip == null) return;
+        _musicName = name;
+        _music.clip = clip;
+        _music.Play();
     }
 
     private void UpdateEcho() {

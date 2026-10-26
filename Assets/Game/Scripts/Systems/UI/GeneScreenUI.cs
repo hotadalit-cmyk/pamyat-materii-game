@@ -164,7 +164,9 @@ public static class UiUtil {
         var go = new GameObject("text");
         go.transform.SetParent(parent, false);
         var t = go.AddComponent<Text>();
-        t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        // Rubik для текста, Russo One для крупных заголовков (OFL); встроенный — запасной
+        var f = size >= 36 ? PM.Systems.Gameplay.ThirdPartyArt.Title : PM.Systems.Gameplay.ThirdPartyArt.Body;
+        t.font = f != null ? f : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         t.fontSize = size;
         t.alignment = anchor;
         t.color = color ?? new Color(0.92f, 0.96f, 1f);

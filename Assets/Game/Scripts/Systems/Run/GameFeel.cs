@@ -26,7 +26,7 @@ public sealed class GameFeel : MonoBehaviour {
         var f = go.AddComponent<GameFeel>();
         Instance = f;
         f._seed = Random.value * 100f;
-        var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        var font = ThirdPartyArt.Title != null ? ThirdPartyArt.Title : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         for (int i = 0; i < PoolSize; i++) {
             var p = new GameObject("popup");
             p.transform.SetParent(go.transform, false);

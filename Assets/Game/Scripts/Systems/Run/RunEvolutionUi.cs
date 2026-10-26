@@ -62,8 +62,9 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         for (int i = 0; i < ResourceInfo.Count; i++) {
             var k = (ResourceKind)i;
             int col = i % 3, row = i / 3;
-            var dot = Box(bar, "dot" + i, new Vector2(22 + col * 180, -18 - row * 48), new Vector2(26, 26), Hex(ResourceInfo.Color(k)), new Vector2(0, 1));
-            dot.GetComponent<Image>().sprite = SpriteUtil.UiCircleSprite;
+            var dot = Box(bar, "dot" + i, new Vector2(18 + col * 180, -12 - row * 48), new Vector2(36, 36), Hex(ResourceInfo.Color(k)), new Vector2(0, 1));
+            var ic = ThirdPartyArt.Icon(ResourceIcon(k));
+            dot.GetComponent<Image>().sprite = ic != null ? ic : SpriteUtil.UiCircleSprite;
             dot.GetComponent<Image>().type = Image.Type.Simple;
             _resText[i] = Label(bar, "0", 26, TextAnchor.MiddleLeft, new Vector2(56 + col * 180, -12 - row * 48), new Vector2(124, 38), new Vector2(0, 1));
         }
@@ -259,6 +260,19 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         var outline = card.AddComponent<Outline>();
         outline.effectColor = n.Id == _selected ? new Color(1f, 1f, 1f, 0.95f) : avail != 0 ? hl : new Color(0, 0, 0, 0);
         outline.effectDistance = avail != 0 || n.Id == _selected ? new Vector2(4, -4) : new Vector2(3, -3);
+        var nodeIcon = ThirdPartyArt.Icon(NodeIcon(n));
+        if (nodeIcon != null) {
+            var ig = new GameObject("icon");
+            ig.transform.SetParent(card.transform, false);
+            var irt = ig.AddComponent<RectTransform>();
+            irt.anchorMin = irt.anchorMax = irt.pivot = new Vector2(0.5f, 0.5f);
+            irt.anchoredPosition = new Vector2(0, 2);
+            irt.sizeDelta = new Vector2(54, 54);
+            var iimg = ig.AddComponent<Image>();
+            iimg.sprite = nodeIcon;
+            iimg.raycastTarget = false;
+            iimg.color = owned ? Color.white : avail != 0 ? new Color(bc.r * 0.6f + 0.4f, bc.g * 0.6f + 0.4f, bc.b * 0.6f + 0.4f) : new Color(1, 1, 1, 0.3f);
+        }
         if (avail != 0) {
             var tag = Label(card.transform, avail == 2 ? "ЖЕТОН" : "МОЖНО", 18, TextAnchor.UpperLeft, new Vector2(10, -4), new Vector2(110, 26), new Vector2(0, 1));
             tag.color = hl;
@@ -303,6 +317,56 @@ public sealed class RunEvolutionUi : MonoBehaviour {
             ProceduralSfx.Instance?.Play("unlock");
             RefreshEvolution();
         } else ProceduralSfx.Instance?.Play("hit");
+    }
+
+    /// <summary>Иконка ресурса (game-icons.net, CC BY 3.0 — Lorc).</summary>
+    public static string ResourceIcon(ResourceKind k) {
+        switch (k) {
+            case ResourceKind.Organic: return "lorc_leaf-swirl";
+            case ResourceKind.Chitin: return "lorc_beetle-shell";
+            case ResourceKind.Slime: return "lorc_drop";
+            case ResourceKind.Crystal: return "lorc_crystal-cluster";
+            case ResourceKind.Ember: return "lorc_fire-ray";
+            default: return "lorc_brain";
+        }
+    }
+
+    /// <summary>Иконка узла: по мутации, иначе по виду эффекта, иначе по ветви.</summary>
+    private static string NodeIcon(EvoNode n) {
+        if (n.Effects != null && n.Effects.Length > 0) {
+            var e = n.Effects[0];
+            if (e.Kind == EvoEffectKind.Mutation) {
+                switch (e.MutationId) {
+                    case "m_spikes": return "lorc_spiked-shell";
+                    case "m_shell": return "lorc_checked-shield";
+                    case "m_sticky": return "lorc_gooey-molecule";
+                    case "m_dash2": return "lorc_sprint";
+                    case "m_magnet": return "lorc_magnet";
+                    case "m_eyes": return "lorc_semi-closed-eye";
+                    case "m_toxic": return "lorc_biohazard";
+                    case "m_light": return "lorc_fluffy-wing";
+                    case "m_regrow": return "lorc_heart-organ";
+                    case "m_hunger": return "lorc_meat";
+                    case "m_crystal": return "lorc_crystal-growth";
+                    case "m_heatproof": return "lorc_heat-haze";
+                    case "m_vampire": return "lorc_claw-slashes";
+                    case "m_ricochet": return "lorc_divert";
+                    case "m_echo": return "lorc_bubbles";
+                }
+            }
+            switch (e.Kind) {
+                case EvoEffectKind.MaxDash: case EvoEffectKind.DashSpeedMult: return "lorc_sprint";
+                case EvoEffectKind.MaxFragments: case EvoEffectKind.SplitMinMass: return "lorc_split-cross";
+                case EvoEffectKind.StorageCap: return "lorc_scroll-unfurled";
+                case EvoEffectKind.LightFlat: return "lorc_light-bulb";
+                case EvoEffectKind.MassGainMult: return "delapouite_slime";
+                case EvoEffectKind.YieldMult: return "lorc_emerald";
+                case EvoEffectKind.RegenFlat: return "lorc_heart-organ";
+                case EvoEffectKind.DamageTakenMult: return "lorc_checked-shield";
+                case EvoEffectKind.PullFlat: return "lorc_magnet";
+            }
+        }
+        return "lorc_dna1";
     }
 
     private static string GeneName(string speciesId) {
@@ -423,6 +487,8 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         if (center) rt.pivot = new Vector2(0.5f, 0.5f);
         var btn = rt.gameObject.AddComponent<Button>();
         btn.targetGraphic = rt.GetComponent<Image>();
+        if (ThirdPartyArt.Button != null && !string.IsNullOrEmpty(label)) rt.GetComponent<Image>().sprite = ThirdPartyArt.Button;
+        btn.onClick.AddListener(() => ProceduralSfx.Instance?.Play("click"));
         if (!string.IsNullOrEmpty(label)) {
             var t = UiUtil.AddText(rt, label, labelSize, TextAnchor.MiddleCenter, TextC);
             t.rectTransform.sizeDelta = size - new Vector2(16, 8);

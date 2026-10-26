@@ -18,6 +18,8 @@ public sealed class RunCreature : MonoBehaviour {
     public SpeciesTraits Traits;      // броня, деление, пиявка, свечение (v0.5)
     public bool IsBoss;               // Страж глубины: масса и фазы — в RunState.Boss
     public SpriteRenderer EchoDot;    // метка эхолокации поверх тьмы (m_echo)
+    public MonsterModel Model;        // 3D-модель (Quaternius, CC0), если есть
+    public SpriteRenderer Ring;       // кольцо: зелёное — можно съесть, красное — опасен
     public bool IsFood => Species == null || Species.Behavior == CreatureBehavior.Food;
     /// <summary>Источник урона для «Отпечатка жизни»: имя души или id вида.</summary>
     public string SourceId => IsNemesis || !string.IsNullOrEmpty(SoulName) ? SoulName : Species?.Id;

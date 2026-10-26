@@ -39,7 +39,7 @@ public sealed class DarknessMask : MonoBehaviour {
     void LateUpdate() {
         if (Follow != null) {
             var p = Follow.position;
-            transform.position = new Vector3(p.x, p.y, 0f);
+            transform.position = new Vector3(p.x, p.y, -3f); // перед 3D-моделями (z≈-0.6), за ними — камера
         }
         float k = 1f - Mathf.Exp(-4f * Time.unscaledDeltaTime);
         _radius = Mathf.Lerp(_radius, _targetRadius, k);
