@@ -299,13 +299,13 @@ public sealed class RunCodexUi : MonoBehaviour {
         rt.anchorMin = rt.anchorMax = rt.pivot = anchor;
         rt.anchoredPosition = pos; rt.sizeDelta = size;
         var img = go.AddComponent<Image>();
-        img.sprite = SpriteUtil.UiRoundedSprite; img.type = Image.Type.Sliced; img.color = c;
+        UiSkin.Box(img, c, size);
         return rt;
     }
 
     private static Button Btn(Transform parent, string label, Vector2 pos, Vector2 size, Color c, Vector2 anchor, int font) {
         var rt = Box(parent, "btn", pos, size, new Color(c.r, c.g, c.b, 0.9f), anchor);
-        if (ThirdPartyArt.Button != null) rt.GetComponent<Image>().sprite = ThirdPartyArt.Button;
+        UiSkin.AsPill(rt.GetComponent<Image>(), new Color(c.r, c.g, c.b, 0.95f));
         var b = rt.gameObject.AddComponent<Button>();
         b.targetGraphic = rt.GetComponent<Image>();
         b.onClick.AddListener(() => ProceduralSfx.Instance?.Play("click"));

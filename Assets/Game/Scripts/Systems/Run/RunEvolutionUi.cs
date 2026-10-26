@@ -21,8 +21,7 @@ public sealed class RunEvolutionUi : MonoBehaviour {
     private Transform _root;
     // HUD
     private readonly Text[] _resText = new Text[ResourceInfo.Count];
-    private Text _evoBadge;
-    private Image _evoBtnImg;
+    private SkillButton _evoBtn, _statsBtn;   // круглые кнопки слева
     // экран эволюции
     private GameObject _evoModal;
     private EvoBranch _branch = EvoBranch.Body;
@@ -38,8 +37,8 @@ public sealed class RunEvolutionUi : MonoBehaviour {
     private GameObject _statsModal;
     private Transform _statsList;
     private int _statsTab;                 // 0 — прокачка, 1 — итоги с разбором источников
-    private Text _statsHint, _statsStore, _statsBadge;
-    private Image _tabTrain, _tabSum, _statsBtnImg;
+    private Text _statsHint, _statsStore;
+    private Image _tabTrain, _tabSum;
     private string _expanded;
     private float _hudTimer;
 
@@ -61,31 +60,29 @@ public sealed class RunEvolutionUi : MonoBehaviour {
 
     // ================= HUD: хранилище + кнопки =================
     private void BuildHud() {
-        var bar = Box(_root, "resources", new Vector2(28, -232), new Vector2(560, 116), Panel, new Vector2(0, 1));
+        // ресурсы — под миникартой (слева вверху), компактно в три столбца
+        var bar = Box(_root, "resources", new Vector2(28, -300), new Vector2(380, 116), Panel, new Vector2(0, 1));
         for (int i = 0; i < ResourceInfo.Count; i++) {
             var k = (ResourceKind)i;
             int col = i % 3, row = i / 3;
-            var dot = Box(bar, "dot" + i, new Vector2(18 + col * 180, -12 - row * 48), new Vector2(36, 36), Hex(ResourceInfo.Color(k)), new Vector2(0, 1));
+            var dot = Box(bar, "dot" + i, new Vector2(16 + col * 122, -14 - row * 46), new Vector2(34, 34), Hex(ResourceInfo.Color(k)), new Vector2(0, 1));
             var ic = ThirdPartyArt.Icon(ResourceIcon(k));
             dot.GetComponent<Image>().sprite = ic != null ? ic : SpriteUtil.UiCircleSprite;
             dot.GetComponent<Image>().type = Image.Type.Simple;
-            _resText[i] = Label(bar, "0", 26, TextAnchor.MiddleLeft, new Vector2(56 + col * 180, -12 - row * 48), new Vector2(124, 38), new Vector2(0, 1));
+            _resText[i] = Label(bar, "0", 25, TextAnchor.MiddleLeft, new Vector2(54 + col * 122, -12 - row * 46), new Vector2(76, 38), new Vector2(0, 1));
         }
         // нажатие на хранилище — открыть эволюцию
         var barBtn = bar.gameObject.AddComponent<Button>();
         barBtn.targetGraphic = bar.GetComponent<Image>();
         barBtn.onClick.AddListener(OpenEvolution);
 
-        var evo = MakeButton(_root, "evo_btn", new Vector2(28, -362), new Vector2(270, 96), GameBootstrap.CSoul, 0.85f, "Эволюция", 30, new Vector2(0, 1));
-        evo.GetComponent<Button>().onClick.AddListener(OpenEvolution);
-        _evoBtnImg = evo.GetComponent<Image>();
-        _evoBadge = Label(evo.transform, "", 24, TextAnchor.MiddleCenter, new Vector2(-6, -6), new Vector2(60, 40), new Vector2(1, 1));
-        _evoBadge.color = new Color(1f, 0.9f, 0.4f);
-        var stats = MakeButton(_root, "stats_btn", new Vector2(318, -362), new Vector2(270, 96), GameBootstrap.CSlime, 0.75f, "Показатели", 30, new Vector2(0, 1));
-        stats.GetComponent<Button>().onClick.AddListener(OpenStats);
-        _statsBtnImg = stats.GetComponent<Image>();
-        _statsBadge = Label(stats.transform, "", 24, TextAnchor.MiddleCenter, new Vector2(-6, -6), new Vector2(60, 40), new Vector2(1, 1));
-        _statsBadge.color = new Color(1f, 0.9f, 0.4f);
+        // круглые кнопки слева (как «магазин» в MOBA): значок — сколько можно развить сейчас
+        _evoBtn = SkillButton.Create(_root, "evo_btn", 128, GameBootstrap.CSoul, "lorc_dna1", "Эволюция");
+        Corner(_evoBtn.Rt, new Vector2(0, 1), new Vector2(110, -510));
+        _evoBtn.OnPress = () => { ProceduralSfx.Instance?.Play("click"); OpenEvolution(); };
+        _statsBtn = SkillButton.Create(_root, "stats_btn", 128, GameBootstrap.CSlime, "lorc_scroll-unfurled", "Показатели");
+        Corner(_statsBtn.Rt, new Vector2(0, 1), new Vector2(290, -510));
+        _statsBtn.OnPress = () => { ProceduralSfx.Instance?.Play("click"); OpenStats(); };
     }
 
     /// <summary>Сколько показателей можно поднять прямо сейчас.</summary>
@@ -106,14 +103,12 @@ public sealed class RunEvolutionUi : MonoBehaviour {
             _resText[i].text = v >= run.Resources.Capacity - 0.01 ? Mathf.FloorToInt((float)v) + " макс" : Mathf.FloorToInt((float)v).ToString();
         }
         int avail = CountAvailable(run);
-        _evoBadge.text = avail > 0 ? avail.ToString() : (run.Evolution.FreeTokens > 0 ? "!" : "");
-        float pulse = avail > 0 || run.Evolution.FreeTokens > 0 ? 0.75f + 0.25f * Mathf.Sin(Time.unscaledTime * 5f) : 0.55f;
-        _evoBtnImg.color = new Color(GameBootstrap.CSoul.r, GameBootstrap.CSoul.g, GameBootstrap.CSoul.b, pulse);
+        _evoBtn.SetBadge(avail > 0 ? avail.ToString() : (run.Evolution.FreeTokens > 0 ? "!" : ""));
+        _evoBtn.SetState(avail > 0 || run.Evolution.FreeTokens > 0);
         if (_evoModal.activeSelf) RefreshStore();
         int train = CountTrainable(run);
-        _statsBadge.text = train > 0 ? train.ToString() : "";
-        float sp = train > 0 ? 0.6f + 0.25f * Mathf.Sin(Time.unscaledTime * 5f + 1f) : 0.75f;
-        _statsBtnImg.color = new Color(GameBootstrap.CSlime.r, GameBootstrap.CSlime.g, GameBootstrap.CSlime.b, sp);
+        _statsBtn.SetBadge(train > 0 ? train.ToString() : "");
+        _statsBtn.SetState(train > 0);
     }
 
     private static int CountAvailable(RunState run) {
@@ -600,6 +595,13 @@ public sealed class RunEvolutionUi : MonoBehaviour {
     /// <summary>Доли (0.08) показываем процентами, плоские величины — как есть.</summary>
     private static float Pct(TrainDef d) => d.UnitFormat.Contains("%") ? 100f : 1f;
 
+    /// <summary>Поставить круглую кнопку по центру точки pos относительно угла anchor.</summary>
+    public static void Corner(RectTransform rt, Vector2 anchor, Vector2 pos) {
+        rt.anchorMin = rt.anchorMax = anchor;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = pos;
+    }
+
     // ================= Строители =================
     public static Color Hex(uint rgb) => new Color(((rgb >> 16) & 0xFF) / 255f, ((rgb >> 8) & 0xFF) / 255f, (rgb & 0xFF) / 255f, 1f);
 
@@ -620,9 +622,7 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         rt.anchorMin = anchor; rt.anchorMax = anchor; rt.pivot = anchor;
         rt.sizeDelta = size; rt.anchoredPosition = pos;
         var img = go.AddComponent<Image>();
-        img.sprite = SpriteUtil.UiRoundedSprite;
-        img.type = Image.Type.Sliced;
-        img.color = color;
+        UiSkin.Box(img, color, size);
         return rt;
     }
 
@@ -632,7 +632,8 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         if (center) rt.pivot = new Vector2(0.5f, 0.5f);
         var btn = rt.gameObject.AddComponent<Button>();
         btn.targetGraphic = rt.GetComponent<Image>();
-        if (ThirdPartyArt.Button != null && !string.IsNullOrEmpty(label)) rt.GetComponent<Image>().sprite = ThirdPartyArt.Button;
+        if (!string.IsNullOrEmpty(label)) UiSkin.AsPill(rt.GetComponent<Image>(), new Color(color.r, color.g, color.b, Mathf.Max(alpha, 0.85f)));
+        else if (rt.GetComponent<UiPressFx>() == null) rt.gameObject.AddComponent<UiPressFx>();
         btn.onClick.AddListener(() => ProceduralSfx.Instance?.Play("click"));
         if (!string.IsNullOrEmpty(label)) {
             var t = UiUtil.AddText(rt, label, labelSize, TextAnchor.MiddleCenter, TextC);

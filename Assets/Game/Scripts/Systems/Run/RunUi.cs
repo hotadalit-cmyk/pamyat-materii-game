@@ -40,12 +40,8 @@ public sealed class RunUi : MonoBehaviour {
     private RunSettingsUi _settings;
     private RunCodexUi _codex;
     public RunCodexUi Codex => _codex;
-    private RectTransform _splitRt, _gatherRt;
-    private Image _splitBtn, _gatherBtn;
-    private Text _splitLabel, _gatherLabel;
-    private RectTransform _dashRt, _soulRt;
-    private Text _dashLabel;
-    private Image _dashFill, _dashImg;
+    // умения справа внизу и круглые кнопки сверху (раскладка в духе MOBA, v0.9)
+    private SkillButton _skDash, _skSplit, _skGather, _skSoul, _skMenu, _skBook;
     private GameObject _pauseModal;
     private RawImage _vignette;
     private float _hurtT;
@@ -80,12 +76,16 @@ public sealed class RunUi : MonoBehaviour {
         ui.BuildImprint();
         ui._evo = RunEvolutionUi.Build(ui._root, game);
         ui._settings = RunSettingsUi.Build(ui._root, game);
-        // «Меню» — одна кнопка слева от миникарты: пауза, энциклопедия, настройки (v0.9)
-        var menu = Button(ui._root, "menu_btn", Vector2.zero, new Vector2(180, 80), GameBootstrap.COutline, 0.45f, "Меню", 28);
-        var menuRt = (RectTransform)menu.transform;
-        menuRt.anchorMin = menuRt.anchorMax = menuRt.pivot = new Vector2(1, 1);
-        menuRt.anchoredPosition = new Vector2(-480, -28);
-        menu.GetComponent<Button>().onClick.AddListener(() => { if (!ui.ModalOpen) ui.OpenPause(); });
+        // круглые «Меню» и «Знания» в правом верхнем углу
+        ui._skMenu = SkillButton.Create(ui._root, "menu_btn", 100, GameBootstrap.COutline, "", "Меню");
+        ui._skMenu.SetCenter("II");
+        ui._skMenu.NoGlow = true;
+        RunEvolutionUi.Corner(ui._skMenu.Rt, new Vector2(1, 1), new Vector2(-84, -72));
+        ui._skMenu.OnPress = () => { ProceduralSfx.Instance?.Play("click"); if (!ui.ModalOpen) ui.OpenPause(); };
+        ui._skBook = SkillButton.Create(ui._root, "codex_btn", 100, GameBootstrap.CSoul, "lorc_light-bulb", "Знания");
+        ui._skBook.NoGlow = true;
+        RunEvolutionUi.Corner(ui._skBook.Rt, new Vector2(1, 1), new Vector2(-214, -72));
+        ui._skBook.OnPress = () => { ProceduralSfx.Instance?.Play("click"); if (!ui.ModalOpen) ui._codex.Open(); };
         ui._codex = RunCodexUi.Build(ui._root, game);
         ui.BuildPause();
         ui.BuildVignette();
@@ -97,19 +97,24 @@ public sealed class RunUi : MonoBehaviour {
 
     // ---------- HUD ----------
     private void BuildHud() {
-        var top = Box(_root, "status", new Vector2(28, -28), new Vector2(560, 196), Panel, new Vector2(0, 1));
-        _mass = Label(top, "Масса 4.0", 40, TextAnchor.MiddleLeft, new Vector2(30, -22), new Vector2(500, 52), new Vector2(0, 1));
+        // сводка по центру сверху (как счёт и таймер в MOBA): масса · путь к шахте · глубина
+        var top = Box(_root, "topbar", new Vector2(0, -18), new Vector2(1060, 112), Panel, new Vector2(0.5f, 1));
+        _mass = Label(top, "Масса 4.0", 36, TextAnchor.MiddleLeft, new Vector2(28, -10), new Vector2(320, 50), new Vector2(0, 1));
         for (int i = 0; i < 4; i++) {
-            var dot = Box(top, "dash" + i, new Vector2(34 + i * 46, -92), new Vector2(34, 34), GameBootstrap.CSlime, new Vector2(0, 1));
+            var dot = Box(top, "dash" + i, new Vector2(32 + i * 32, -70), new Vector2(22, 22), GameBootstrap.CSlime, new Vector2(0, 1));
             var img = dot.GetComponent<Image>();
             img.sprite = SpriteUtil.UiCircleSprite;
             img.type = Image.Type.Simple;
             _dashDots.Add(img);
         }
-        _depth = Label(top, "Глубина 1 · 1/3", 28, TextAnchor.MiddleLeft, new Vector2(30, -140), new Vector2(500, 40), new Vector2(0, 1));
-        _combo = Label(top, "", 34, TextAnchor.MiddleRight, new Vector2(-30, -22), new Vector2(260, 52), new Vector2(1, 1));
+        _depth = Label(top, "Глубина 1", 24, TextAnchor.MiddleRight, new Vector2(-26, -12), new Vector2(300, 88), new Vector2(1, 1));
+        var fillBg = Box(top, "goal_bg", new Vector2(0, 24), new Vector2(400, 16), new Color(1, 1, 1, 0.1f), new Vector2(0.5f, 0));
+        var fillGo = Box(fillBg, "goal_fill", Vector2.zero, new Vector2(400, 16), GameBootstrap.CFood, new Vector2(0, 0.5f));
+        _goalFill = fillGo.GetComponent<Image>(); // ширина = прогресс (Filled без спрайта не режется)
+        _goal = Label(top, "", 24, TextAnchor.MiddleCenter, new Vector2(0, -14), new Vector2(420, 40), new Vector2(0.5f, 1));
+        _combo = Label(_root, "", 40, TextAnchor.MiddleCenter, new Vector2(0, -140), new Vector2(600, 54), new Vector2(0.5f, 1));
         _combo.color = new Color(1f, 0.9f, 0.4f);
-        _mutations = Label(_root, "", 22, TextAnchor.UpperLeft, new Vector2(40, -470), new Vector2(700, 120), new Vector2(0, 1));
+        _mutations = Label(_root, "", 22, TextAnchor.UpperCenter, new Vector2(0, -190), new Vector2(1000, 60), new Vector2(0.5f, 1));
         _mutations.color = new Color(0.75f, 0.65f, 1f, 0.9f);
 
         _bossBar = Box(_root, "boss_bar", new Vector2(0, 40), new Vector2(1000, 84), Panel, new Vector2(0.5f, 0)).gameObject;
@@ -118,47 +123,15 @@ public sealed class RunUi : MonoBehaviour {
         _bossLabel = Label(_bossBar.transform, "Страж глубины", 28, TextAnchor.MiddleCenter, new Vector2(0, -6), new Vector2(940, 40), new Vector2(0.5f, 1));
         _bossBar.SetActive(false);
 
-        // деление/слияние — крупные кнопки под правый большой палец
-        var split = Button(_root, "split_btn", Vector2.zero, new Vector2(250, 120), GameBootstrap.CSlime, 0.8f, "Разделиться", 30);
-        var srt = (RectTransform)split.transform;
-        srt.anchorMin = srt.anchorMax = srt.pivot = new Vector2(1, 0);
-        srt.anchoredPosition = new Vector2(-28, 168);
-        split.GetComponent<Button>().onClick.AddListener(() => _game.RequestSplit());
-        _splitBtn = split.GetComponent<Image>();
-        _splitRt = srt;
-        _splitLabel = split.GetComponentInChildren<Text>();
-        var gather = Button(_root, "gather_btn", Vector2.zero, new Vector2(250, 120), GameBootstrap.CSoul, 0.8f, "Собраться", 30);
-        var grt = (RectTransform)gather.transform;
-        grt.anchorMin = grt.anchorMax = grt.pivot = new Vector2(1, 0);
-        grt.anchoredPosition = new Vector2(-28, 28);
-        gather.GetComponent<Button>().onClick.AddListener(() => _game.RequestGather());
-        _gatherBtn = gather.GetComponent<Image>();
-        _gatherRt = grt;
-        _gatherLabel = gather.GetComponentInChildren<Text>();
-        var soul = Button(_root, "soul_btn", Vector2.zero, new Vector2(250, 120), new Color(0.75f, 0.55f, 1f), 0.8f, "Душа ⇄", 30);
-        soul.GetComponent<Button>().onClick.AddListener(() => _game.RequestSoulTransfer());
-        _soulRt = (RectTransform)soul.transform;
-        // режим джойстика: круглая кнопка рывка рядом с кнопками деления, срабатывает при касании
-        var dash = Box(_root, "dash_btn", Vector2.zero, new Vector2(230, 230), new Color(GameBootstrap.CSlime.r, GameBootstrap.CSlime.g, GameBootstrap.CSlime.b, 0.55f), new Vector2(1, 0));
-        dash.GetComponent<Image>().sprite = SpriteUtil.UiCircleSprite;
-        dash.GetComponent<Image>().type = Image.Type.Simple;
-        _dashImg = dash.GetComponent<Image>();
-        var chargeGo = new GameObject("charge_fill");
-        chargeGo.transform.SetParent(dash, false);
-        _dashFill = chargeGo.AddComponent<Image>();
-        _dashFill.sprite = SpriteUtil.UiCircleSprite;
-        _dashFill.type = Image.Type.Filled;
-        _dashFill.fillMethod = Image.FillMethod.Radial360;
-        _dashFill.fillOrigin = (int)Image.Origin360.Top;
-        _dashFill.color = new Color(1f, 1f, 1f, 0.22f);
-        _dashFill.raycastTarget = false;
-        _dashFill.rectTransform.sizeDelta = new Vector2(230, 230);
-        var dl = UiUtil.AddText(dash, "РЫВОК", 34, TextAnchor.MiddleCenter, TextColor);
-        dl.rectTransform.sizeDelta = new Vector2(220, 120);
-        dl.raycastTarget = false;
-        _dashLabel = dl;
-        dash.gameObject.AddComponent<PressButton>().OnPress = () => _game.JoystickDash();
-        _dashRt = dash;
+        // умения — дугой вокруг большой кнопки рывка в правом нижнем углу (как в MOBA)
+        _skDash = SkillButton.Create(_root, "dash_btn", 250, GameBootstrap.CSlime, "lorc_sprint", "");
+        _skDash.OnPress = () => _game.JoystickDash();
+        _skSplit = SkillButton.Create(_root, "split_btn", 150, new Color(0.3f, 0.75f, 1f), "lorc_split-cross", "Деление");
+        _skSplit.OnPress = () => _game.RequestSplit();
+        _skGather = SkillButton.Create(_root, "gather_btn", 150, GameBootstrap.CSoul, "lorc_gooey-molecule", "Собраться");
+        _skGather.OnPress = () => _game.RequestGather();
+        _skSoul = SkillButton.Create(_root, "soul_btn", 150, new Color(0.75f, 0.55f, 1f), "lorc_dragon-spiral", "Душа ⇄");
+        _skSoul.OnPress = () => _game.RequestSoulTransfer();
         RunJoystick.Build(_root);
         ApplyHandedness();
 
@@ -186,11 +159,6 @@ public sealed class RunUi : MonoBehaviour {
         _biomeTitle = Label(_root, "", 72, TextAnchor.MiddleCenter, new Vector2(0, 120), new Vector2(1600, 100), new Vector2(0.5f, 0.5f));
         _biomeSub = Label(_root, "", 32, TextAnchor.MiddleCenter, new Vector2(0, 40), new Vector2(1600, 60), new Vector2(0.5f, 0.5f));
 
-        var goal = Box(_root, "goal", new Vector2(0, -28), new Vector2(720, 92), Panel, new Vector2(0.5f, 1));
-        var fillBg = Box(goal, "goal_bg", new Vector2(0, 18), new Vector2(660, 16), new Color(1, 1, 1, 0.08f), new Vector2(0.5f, 0));
-        var fillGo = Box(fillBg, "goal_fill", Vector2.zero, new Vector2(660, 16), GameBootstrap.CFood, new Vector2(0, 0.5f));
-        _goalFill = fillGo.GetComponent<Image>(); // ширина = прогресс (Filled без спрайта не режется)
-        _goal = Label(goal, "Поглощено 0 / 3", 28, TextAnchor.MiddleCenter, new Vector2(0, -8), new Vector2(700, 40), new Vector2(0.5f, 1));
 
         _banner = Label(_root, "", 52, TextAnchor.MiddleCenter, new Vector2(0, 160), new Vector2(1500, 140), new Vector2(0.5f, 0.5f));
         _banner.horizontalOverflow = HorizontalWrapMode.Wrap; _banner.resizeTextForBestFit = true; _banner.resizeTextMinSize = 30; _banner.resizeTextMaxSize = 52; // длинный баннер — в две строки, не обрезается
@@ -318,23 +286,23 @@ public sealed class RunUi : MonoBehaviour {
 
     /// <summary>Кнопки деления под большой палец: справа (по умолчанию) или слева.</summary>
     public void ApplyHandedness() {
-        if (_splitRt == null || _gatherRt == null) return;
+        if (_skDash == null) return;
         bool left = GameSettings.LeftHanded;
         var anchor = left ? new Vector2(0, 0) : new Vector2(1, 0);
-        float x = left ? 28 : -28;
-        _splitRt.anchorMin = _splitRt.anchorMax = _splitRt.pivot = anchor;
-        _gatherRt.anchorMin = _gatherRt.anchorMax = _gatherRt.pivot = anchor;
-        _splitRt.anchoredPosition = new Vector2(x, 168);
-        _gatherRt.anchoredPosition = new Vector2(x, 28);
-        if (_soulRt != null) {
-            _soulRt.anchorMin = _soulRt.anchorMax = _soulRt.pivot = anchor;
-            _soulRt.anchoredPosition = new Vector2(x, 308);
-        }
-        if (_dashRt != null) {
-            _dashRt.anchorMin = _dashRt.anchorMax = _dashRt.pivot = anchor;
-            _dashRt.anchoredPosition = new Vector2(left ? 310 : -310, 30);   // между кнопками деления и центром
-            _dashRt.gameObject.SetActive(GameSettings.Joystick);
-        }
+        float sx = left ? 1f : -1f;
+        var c = new Vector2(sx * 200f, 190f);
+        RunEvolutionUi.Corner(_skDash.Rt, anchor, c);
+        Place(_skSplit, anchor, c, 180f, sx);
+        Place(_skGather, anchor, c, 138f, sx);
+        Place(_skSoul, anchor, c, 96f, sx);
+        _skDash.gameObject.SetActive(GameSettings.Joystick);
+    }
+
+    /// <summary>Умение на дуге вокруг рывка: угол от горизонтали к центру экрана.</summary>
+    private static void Place(SkillButton b, Vector2 anchor, Vector2 c, float deg, float sx) {
+        const float r = 262f;
+        float a = deg * Mathf.Deg2Rad;
+        RunEvolutionUi.Corner(b.Rt, anchor, c + new Vector2(-sx * Mathf.Cos(a) * r, Mathf.Sin(a) * r));
     }
 
     void OnDestroy() { GameSettings.Changed -= ApplyHandedness; }
@@ -344,15 +312,15 @@ public sealed class RunUi : MonoBehaviour {
 
     void Update() {
         if (UnityEngine.Input.GetKeyDown(KeyCode.Escape)) OnBack();   // «Назад» на Android
+        if (_minimap != null && _titleModal != null && _minimap.gameObject.activeSelf == _titleModal.activeSelf)
+            _minimap.gameObject.SetActive(!_titleModal.activeSelf);    // миникарта не лезет на заставку
         var run = _game != null ? _game.Run : null;
         UpdateVignette(run);
-        if (run != null && _dashLabel != null) {
-            // круглая кнопка рывка: число зарядов и заполнение до следующего
-            _dashLabel.text = "РЫВОК\n<size=26>" + run.DashCharges + " / " + run.MaxDashCharges + "</size>";
-            _dashLabel.supportRichText = true;
-            _dashFill.fillAmount = run.DashCharges >= run.MaxDashCharges ? 0f : (float)run.ChargeProgress01;
-            var dc = GameBootstrap.CSlime; dc.a = run.DashCharges > 0 ? 0.6f : 0.25f;
-            _dashImg.color = dc;
+        if (run != null && _skDash != null) {
+            // рывок: число зарядов в центре, тень перезарядки по кругу, вспышка при готовности
+            _skDash.SetCounter(run.DashCharges + "/" + run.MaxDashCharges);
+            _skDash.SetCooldown(run.DashCharges > 0 ? 0f : 1f - (float)run.ChargeProgress01);
+            _skDash.SetState(run.DashCharges > 0);
         }
         if (run != null) {
             _mass.text = string.Format("Масса {0:0.0}", run.Mass);
@@ -365,16 +333,16 @@ public sealed class RunUi : MonoBehaviour {
                 _dashDots[i].color = c;
             }
             int frags = _game.FragmentCount;
-            bool canSplit = _game.CanSplit;
-            _splitBtn.color = new Color(GameBootstrap.CSlime.r, GameBootstrap.CSlime.g, GameBootstrap.CSlime.b, canSplit ? 0.8f : 0.25f);
-            _splitLabel.text = frags > 1 ? "Разделиться\n(" + frags + ")" : "Разделиться";
-            _gatherBtn.gameObject.SetActive(frags > 1);
-            _splitBtn.gameObject.SetActive(_game.SplitUnlocked);     // деление — только после узла эволюции
-            _soulRt.gameObject.SetActive(_game.CanSoulTransfer);
+            _skSplit.gameObject.SetActive(_game.SplitUnlocked);     // деление — только после узла эволюции
+            _skSplit.SetState(_game.CanSplit);
+            _skSplit.SetBadge(frags > 1 ? frags.ToString() : "");
+            _skGather.gameObject.SetActive(frags > 1);
+            _skSoul.gameObject.SetActive(_game.CanSoulTransfer);
             bool g = _game.Gathering;
-            _gatherBtn.color = g ? new Color(1f, 0.85f, 0.4f, 0.9f) : new Color(GameBootstrap.CSoul.r, GameBootstrap.CSoul.g, GameBootstrap.CSoul.b, 0.8f);
             double carry = _game.TwinCarry;
-            _gatherLabel.text = g ? "Собираемся…" : carry >= 0.5 ? "Собраться\n(ноша " + carry.ToString("0") + ")" : "Собраться";
+            _skGather.SetLabel(g ? "Сбор…" : "Собраться");
+            _skGather.SetBadge(carry >= 0.5 ? carry.ToString("0") : "");
+            _skGather.SetState(!g);
             _combo.text = run.Combo != null && run.Combo.Chain >= 2 ? "Цепочка ×" + run.Combo.Chain : "";
             var ids = run.Mutations.ToArray();
             if (ids.Length > 0) {
@@ -402,7 +370,7 @@ public sealed class RunUi : MonoBehaviour {
                         evap ? " · жар" : "");
                 float goal = (float)System.Math.Max(0.01, run.Room.GoalMass);
                 float frac = Mathf.Clamp01((float)run.RoomAbsorbed / goal);
-                _goalFill.rectTransform.sizeDelta = new Vector2(Mathf.Max(16f, 660f * frac), 16f);
+                _goalFill.rectTransform.sizeDelta = new Vector2(Mathf.Max(16f, 400f * frac), 16f);
                 _goal.text = run.ExitOpen
                     ? (run.OpenWorld ? "Шахта вниз открыта — следуйте за огоньком" : "Выход открыт — ищите светящуюся трещину")
                     : string.Format(run.OpenWorld ? "Шахта откроется: {0:0.0} / {1:0.0}" : "Поглощено {0:0.0} / {1:0.0}", run.RoomAbsorbed, goal);
@@ -658,9 +626,7 @@ public sealed class RunUi : MonoBehaviour {
         rt.anchorMin = anchor; rt.anchorMax = anchor; rt.pivot = anchor;
         rt.sizeDelta = size; rt.anchoredPosition = pos;
         var img = go.AddComponent<Image>();
-        img.sprite = SpriteUtil.UiRoundedSprite;
-        img.type = Image.Type.Sliced;
-        img.color = color;
+        UiSkin.Box(img, color, size);
         return rt;
     }
 
@@ -669,7 +635,7 @@ public sealed class RunUi : MonoBehaviour {
         var rt = Box(parent, name, pos, size, new Color(color.r, color.g, color.b, alpha), new Vector2(0.5f, 0.5f));
         var btn = rt.gameObject.AddComponent<Button>();
         btn.targetGraphic = rt.GetComponent<Image>();
-        if (ThirdPartyArt.Button != null && !string.IsNullOrEmpty(label)) rt.GetComponent<Image>().sprite = ThirdPartyArt.Button;
+        if (!string.IsNullOrEmpty(label)) UiSkin.AsPill(rt.GetComponent<Image>(), new Color(color.r, color.g, color.b, Mathf.Max(alpha, 0.85f)));
         btn.onClick.AddListener(() => ProceduralSfx.Instance?.Play("click"));
         var t = UiUtil.AddText(rt, label, labelSize, TextAnchor.MiddleCenter, TextColor);
         t.rectTransform.sizeDelta = size - new Vector2(24, 12);

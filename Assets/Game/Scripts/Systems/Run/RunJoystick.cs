@@ -19,6 +19,16 @@ public sealed class RunJoystick : MonoBehaviour {
     private RectTransform _root, _base, _knob;
     private int _finger = -2;                    // -2 — нет; -1 — мышь
     private Vector2 _origin;
+    private CanvasGroup _group;
+
+    /// <summary>Где джойстик ждёт палец (как в MOBA — всегда виден в своём углу).</summary>
+    private Vector2 Home {
+        get {
+            var r = _root.rect;
+            bool left = !GameSettings.LeftHanded;
+            return new Vector2(left ? r.xMin + 330f : r.xMax - 330f, r.yMin + 290f);
+        }
+    }
 
     public static RunJoystick Build(Transform canvas) {
         var go = new GameObject("joystick");
@@ -29,6 +39,8 @@ public sealed class RunJoystick : MonoBehaviour {
         j._root = rt;
         j._base = Circle(rt, "base", Radius * 2.2f, new Color(0.6f, 0.85f, 1f, 0.16f));
         j._knob = Circle(j._base, "knob", Radius * 0.95f, new Color(0.6f, 0.9f, 1f, 0.55f));
+        j._group = j._base.gameObject.AddComponent<CanvasGroup>();
+        j._group.blocksRaycasts = false;
         j._base.gameObject.SetActive(false);
         go.transform.SetAsFirstSibling(); // под всеми кнопками и окнами
         Instance = j;
@@ -52,7 +64,13 @@ public sealed class RunJoystick : MonoBehaviour {
 
     void Update() {
         bool on = GameSettings.Joystick && !PullGestureInput.Blocked && RunGame.Instance != null && RunGame.Instance.InRun;
-        if (!on) { Release(); return; }
+        if (!on) { Release(); if (_base.gameObject.activeSelf) _base.gameObject.SetActive(false); return; }
+        if (_finger == -2) {                                     // ждёт палец: тусклый, на своём месте
+            if (!_base.gameObject.activeSelf) _base.gameObject.SetActive(true);
+            _base.anchoredPosition = Home;
+            _knob.anchoredPosition = Vector2.zero;
+            _group.alpha = 0.45f;
+        }
         if (Application.isMobilePlatform) Touches(); else Mouse();
     }
 
@@ -98,6 +116,7 @@ public sealed class RunJoystick : MonoBehaviour {
         _base.anchoredPosition = _origin;
         _knob.anchoredPosition = Vector2.zero;
         _base.gameObject.SetActive(true);
+        _group.alpha = 1f;
         Dir = Vector2.zero;
     }
 
@@ -117,7 +136,7 @@ public sealed class RunJoystick : MonoBehaviour {
     private void Release() {
         _finger = -2;
         Dir = Vector2.zero;
-        if (_base != null && _base.gameObject.activeSelf) _base.gameObject.SetActive(false);
+        // база возвращается «домой» в Update
     }
 
     private Vector2 ToLocal(Vector2 screen) {

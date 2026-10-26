@@ -171,7 +171,7 @@ public sealed class RunSettingsUi : MonoBehaviour {
         rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = size;
         var img = go.AddComponent<Image>();
-        img.sprite = SpriteUtil.UiRoundedSprite; img.type = Image.Type.Sliced; img.color = c;
+        UiSkin.Box(img, c, size);
         return rt;
     }
 
@@ -182,10 +182,9 @@ public sealed class RunSettingsUi : MonoBehaviour {
         rt.anchorMin = rt.anchorMax = rt.pivot = anchor;
         rt.anchoredPosition = pos; rt.sizeDelta = size;
         var img = go.AddComponent<Image>();
-        img.sprite = SpriteUtil.UiRoundedSprite; img.type = Image.Type.Sliced; img.color = c;
+        UiSkin.AsPill(img, c);
         var b = go.AddComponent<Button>();
         b.targetGraphic = img;
-        if (ThirdPartyArt.Button != null) img.sprite = ThirdPartyArt.Button;
         b.onClick.AddListener(() => ProceduralSfx.Instance?.Play("click"));
         var t = UiUtil.AddText(rt, label, 26, TextAnchor.MiddleCenter, TextC);
         t.rectTransform.sizeDelta = size - new Vector2(12, 6);

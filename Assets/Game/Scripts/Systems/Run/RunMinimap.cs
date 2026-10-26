@@ -13,7 +13,7 @@ namespace PM.Systems.Run {
 /// шахта и алтари — только когда открыты. Нажатие — карта на весь экран (игра на паузе).
 /// </summary>
 public sealed class RunMinimap : MonoBehaviour, IPointerClickHandler {
-    private const float SmallW = 420f;
+    private const float SmallW = 380f, SmallMaxH = 250f;
     private RunGame _game;
     private RectTransform _frame, _mapRt;
     private RawImage _map;
@@ -27,12 +27,12 @@ public sealed class RunMinimap : MonoBehaviour, IPointerClickHandler {
         var go = new GameObject("minimap");
         go.transform.SetParent(canvas, false);
         var rt = go.AddComponent<RectTransform>();
-        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(1, 1);
-        rt.anchoredPosition = new Vector2(-28, -28);
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
+        rt.anchoredPosition = new Vector2(28, -28);
         var bg = go.AddComponent<Image>();
-        bg.sprite = SpriteUtil.UiRoundedSprite;
+        bg.sprite = PM.Systems.UI.UiSkin.Panel;
         bg.type = Image.Type.Sliced;
-        bg.color = new Color(0.01f, 0.03f, 0.06f, 0.78f);
+        bg.color = new Color(1f, 1f, 1f, 0.92f);
         var m = go.AddComponent<RunMinimap>();
         m._game = game;
         m._frame = rt;
@@ -67,7 +67,9 @@ public sealed class RunMinimap : MonoBehaviour, IPointerClickHandler {
         _view = view;
         _map.texture = view.MiniTex;
         float aspect = (float)view.Map.Width / view.Map.Height;
-        _smallSize = new Vector2(SmallW, SmallW / aspect) + new Vector2(20, 20);
+        float sw = SmallW, sh = SmallW / aspect;
+        if (sh > SmallMaxH) { sh = SmallMaxH; sw = sh * aspect; }        // высокая карта — не наезжает на ресурсы
+        _smallSize = new Vector2(sw, sh) + new Vector2(20, 20);
         _frame.sizeDelta = _smallSize;
         foreach (var a in _altars) Destroy(a.gameObject);
         _altars.Clear();
@@ -100,8 +102,8 @@ public sealed class RunMinimap : MonoBehaviour, IPointerClickHandler {
             Time.timeScale = 0f;
             PM.Systems.Input.PullGestureInput.Blocked = true;
         } else {
-            _frame.anchorMin = _frame.anchorMax = _frame.pivot = new Vector2(1, 1);
-            _frame.anchoredPosition = new Vector2(-28, -28);
+            _frame.anchorMin = _frame.anchorMax = _frame.pivot = new Vector2(0, 1);
+            _frame.anchoredPosition = new Vector2(28, -28);
             _frame.sizeDelta = _smallSize;
             if (_game != null && _game.InRun && Time.timeScale == 0f && !_game.UiModalOpen) {
                 Time.timeScale = 1f;
