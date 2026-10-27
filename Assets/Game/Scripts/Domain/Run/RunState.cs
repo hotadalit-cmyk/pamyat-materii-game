@@ -45,6 +45,15 @@ public sealed class RunState {
     public const double GuardianPityMult = 0.85;       // после 2 поражений от стража его HP ×0.85
     public const int GuardianPityAfterDefeats = 2;
     private static readonly double[] GuardianEssenceByDepth = { 8.0, 14.0, 22.0, 32.0, 40.0 };
+    // v0.14: табличная цель глубины (Docs/BALANCE_v14.md §2); WorldGenerator зажимает карту в ±10%
+    private static readonly double[] GoalMassByDepth = { 15.0, 32.0, 65.0, 115.0, 190.0 };
+
+    /// <summary>Табличная цель глубины: 15 / 32 / 65 / 115 / 190 (глубина зажимается в 1..5).</summary>
+    public static double GoalMassFor(int depth) {
+        if (depth < 1) depth = 1;
+        if (depth > GoalMassByDepth.Length) depth = GoalMassByDepth.Length;
+        return GoalMassByDepth[depth - 1];
+    }
 
     private static readonly double[] GrowthThresholds = BuildThresholds(); // 6,9,13,18,24,31,40,(×~1.3)
 

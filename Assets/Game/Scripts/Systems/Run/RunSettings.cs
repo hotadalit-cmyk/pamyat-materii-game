@@ -153,9 +153,8 @@ public sealed class RunSettingsUi : MonoBehaviour {
         if (DevTools.Enabled) BuildDevRow(ref y); // v0.13: секция «Для тестов» — только при DevTools.Enabled
     }
 
-    /// <summary>v0.13: «Для тестов» — кнопки «Страж 1…5»: новая жизнь сразу у стража глубины.</summary>
+    /// <summary>v0.14: кнопки «Страж 1…5» в строке заголовка настроек — новая жизнь сразу у стража глубины.</summary>
     private void BuildDevRow(ref float y) {
-        // в строке заголовка, между «НАСТРОЙКИ» и «Закрыть»: внизу окна места нет
         var devCol = new Color(0.85f, 0.55f, 0.3f, 0.95f);
         for (int i = 0; i < PM.Domain.Run.RunState.MaxDepth; i++) {
             int depth = i + 1;

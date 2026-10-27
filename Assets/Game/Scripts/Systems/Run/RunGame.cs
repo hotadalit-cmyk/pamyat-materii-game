@@ -156,7 +156,7 @@ public sealed partial class RunGame : MonoBehaviour {
         Meta.TakeLegacy();
         _legacyNode = null;
         StartRun(RunState.CreateDevGuardianRun(Meta, NewSeed(), depth), null, null);
-        _ui.HideTitle(); // запуск с заставки: сразу в бой
+        _ui.HideTitle(); // v0.14: DevTools-старт может быть из главного меню — титул закрываем принудительно
     }
 
     private ulong NewSeed() => (ulong)System.DateTime.UtcNow.Ticks;
@@ -280,7 +280,8 @@ public sealed partial class RunGame : MonoBehaviour {
         if (Run.OpenWorld && Run.World != null) { BuildWorld(); return; }
         if (_roomRoot != null) Destroy(_roomRoot.gameObject);
         _creatures.Clear();
-        _obstacles.Clear(); _squashBase.Clear();
+        _obstacles.Clear();
+        _squashBase.Clear(); // v0.14: старые отбойники уничтожены — кэш масштабов не нужен
         _boss = null;
         _altarRing = null;
         _roomRoot = new GameObject("room").transform;
@@ -330,7 +331,8 @@ public sealed partial class RunGame : MonoBehaviour {
     private void BuildWorld() {
         if (_roomRoot != null) Destroy(_roomRoot.gameObject);
         _creatures.Clear();
-        _obstacles.Clear(); _squashBase.Clear();
+        _obstacles.Clear();
+        _squashBase.Clear(); // v0.14: старые отбойники уничтожены — кэш масштабов не нужен
         _pending.Clear();
         _pendingIndex.Clear();
         _altarRings.Clear();
@@ -671,7 +673,7 @@ public sealed partial class RunGame : MonoBehaviour {
             return;
         }
         var dec = PuppetBrain.Think(BuildPuppetInput(_player.Rb.position, Run.FragmentMass(Run.Fragments.LeadId),
-            Run.Fragments.LeadId, false, _player.Rb.position));
+            Run.Fragments.LeadId, false, _player.Rb.position, _player.Rb.linearVelocity));
         Vector2 dir = new Vector2((float)dec.Move.X, (float)dec.Move.Y);
         if (dir.sqrMagnitude > 0.001f) {
             dir.Normalize();
@@ -689,8 +691,8 @@ public sealed partial class RunGame : MonoBehaviour {
         }
     }
 
-    /// <summary>Снимок мира для PuppetBrain: существа в радиусе 14, зоны стража, ноша/лидер для клона.</summary>
-    private PuppetInput BuildPuppetInput(Vector2 me, double selfMass, int fragId, bool clone, Vector2 lead) {
+    /// <summary>Снимок мира для PuppetBrain: существа в радиусе 14, тело стража, зоны стража, ноша/лидер для клона.</summary>
+    private PuppetInput BuildPuppetInput(Vector2 me, double selfMass, int fragId, bool clone, Vector2 lead, Vector2 selfVel) {
         int n = 0;
         for (int i = 0; i < _creatures.Count && n < _senseTmp.Length; i++) {
             var c = _creatures[i];
@@ -705,11 +707,21 @@ public sealed partial class RunGame : MonoBehaviour {
                 Threatens = !c.IsFood && !edible && cm > selfMass * 0.9,
             };
         }
+        // v0.14 (аудит): тело стража — главный ранящий глубины, автопилот обязан его видеть
+        // (иначе встаёт вплотную и ловит удары; по ТЗ — «бежать от ранящих ближе 4»)
+        if (Run.OpenWorld && Run.Guardian != null && Run.GuardianAwake && !Run.GuardianAbsorbed
+            && _guardian != null && n < _senseTmp.Length) {
+            Vector2 gp = (Vector2)_guardian.transform.position;
+            _senseTmp[n++] = new PuppetSense {
+                Pos = new Vec2(gp.x, gp.y), Mass = Run.Guardian.Hp,
+                IsFood = false, IsShimmering = false, Threatens = true,
+            };
+        }
         var sense = new PuppetSense[n];
         System.Array.Copy(_senseTmp, sense, n);
         return new PuppetInput {
             SelfPos = new Vec2(me.x, me.y), SelfMass = selfMass,
-            SelfVel = new Vec2(0, 0),
+            SelfVel = new Vec2(selfVel.x, selfVel.y), // v0.14 (аудит): реальная скорость — работает дрейф по инерции
             DashCharges = clone ? 0 : Run.DashCharges,
             MaxDashCharges = clone ? 0 : Run.MaxDashCharges,
             Creatures = sense, Zones = _puppetZones,
@@ -817,7 +829,7 @@ public sealed partial class RunGame : MonoBehaviour {
     private void PuppetCloneStep(FragView fv, Rigidbody2D rb, Vector2 lead, float dist, float dt) {
         var me = rb.position;
         double m = Run.FragmentMass(fv.Id);
-        var dec = PuppetBrain.Think(BuildPuppetInput(me, m, fv.Id, true, lead));
+        var dec = PuppetBrain.Think(BuildPuppetInput(me, m, fv.Id, true, lead, rb.linearVelocity));
         Vector2 dir = new Vector2((float)dec.Move.X, (float)dec.Move.Y);
         if (dir.sqrMagnitude > 0.001f) {
             dir.Normalize();
@@ -850,7 +862,10 @@ public sealed partial class RunGame : MonoBehaviour {
             if (Run.OpenWorld && GuardianPartIndex(c) >= 0) { OnGuardianPartContact(c, rel, point); return; } // v0.12: капли Горнила
             OnBossContact(c, rel, point); return;
         }
-        var res = SizeRule.Resolve(Run.FragmentMass(fragmentId), Run.Mutations, c.Mass, c.Mutations, rel);
+        var sp = c.Species;
+        var res = SizeRule.Resolve(Run.FragmentMass(fragmentId), Run.Mutations, c.Mass, c.Mutations, rel,
+            sp != null ? sp.Attack : 0.08,                     // v0.14: Attack/Toughness вида, глубина
+            sp != null && sp.Toughness > 0.0 ? sp.Toughness : 1.0, Run.Depth);
         ResolveContact(c, res, point, rel);
     }
 
@@ -904,14 +919,18 @@ public sealed partial class RunGame : MonoBehaviour {
         }
     }
 
-    // исходный размер шляпки гриба: повторный удар во время анимации не должен считать раздутый размер исходным
+    // v0.14: исходный масштаб отбойников — иначе частые удары стартуют корутину от уже сжатого
+    // масштаба и гриб растёт бесконечно. Кэш живёт до пересборки комнаты/мира.
     private readonly Dictionary<Transform, Vector3> _squashBase = new Dictionary<Transform, Vector3>();
 
     private System.Collections.IEnumerator Squash(Transform t) {
         if (t == null) yield break;
-        if (!_squashBase.TryGetValue(t, out var baseS)) { baseS = t.localScale; _squashBase[t] = baseS; }
+        if (!_squashBase.TryGetValue(t, out var baseS)) {
+            baseS = t.localScale;
+            _squashBase[t] = baseS;
+        }
         for (float k = 0; k < 1f; k += Time.deltaTime * 6f) {
-            if (t == null) yield break;
+            if (t == null) { _squashBase.Remove(t); yield break; }
             float s = 1f + 0.18f * Mathf.Sin(k * Mathf.PI);
             t.localScale = new Vector3(baseS.x * s, baseS.y * s, 1f);
             yield return null;
@@ -993,8 +1012,9 @@ public sealed partial class RunGame : MonoBehaviour {
             GameFeel.Text(point, "Броня! Нужна скорость и рикошеты", new Color(0.7f, 0.85f, 1f), 0.8f);
             ProceduralSfx.Instance?.Play("glass", 0.9f, 0f, 0.45f);
         }
-        // страж бьёт в ответ своей массой
-        var res = SizeRule.Resolve(fragMass, Run.Mutations, boss.Mass, new MutationSet(), rel);
+        // страж бьёт в ответ своим Attack (v0.14: процент массы героя, границы 3–25%)
+        var res = SizeRule.Resolve(fragMass, Run.Mutations, boss.Mass, new MutationSet(), rel,
+            0.11, 1.2, Run.Depth);
         if (res.MassLossA > 0 && !boss.IsExposed) {
             HurtFragment(res.MassLossA, BossState.SpeciesId);
             GameFeel.Text(_player.transform.position, "−" + res.MassLossA.ToString("0.0"), GameBootstrap.CDanger);
@@ -1295,9 +1315,9 @@ public sealed partial class RunGame : MonoBehaviour {
             if (toG.sqrMagnitude > 0.01f)
                 _player.Rb.AddForce(toG.normalized * ((float)o.Pull * _player.Rb.mass), ForceMode2D.Force);
         }
-        if (o.RingBurn) { // v0.12: вне кипящего кольца Горнила — 1.0 массы/с
+        if (o.RingBurn) { // v0.14: вне кипящего кольца Горнила — доля массы героя в секунду
             _hitFrag = Run.Fragments.LeadId;
-            HurtFragment(g.Def.RingDamagePerSec * dt, g.Def.SpeciesId);
+            HurtFragment(Run.Mass * g.Def.RingDamagePerSec * dt, g.Def.SpeciesId);
             _hitFrag = -1;
         }
         if (Run.IsDead) { EndRun(); return; }
@@ -1428,7 +1448,7 @@ public sealed partial class RunGame : MonoBehaviour {
             }
             sr.enabled = true;
             sr.transform.position = new Vector3((float)list[i].X, (float)list[i].Y, 0f);
-            float d = (float)Run.Guardian.Def.ShardRadius * 2.4f;
+            float d = (float)Run.Guardian.ShardRadius * 2.4f;
             sr.transform.localScale = new Vector3(d, d, 1f);
         }
     }
@@ -1698,8 +1718,9 @@ public sealed partial class RunGame : MonoBehaviour {
             GameFeel.Text(point, "Броня! Нужна скорость и рикошеты", new Color(0.7f, 0.85f, 1f), 0.8f);
             ProceduralSfx.Instance?.Play("glass", 0.9f, 0f, 0.45f);
         }
-        // страж бьёт в ответ своей массой
-        var res = SizeRule.Resolve(fragMass, Run.Mutations, g.Hp, new MutationSet(), rel);
+        // страж бьёт в ответ своим Attack (v0.14: процент массы героя, границы 3–25%)
+        var res = SizeRule.Resolve(fragMass, Run.Mutations, g.Hp, new MutationSet(), rel,
+            0.11, 1.2, Run.Depth);
         if (res.MassLossA > 0 && !g.IsExposed) {
             HurtFragment(res.MassLossA, g.Def.SpeciesId);
             GameFeel.Text(_player.transform.position, "−" + res.MassLossA.ToString("0.0"), GameBootstrap.CDanger);

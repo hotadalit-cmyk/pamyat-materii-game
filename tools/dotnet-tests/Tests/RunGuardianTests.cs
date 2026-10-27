@@ -24,17 +24,6 @@ public static class RunGuardianTests {
         True(g.Hp <= targetHp + 1e-9, "страж сбит до " + targetHp.ToString("0.##"));
     }
 
-    /// <summary>Страж у шахты далеко от центра карты: зоны спор — в его арене, а не вокруг (0,0).</summary>
-    public static void SporeZones_AroundGuardianNotMapOrigin() {
-        var def = GuardianCatalog.ForDepth(1);
-        var g = new GuardianState(def, 40.0, 7UL);
-        var self = new Vec2(60, -35);
-        var o = g.Think(new GuardianInput { SelfPos = self, PlayerPos = self + new Vec2(3, 0), PlayerMass = 30.0, Dt = 0.1 });
-        True(o.Zones != null && o.Zones.Length == def.ZoneCount, "зоны выданы");
-        for (int i = 0; i < o.Zones.Length; i++)
-            True((o.Zones[i].Pos - self).Length <= def.ArenaRadius + 1e-9, "зона " + i + " в арене стража");
-    }
-
     // ---------- каталог ----------
 
     public static void Catalog_FiveGuardians() {
@@ -48,9 +37,9 @@ public static class RunGuardianTests {
             Eq(names[d - 1], def.Name, "имя глубины " + d);
             Eq(d, def.Depth, "глубина записи " + d);
             Eq(hpMults[d - 1], def.HpMult, "HpMult глубины " + d);
-            True(def.ArenaRadius > 0.0, "арена задана");
+            True(def.ArenaMult > 0.0, "множитель арены задан");
             True(!string.IsNullOrEmpty(def.SpeciesId), "вид тела задан");
-            True(def.WakeRadius > 0.0, "радиус сна задан");
+            True(def.WakeMult > 0.0, "множитель радиуса сна задан");
         }
         Eq("spore_mother", GuardianCatalog.ForDepth(0).Id, "ниже 1 — первый страж");
         Eq("pulsar", GuardianCatalog.ForDepth(9).Id, "выше 5 — последний страж");
@@ -157,10 +146,10 @@ public static class RunGuardianTests {
         b.Think(NearInput(0.0));
         Eq(4, oa.Zones.Length, "четыре зоны спор");
         for (int i = 0; i < 4; i++) {
-            Eq(2.5, oa.Zones[i].Radius, "радиус зоны " + i);
+            Eq(a.ZoneRadius, oa.Zones[i].Radius, "радиус зоны " + i + " = BodyR×1.7 (v0.14)");
             Eq(0.4, oa.Zones[i].DamagePerSec, "урон зоны " + i);
             Eq(0.3, oa.Zones[i].Slow01, "замедление 30% в зоне " + i);
-            True(oa.Zones[i].Pos.Length <= 9.0 * 0.85 + 1e-9, "зона " + i + " в границах арены");
+            True(oa.Zones[i].Pos.Length <= a.ArenaRadius * 0.85 + 1e-9, "зона " + i + " в границах арены");
         }
         var before = new Vec2[4];
         for (int i = 0; i < 4; i++) before[i] = oa.Zones[i].Pos;
@@ -193,6 +182,24 @@ public static class RunGuardianTests {
         }
     }
 
+    // v0.14: зоны строились вокруг (0,0) карты — должны строиться вокруг стража
+    public static void SporeZones_AroundGuardianNotMapOrigin() {
+        var self = new Vec2(60.0, -35.0);
+        var def = GuardianCatalog.ForDepth(1);
+        True(self.Length > def.ArenaMult * 3.0, "фикстура: страж далеко от (0,0) карты");
+        var g = new GuardianState(def, 20.0, 101UL);
+        var o = g.Think(new GuardianInput { SelfPos = self, PlayerPos = self + new Vec2(3, 0), PlayerMass = 10.0, Dt = 0.0 });
+        Eq(4, o.Zones.Length, "четыре зоны спор");
+        double reach = g.ArenaRadius * 0.85 + g.ZoneRadius;
+        for (int i = 0; i < o.Zones.Length; i++) {
+            double fromGuardian = (o.Zones[i].Pos - self).Length;
+            True(fromGuardian <= g.ArenaRadius + 1e-9,
+                "зона " + i + " в пределах арены стража (60,−35): " + fromGuardian.ToString("0.##"));
+            True(fromGuardian <= reach, "зона " + i + " внутри досягаемости перемешивания");
+            True(fromGuardian > 0.5, "зона " + i + " не прилипла к центру стража");
+        }
+    }
+
     // ---------- окно уязвимости ----------
 
     public static void SporeMother_WeakPointWindow2of8() {
@@ -212,7 +219,7 @@ public static class RunGuardianTests {
 
     public static void SporeMother_DamageMultCapClosedAndOpen() {
         var def = GuardianCatalog.ForDepth(1);
-        double baseLoss = 0.35 * 8.0 * 10.0 / (10.0 + 20.0); // формула стража без модификаторов
+        double baseLoss = 0.025 * 8.0 * 10.0 * System.Math.Sqrt(10.0 / (10.0 + 20.0)); // v0.14: формула от √доли
         var closed = new GuardianState(def, 20.0, 7UL);
         closed.Think(NearInput(0.0)); // фаза 1 — шляпка закрыта всегда
         Eq(baseLoss * 0.5, closed.ApplyHit(8.0, 10.0, null, 0), "закрытая шляпка — урон ×0.5");
@@ -222,7 +229,7 @@ public static class RunGuardianTests {
         var o = opened.Think(NearInput(6.0)); // через 6 c окно открыто
         True(o.WeakPointOpen, "окно уязвимости открыто");
         double hpBefore = opened.Hp;
-        double expOpen = 0.35 * 8.0 * 10.0 / (10.0 + hpBefore) * 1.5;
+        double expOpen = 0.025 * 8.0 * 10.0 * System.Math.Sqrt(10.0 / (10.0 + hpBefore)) * 1.5;
         Eq(expOpen, opened.ApplyHit(8.0, 10.0, null, 0), "открытая шляпка — урон ×1.5");
     }
 
@@ -244,7 +251,7 @@ public static class RunGuardianTests {
         var o3 = g.Think(t);
         True(o3.Telegraph.Radius == 0.0, "сразу нового телеграфа нет (кулдаун 4 с)");
         var o4 = g.Think(NearInput(3.0)); // ещё 3 c — суммарно 4 c
-        Eq(2.2, o4.Telegraph.Radius, "новый телеграф через 4 с");
+        Eq(g.RootRadius, o4.Telegraph.Radius, "новый телеграф через 4 с (радиус = BodyR×1.5, v0.14)");
         Eq(0.8, o4.Telegraph.Seconds, "окно уклонения 0.8 с");
     }
 
@@ -255,7 +262,7 @@ public static class RunGuardianTests {
         var first = g.Think(NearInput(0.0));
         Eq(2, first.SpawnMinions, "первая волна — два плесеника");
         Eq("mite", first.MinionSpecies, "вид миньона — mite");
-        Eq(1.5, first.MinionMass, "масса плесеника 1.5");
+        Eq(g.MinionMass, first.MinionMass, "масса плесеника = BodyR²×0.65 (v0.14)");
         var t6 = NearInput(6.0);
         Eq(0, g.Think(t6).SpawnMinions, "6 c — волн нет");
         Eq(2, g.Think(t6).SpawnMinions, "12 c — новая волна");
@@ -283,11 +290,11 @@ public static class RunGuardianTests {
     // ---------- отступление ----------
 
     public static void Retreat_Phase1Resets_Phase2DoesNot() {
-        var def = GuardianCatalog.ForDepth(1); // арена 9
+        var def = GuardianCatalog.ForDepth(1); // арена BodyR×4.5+2
         var g = new GuardianState(def, 20.0, 17UL);
         g.Think(NearInput(0.0, 5.0)); // внутри арены — бой начался
         DamageToHp(g, 18.0);          // 90% — фаза 1
-        var o = g.Think(FarInput(0.1, 14.0)); // 14 > 9 × 1.5 = 13.5
+        var o = g.Think(FarInput(0.1, 17.0)); // v0.14: surf = 17 − 1.57 − 1.11 = 14.3 > арена×1.5 = 13.6
         True(o.ResetFight, "выход из арены в фазе 1 — сброс боя");
         Eq(20.0, g.Hp, "HP восстановлен");
         Eq(GuardianPhase.Phase1, g.Phase, "страж снова в фазе 1");
@@ -295,7 +302,7 @@ public static class RunGuardianTests {
         var zonesBack = g.Think(NearInput(0.0, 5.0));
         True(zonesBack.Zones[0].Radius > 0.0, "зоны после сброса выставляются заново");
         DamageToHp(g, 8.0);           // 40% — фаза 2
-        var o2 = g.Think(FarInput(0.1, 14.0));
+        var o2 = g.Think(FarInput(0.1, 17.0));
         True(!o2.ResetFight, "в фазе 2 отступить нельзя");
         True(g.Hp < 8.0 + 1e-9, "HP не восстановился");
     }
@@ -337,15 +344,15 @@ public static class RunGuardianTests {
         Eq(GuardianPhase.Phase2, g.Phase, "55% — фаза 2 (выводок)");
         Eq(3, o2.SpawnMinions, "выводок из трёх");
         Eq("mite", o2.MinionSpecies, "вид миньона — mite");
-        Eq(1.1, o2.MinionMass, "масса миньона 1.1");
+        Eq(g.MinionMass, o2.MinionMass, "масса миньона = BodyR²×0.65 (v0.14)");
         DamageToHp(g, 30.0 * 0.40); // 40% — фаза 3
         var o3 = g.Think(NearInput(0.0));
         Eq(GuardianPhase.Phase3, g.Phase, "40% — фаза 3 (ярость)");
         True(o3.Shockwave, "ударная волна в фазе 3");
         Eq(0, o3.Zones.Length, "у Пульсара нет зон");
-        // формула удара без изменений — на свежем страже (HP 30)
+        // формула удара v0.14 — на свежем страже (HP 30)
         var fresh = new GuardianState(GuardianCatalog.ForDepth(5), 30.0, 22UL);
-        Eq(0.7, fresh.ApplyHit(8.0, 10.0, null, 0), "формула удара без изменений");
+        Eq(1.0, fresh.ApplyHit(8.0, 10.0, null, 0), "v0.14: 0.025×8×10×√(10/40)");
     }
 
     public static void Pulsar_BossFacadeStillWorks() {

@@ -289,7 +289,6 @@ public static class WorldGenerator {
         // ---------- 9. Спавны ----------
         int maxDist = 1;
         for (int i = 0; i < dist.Length; i++) if (dist[i] > maxDist && dist[i] < int.MaxValue) maxDist = dist[i];
-        double massMult = 1.0 + 0.25 * (depth - 1);
         var pool = SpeciesPoolFor(depth, biome);
         int floorCount = 0;
         for (int i = 0; i < m.Cells.Length; i++) if (m.Cells[i] == 1) floorCount++;
@@ -322,8 +321,8 @@ public static class WorldGenerator {
             if (sp.Id == "soul_slime") {
                 if (souls >= 2 || (p - m.PlayerStart).Length < 25) continue;
                 souls++;
-                mass = (4.0 + 3.0 * (depth - 1)) * rng.Range(0.9, 1.1);
-            } else mass = sp.BaseMass * massMult * rng.Range(0.85, 1.15);
+                mass = sp.MassAtDepth(depth) * rng.Range(0.9, 1.1); // v0.14: кривая вместо спец-формулы
+            } else mass = sp.MassAtDepth(depth) * rng.Range(0.85, 1.15); // v0.14: свой темп роста у каждого вида
             int reg = m.RegionOf[i];
             if (reg >= 0 && m.Regions[reg].Kind == RegionKind.Elite) mass *= RunState.EliteMassMult;
             if (reg >= 0 && (m.Regions[reg].Kind == RegionKind.Start || m.Regions[reg].Kind == RegionKind.Maze)) continue;
@@ -338,7 +337,7 @@ public static class WorldGenerator {
                 var sp = pool[System.Math.Max(0, pool.Count - 1 - rng.NextInt(2))];
                 if (sp.Id == "soul_slime") sp = pool[0];
                 var p = NearestFloor(m, m.Regions[r].Center + new Vec2(rng.Range(-3, 3), rng.Range(-3, 3)));
-                double mass = sp.BaseMass * massMult * RunState.EliteMassMult;
+                double mass = sp.MassAtDepth(depth) * RunState.EliteMassMult;
                 if (Clear(m, p, SizeRule.RadiusForMass(mass) + 0.1)) m.Spawns.Add(new SpawnSpec { SpeciesId = sp.Id, Pos = p, Mass = mass });
             }
         }
@@ -365,9 +364,16 @@ public static class WorldGenerator {
         }
 
         // ---------- 10. Цель шахты и коллайдеры ----------
+        // v0.14: цель табличная с допуском ±10% от карты (Docs/BALANCE_v14.md §2.2):
+        // близкая к таблице карта работает как раньше (25% массы), выбившаяся — зажимается.
         double total = 0;
         for (int s = 0; s < m.Spawns.Count; s++) total += m.Spawns[s].Mass;
-        m.GoalMass = System.Math.Max(6.0, total * 0.25);
+        double goalTarget = RunState.GoalMassFor(depth);
+        double mapGoal = total * 0.25;
+        double goal = mapGoal;
+        if (goal > goalTarget * 1.1) goal = goalTarget * 1.1;
+        if (goal < goalTarget * 0.9) goal = goalTarget * 0.9;
+        m.GoalMass = System.Math.Max(6.0, goal);
         BuildWallRects(m);
         AssignShimmer(m, seed);
         return m;

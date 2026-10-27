@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    v0.14: симуляция баланса (Docs/BALANCE_v14.md) — компилирует Domain напрямую из Assets.
+    ПРАВИЛО: только файлы без UnityEngine (как tools/dotnet-tests).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>BalanceSim</AssemblyName>
+    <RootNamespace>BalanceSim</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Assets/Game/Scripts/Domain/**/*.cs" />
+    <Compile Include="../../Assets/Game/Scripts/Persistence/**/*.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+</Project>

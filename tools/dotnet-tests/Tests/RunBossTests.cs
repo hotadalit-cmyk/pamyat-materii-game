@@ -71,17 +71,17 @@ public static class RunBossTests {
         Eq(0.0, boss.ApplyHit(5.99, 100.0, null, 5), "медленный удар не пробивает броню");
         Eq(30.0, boss.Mass, "масса не тронута");
         double loss = boss.ApplyHit(6.0, 10.0, null, 0);
-        Eq(0.525, loss, "скорость 6 уже ранит: 0.35×6×10/40");
-        Eq(29.475, boss.Mass, "масса уменьшилась");
+        Eq(0.75, loss, "скорость 6 уже ранит: v0.14 — 0.025×6×10×√(10/40)");
+        Eq(29.25, boss.Mass, "масса уменьшилась");
     }
 
     public static void ApplyHit_Formula() {
         var boss = new BossState(30.0, 13UL);
         double loss = boss.ApplyHit(8.0, 10.0, null, 0);
-        Eq(0.7, loss, "0.35×8×10/(10+30)");
-        Eq(29.3, boss.Mass, "30 − 0.7");
+        Eq(1.0, loss, "v0.14: 0.025×8×10×√(10/40) — от массы героя и √доли");
+        Eq(29.0, boss.Mass, "30 − 1.0");
         double loss2 = boss.ApplyHit(8.0, 10.0, null, 0);
-        Eq(0.35 * 8.0 * 10.0 / (10.0 + 29.3), loss2, "формула использует текущую массу");
+        Eq(0.025 * 8.0 * 10.0 * System.Math.Sqrt(10.0 / (10.0 + 29.0)), loss2, "формула использует текущую массу");
     }
 
     public static void ApplyHit_RicochetAndSpikesBonus() {
@@ -90,18 +90,18 @@ public static class RunBossTests {
         rico.Add("m_ricochet");
         var boss = new BossState(30.0, 15UL);
         double loss = boss.ApplyHit(8.0, 10.0, rico, 2);
-        Eq(1.4, loss, "0.7 × (1 + 0.5×2 отскока)");
+        Eq(2.0, loss, "1.0 × (1 + 0.5×2 отскока)");
 
         var spikes = new MutationSet();
         spikes.Add("m_spikes");
         var boss2 = new BossState(30.0, 15UL);
-        Eq(1.05, boss2.ApplyHit(8.0, 10.0, spikes, 0), "шипы: 0.7 × 1.5");
+        Eq(1.5, boss2.ApplyHit(8.0, 10.0, spikes, 0), "шипы: 1.0 × 1.5");
 
         var both = new MutationSet();
         both.Add("m_spikes");
         both.Add("m_ricochet");
         var boss3 = new BossState(30.0, 15UL);
-        Eq(0.35 * 8.0 * 10.0 / 40.0 * 1.5 * 1.5, boss3.ApplyHit(8.0, 10.0, both, 2), "шипы + рикошет складываются");
+        Eq(2.25, boss3.ApplyHit(8.0, 10.0, both, 2), "шипы ×1.5 и рикошет ×1.5 (1 стак) складываются");
     }
 
     public static void Phases_ByMass() {

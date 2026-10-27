@@ -687,13 +687,6 @@ public sealed class RunUi : MonoBehaviour {
         _titleModal.SetActive(false);
     }
 
-    /// <summary>Закрыть заставку без подсказки (тестовый старт у стража из настроек на титуле).</summary>
-    public void HideTitle() {
-        if (_titleModal == null || !_titleModal.activeSelf) return;
-        _titleModal.SetActive(false);
-        PM.Systems.Input.PullGestureInput.Blocked = false;
-    }
-
     public void ShowTitle() {
         var m = _game.Meta;
         _titleSoul.text = m.Runs > 0
@@ -701,6 +694,12 @@ public sealed class RunUi : MonoBehaviour {
             : "Первая жизнь. Душа ещё ничего не помнит.";
         _titleModal.SetActive(true);
         PM.Systems.Input.PullGestureInput.Blocked = true;
+    }
+
+    /// <summary>v0.14: принудительно закрыть титул (DevTools-старт у стража может быть из главного меню).</summary>
+    public void HideTitle() {
+        if (_titleModal != null && _titleModal.activeSelf) _titleModal.SetActive(false);
+        PM.Systems.Input.PullGestureInput.Blocked = false;
     }
 
     private void BuildInfo() {
