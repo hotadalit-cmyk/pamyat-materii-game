@@ -49,7 +49,7 @@ public sealed class RunUi : MonoBehaviour {
     public RectTransform SplitRt => _skSplit != null ? _skSplit.Rt : null;
     public RectTransform GatherRt => _skGather != null ? _skGather.Rt : null;
     // умения справа внизу и круглые кнопки сверху (раскладка в духе MOBA, v0.9)
-    private SkillButton _skDash, _skSplit, _skGather, _skSoul, _skMenu, _skBook;
+    private SkillButton _skDash, _skSplit, _skGather, _skSoul, _skAuto, _skMenu, _skBook;
     private float _dashLock; // v0.12: оглушение Хора — рывок недоступен
     private GameObject _pauseModal;
     private RawImage _vignette;
@@ -141,6 +141,8 @@ public sealed class RunUi : MonoBehaviour {
         _skGather.OnPress = () => _game.RequestGather();
         _skSoul = SkillButton.Create(_root, "soul_btn", 150, new Color(0.75f, 0.55f, 1f), "lorc_dragon-spiral", "Душа ⇄");
         _skSoul.OnPress = () => _game.RequestSoulTransfer();
+        _skAuto = SkillButton.Create(_root, "auto_btn", 150, new Color(0.55f, 0.85f, 1f), "lorc_brain", "Авто"); // v0.13: Марионетка
+        _skAuto.OnPress = () => _game.TogglePuppet();
         RunJoystick.Build(_root);
         ApplyHandedness();
 
@@ -320,6 +322,7 @@ public sealed class RunUi : MonoBehaviour {
         Place(_skSplit, anchor, c, 180f, sx);
         Place(_skGather, anchor, c, 138f, sx);
         Place(_skSoul, anchor, c, 96f, sx);
+        Place(_skAuto, anchor, c, 54f, sx); // v0.13: «Авто» ниже «Души ⇄» на той же дуге
         _skDash.gameObject.SetActive(GameSettings.Joystick);
     }
 
@@ -371,6 +374,13 @@ public sealed class RunUi : MonoBehaviour {
             _skSplit.SetBadge(frags > 1 ? frags.ToString() : "");
             _skGather.gameObject.SetActive(frags > 1);
             _skSoul.gameObject.SetActive(_game.CanSoulTransfer);
+            // v0.13: кнопка «Авто» — только с узлом «Марионетка»
+            bool puppet = _game.PuppetAvailable;
+            _skAuto.gameObject.SetActive(puppet);
+            if (puppet) {
+                _skAuto.SetState(true);
+                _skAuto.SetLabel(_game.PuppetOn ? "Авто вкл" : "Авто");
+            }
             bool g = _game.Gathering;
             double carry = _game.TwinCarry;
             _skGather.SetLabel(g ? "Сбор…" : "Собраться");

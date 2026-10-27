@@ -281,6 +281,15 @@ namespace PM.Domain.Run {
                 EvoBranch.Clones, 4, 2,
                 Cost.Of(new CostItem(ResourceKind.Organic, 16), new CostItem(ResourceKind.Psyche, 8)),
                 new[]{ Eff(EvoEffectKind.CloneRegen, 0.04), Eff(EvoEffectKind.CloneSight, 2.0) }, requires: new[]{ "clone_shell" }));
+            // v0.13: продвинутый автопилот — «Марионетка» у героя, «Кукловод» раздаёт её клонам
+            l.Add(N("puppet", "Марионетка", "Способность: кнопка «Авто» — герой сам охотится, бегает от угроз и обходит опасные зоны.",
+                EvoBranch.Clones, 3, 3,
+                Cost.Of(new CostItem(ResourceKind.Slime, 14), new CostItem(ResourceKind.Psyche, 8)),
+                new[]{ Abil("puppet") }, requires: new[]{ "clone_instinct" }));
+            l.Add(N("puppet_master", "Кукловод", "Способность: тап по клону — выдать или снять ему автопилот (максимум 2 нити).",
+                EvoBranch.Clones, 4, 3,
+                Cost.Of(new CostItem(ResourceKind.Slime, 24), new CostItem(ResourceKind.Psyche, 12)),
+                new[]{ Abil("puppet_master") }, requires: new[]{ "puppet", "clone_soul" }));
 
             return l.ToArray();
         }

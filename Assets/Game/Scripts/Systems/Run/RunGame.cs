@@ -156,6 +156,10 @@ public sealed partial class RunGame : MonoBehaviour {
         _lastHitSource = null;
         _builtRoomKey = -1;
         _lastDepthShown = 0;
+        PuppetOn = false;              // новая жизнь — автопилот сброшен
+        _manualT = 0f;
+        _puppetMarked.Clear();
+        if (_intentLabel != null) _intentLabel.text = "";
         EnsurePlayer();
         BuildRoom();
     }
@@ -603,6 +607,202 @@ public sealed partial class RunGame : MonoBehaviour {
         if (Run.IsDead) { _lastHitSource = "dash"; EndRun(); }
     }
 
+    // ---------- Марионетка: автопилот героя и клонов (v0.13) ----------
+    public bool PuppetAvailable => InRun && Run.HasAbility("puppet");
+    public bool PuppetOn { get; private set; }
+    private float _manualT;                 // ручной перехват: сколько ещё управлять самим
+    private float _autoDashT;               // пауза между автопилотными рывками
+    private PuppetIntent _lastIntent = (PuppetIntent)(-1);
+    private readonly HashSet<int> _puppetMarked = new HashSet<int>();   // клоны под нитью
+    private readonly List<PuppetZone> _puppetZoneBuf = new List<PuppetZone>();
+    private PuppetZone[] _puppetZones = new PuppetZone[0];
+    private PuppetSense[] _senseTmp = new PuppetSense[48];
+    private TextMesh _intentLabel;
+
+    /// <summary>Кнопка «Авто»: включить/выключить автопилот героя.</summary>
+    public void TogglePuppet() {
+        if (!PuppetAvailable) {
+            _ui.Flash("«Марионетка» открывается в ветви «Клоны»");
+            ProceduralSfx.Instance?.Play("deny");
+            return;
+        }
+        PuppetOn = !PuppetOn;
+        _manualT = 0f;
+        _lastIntent = (PuppetIntent)(-1);
+        ProceduralSfx.Instance?.Play(PuppetOn ? "evolve" : "deny");
+        _ui.Flash(PuppetOn ? "Автопилот включён — касание управления вернёт вам руку на 3 с"
+                           : "Автопилот выключен", 1.8f);
+        if (!PuppetOn && _intentLabel != null) _intentLabel.text = "";
+    }
+
+    private void PuppetStep(float dt) {
+        if (!PuppetOn || _player == null || Run.IsDead) return;
+        _autoDashT = Mathf.Max(0f, _autoDashT - dt);
+        // касание джойстика/рогатки — управление возвращается игроку на 3 с
+        bool manual = (RunJoystick.Instance != null && RunJoystick.Instance.Dir.sqrMagnitude > 0.0001f)
+                      || (PullGestureInput.Instance != null && PullGestureInput.Instance.Active);
+        if (manual) _manualT = 3f;
+        if (_manualT > 0f) {
+            _manualT -= dt;
+            SetIntentLabel("");
+            return;
+        }
+        var dec = PuppetBrain.Think(BuildPuppetInput(_player.Rb.position, Run.FragmentMass(Run.Fragments.LeadId),
+            Run.Fragments.LeadId, false, _player.Rb.position));
+        Vector2 dir = new Vector2((float)dec.Move.X, (float)dec.Move.Y);
+        if (dir.sqrMagnitude > 0.001f) {
+            dir.Normalize();
+            var rb = _player.Rb;
+            if (Vector2.Dot(rb.linearVelocity, dir) < JoyMaxSpeed * (float)Run.DashSpeedMult)
+                rb.AddForce(dir * (JoyAccel * rb.mass), ForceMode2D.Force);
+        }
+        if (dec.Dash && _autoDashT <= 0f && _guardianDashLock <= 0f) {
+            _autoDashT = 0.8f;
+            OnDashRelease(dec.DashDir, 1.0);
+        }
+        if (dec.Intent != _lastIntent) {
+            _lastIntent = dec.Intent;
+            SetIntentLabel(PuppetBrain.IntentName(dec.Intent));
+        }
+    }
+
+    /// <summary>Снимок мира для PuppetBrain: существа в радиусе 14, зоны стража, ноша/лидер для клона.</summary>
+    private PuppetInput BuildPuppetInput(Vector2 me, double selfMass, int fragId, bool clone, Vector2 lead) {
+        int n = 0;
+        for (int i = 0; i < _creatures.Count && n < _senseTmp.Length; i++) {
+            var c = _creatures[i];
+            if (c == null || c.IsBoss || !c.gameObject.activeSelf) continue;
+            Vector2 cp = c.View.Rb.position;
+            if (Vector2.Distance(me, cp) > 14f) continue;
+            double cm = c.Mass;
+            bool edible = c.IsFood || selfMass >= cm * (clone ? Run.CloneAbsorbRatio : Run.Mutations.AbsorbRatio);
+            _senseTmp[n++] = new PuppetSense {
+                Pos = new Vec2(cp.x, cp.y), Mass = cm, IsFood = c.IsFood,
+                IsShimmering = c.IsShimmering,
+                Threatens = !c.IsFood && !edible && cm > selfMass * 0.9,
+            };
+        }
+        var sense = new PuppetSense[n];
+        System.Array.Copy(_senseTmp, sense, n);
+        return new PuppetInput {
+            SelfPos = new Vec2(me.x, me.y), SelfMass = selfMass,
+            SelfVel = new Vec2(0, 0),
+            DashCharges = clone ? 0 : Run.DashCharges,
+            MaxDashCharges = clone ? 0 : Run.MaxDashCharges,
+            Creatures = sense, Zones = _puppetZones,
+            Carry = clone ? Run.CarryTotal(fragId) : 0.0,
+            CarryCapacity = clone ? Run.Resources.Capacity : 0.0,
+            LeaderPos = new Vec2(lead.x, lead.y),
+            Leash = clone ? Run.CloneLeash : 0.0,
+            AbsorbRatio = clone ? Run.CloneAbsorbRatio : Run.Mutations.AbsorbRatio,
+        };
+    }
+
+    /// <summary>Круги-телеграфы и зоны стража — автопилот обходит их (вызывается из GuardianStep).</summary>
+    private void UpdatePuppetZones(GuardianOutput o) {
+        _puppetZoneBuf.Clear();
+        if (o.Telegraph.Seconds > 0.0 && o.Telegraph.Radius > 0.0)
+            _puppetZoneBuf.Add(new PuppetZone { Pos = o.Telegraph.Pos, Radius = o.Telegraph.Radius });
+        if (o.Telegraphs != null)
+            for (int i = 0; i < o.Telegraphs.Length; i++)
+                if (o.Telegraphs[i].Seconds > 0.0 && o.Telegraphs[i].Radius > 0.0)
+                    _puppetZoneBuf.Add(new PuppetZone { Pos = o.Telegraphs[i].Pos, Radius = o.Telegraphs[i].Radius });
+        if (o.Zones != null)
+            for (int i = 0; i < o.Zones.Length; i++)
+                if (o.Zones[i].Radius > 0.0 && o.Zones[i].Life > 0.0)
+                    _puppetZoneBuf.Add(new PuppetZone { Pos = o.Zones[i].Pos, Radius = o.Zones[i].Radius });
+        _puppetZones = _puppetZoneBuf.ToArray();
+    }
+
+    private void SetIntentLabel(string text) {
+        if (_player == null) return;
+        if (_intentLabel == null) {
+            var go = new GameObject("puppet_intent");
+            var tm = go.AddComponent<TextMesh>();
+            tm.fontSize = 48;
+            tm.characterSize = 0.06f;
+            tm.anchor = TextAnchor.LowerCenter;
+            tm.color = new Color(0.6f, 0.9f, 1f, 0.95f);
+            var font = ThirdPartyArt.Body != null ? ThirdPartyArt.Body : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            tm.font = font;
+            go.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+            go.GetComponent<MeshRenderer>().sortingOrder = DarknessMask.Order + 10;
+            _intentLabel = tm;
+        }
+        _intentLabel.text = text;
+        _intentLabel.transform.position = _player.transform.position + Vector3.up * (PlayerRadius + 0.7f);
+    }
+
+    /// <summary>Тап по клону (Кукловод): выдать или снять нить автопилота — максимум две.</summary>
+    private void PuppetTapStep() {
+        if (!Run.HasAbility("puppet_master") || _ui.ModalOpen || _player == null) return;
+        bool tap = false;
+        Vector2 screen = Vector2.zero;
+        if (Application.isMobilePlatform) {
+            for (int i = 0; i < UnityEngine.Input.touchCount; i++) {
+                var t = UnityEngine.Input.GetTouch(i);
+                if (t.phase != TouchPhase.Began) continue;
+                if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(t.fingerId)) continue;
+                tap = true; screen = t.position; break;
+            }
+        } else if (UnityEngine.Input.GetMouseButtonDown(0) &&
+                   (EventSystem.current == null || !EventSystem.current.IsPointerOverGameObject())) {
+            tap = true; screen = UnityEngine.Input.mousePosition;
+        }
+        if (!tap) return;
+        var cam = Camera.main;
+        if (cam == null) return;
+        Vector2 w = cam.ScreenToWorldPoint(new Vector3(screen.x, screen.y, 10f));
+        var fv = NearestFragment(w, out float d);
+        if (fv == null || fv.View == _player || d > FragRadius(fv) + 0.45f) return;
+        ToggleClonePuppet(fv);
+    }
+
+    private void ToggleClonePuppet(FragView fv) {
+        if (_puppetMarked.Contains(fv.Id)) {
+            _puppetMarked.Remove(fv.Id);
+            if (fv.Thread != null) fv.Thread.enabled = false;
+            _ui.Flash("Нить снята", 1.2f);
+            ProceduralSfx.Instance?.Play("deny");
+            return;
+        }
+        if (_puppetMarked.Count >= 2) {
+            _ui.Flash("Нитей только две — снимите одну", 1.6f);
+            ProceduralSfx.Instance?.Play("deny");
+            return;
+        }
+        _puppetMarked.Add(fv.Id);
+        if (fv.Thread == null)
+            fv.Thread = SpriteUtil.AddSprite(fv.View.transform, SpriteUtil.RingSprite, 1f, 1f,
+                new Color(1f, 0.82f, 0.3f, 0.95f), DarknessMask.Order + 7);
+        fv.Thread.enabled = true;
+        _ui.Flash("Клон под нитью — он играет сам", 1.6f);
+        ProceduralSfx.Instance?.Play("evolve");
+    }
+
+    /// <summary>Метка-нить над клоном: держим мировой размер и высоту при любом масштабе тела.</summary>
+    private void ThreadStep(FragView fv) {
+        if (fv.Thread == null || !fv.Thread.enabled) return;
+        float parentScale = Mathf.Max(0.0001f, fv.View.transform.localScale.x);
+        float r = FragRadius(fv);
+        fv.Thread.transform.localPosition = new Vector3(0f, (r + 0.35f) / parentScale, 0f);
+        float s = 0.42f / parentScale;
+        fv.Thread.transform.localScale = new Vector3(s, s, 1f);
+    }
+
+    /// <summary>Клон под нитью: движение по решению PuppetBrain (сила — как в TwinForage).</summary>
+    private void PuppetCloneStep(FragView fv, Rigidbody2D rb, Vector2 lead, float dist, float dt) {
+        var me = rb.position;
+        double m = Run.FragmentMass(fv.Id);
+        var dec = PuppetBrain.Think(BuildPuppetInput(me, m, fv.Id, true, lead));
+        Vector2 dir = new Vector2((float)dec.Move.X, (float)dec.Move.Y);
+        if (dir.sqrMagnitude > 0.001f) {
+            dir.Normalize();
+            if (Vector2.Dot(rb.linearVelocity, dir) < CloneMaxSpeed(fv))
+                rb.AddForce(dir * ((dec.Intent == PuppetIntent.Flee ? 18f : 11f) * rb.mass), ForceMode2D.Force);
+        } else Wander(fv, rb, lead, dist, dt);
+    }
+
     // ---------- Контакты ----------
     private int _hitFrag = -1;   // фрагмент, участвующий в текущем контакте
 
@@ -891,6 +1091,7 @@ public sealed partial class RunGame : MonoBehaviour {
         var pPos = _player.Rb.position;
         float pr = PlayerRadius;
         JoystickStep();
+        PuppetStep(dt);   // v0.13: автопилот героя («Марионетка»)
         FragmentsStep(dt);
         LootStep();
         if (!InRun) return;
@@ -1018,6 +1219,7 @@ public sealed partial class RunGame : MonoBehaviour {
             PlayerDashed = _playerDashed, PlayerDashDir = _playerDashDir, // v0.12: зеркало Гранильщика
         });
         _playerDashed = false; // флаг однотактный
+        UpdatePuppetZones(o); // v0.13: телеграфы/зоны стража — для автопилота
         _guardianDashLock = Mathf.Max(0f, (float)o.DashLockSeconds);
         _ui.SetDashLocked(_guardianDashLock); // серая кнопка рывка с таймером «Оглушён!»
         if (o.ResetFight) { // отступление в фазе 1: штраф и восстановление — в Domain
@@ -1548,6 +1750,7 @@ public sealed partial class RunGame : MonoBehaviour {
                   (float)Run.LightRadius * (Run.OpenWorld ? 1.8f : 1f));
         UpdateExitVisual();
         if (!_ui.ModalOpen) TwoFingerStep();
+        if (InRun) PuppetTapStep();   // v0.13: тап по клону — нить «Кукловода»
         if (InRun) TwinGlowStep();
         if (InRun && Run.CompletedBiomesCount > _biomesShown) {
             // v0.10: область изучена целиком — праздник и эссенция

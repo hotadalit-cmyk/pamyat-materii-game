@@ -18,6 +18,7 @@ public sealed partial class RunGame {
         public int Id;
         public SimEntityView2D View;
         public SpriteRenderer Glow;
+        public SpriteRenderer Thread;  // v0.13: золотая метка автопилота «Кукловода»
         public float BaseRadius;
         public Vector2 WanderDir;      // куда бредёт клон, когда вокруг нет дела
         public float WanderT;
@@ -93,6 +94,7 @@ public sealed partial class RunGame {
         for (int i = _fragList.Count - 1; i >= 0; i--) {
             var fv = _fragList[i];
             if (System.Array.IndexOf(ids, fv.Id) >= 0) continue;
+            _puppetMarked.Remove(fv.Id);   // v0.13: нить лопнувшего/влитого клона исчезает
             if (fv.View != null) {
                 SplashBurst2D.Instance?.Burst(fv.View.transform.position, Vector2.up, 6);
                 Destroy(fv.View.gameObject);
@@ -273,6 +275,12 @@ public sealed partial class RunGame {
                 if (dist < 0.001f) continue;
                 float kr = _gathering ? 14f + 10f * Mathf.Min(_gatherTimer, 3f) : 12f;
                 rb.AddForce(d / dist * (kr * rb.mass), ForceMode2D.Force);
+                continue;
+            }
+            if (_puppetMarked.Contains(fv.Id)) {
+                // v0.13: клон под нитью «Кукловода» играет сам по PuppetBrain
+                ThreadStep(fv);
+                PuppetCloneStep(fv, rb, lead, dist, dt);
                 continue;
             }
             if (TwinForage(fv, rb, lead, dist)) continue;
