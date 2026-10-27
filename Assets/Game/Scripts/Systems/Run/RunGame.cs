@@ -1571,6 +1571,7 @@ public sealed partial class RunGame : MonoBehaviour {
         }
         UpdateEcho();
         UpdateRings();
+        UpdateHpArcs();   // v0.13: дуга-шкала HP вокруг не-съедобных существ
         UpdateShockwave();
         if (Run.IsDead) { EndRun(); return; }
         if (Run.PendingOffer != null && !_offerShown) {
@@ -1620,6 +1621,37 @@ public sealed partial class RunGame : MonoBehaviour {
     private RunAudio _audio;
     private bool _splitHinted, _soulHinted;
     private int _biomesShown;
+
+    /// <summary>
+    /// v0.13: тонкая дуга-шкала HP снаружи кольца угрозы у каждого не-съедобного существа.
+    /// Заполнение = Mass / MaxMass по часовой от верха; у стражей и капель Горнила — всегда,
+    /// у остальных — когда ранены. Цвет: зелёный &gt;60%, жёлтый 30–60%, красный &lt;30%.
+    /// 32 спрайта закэшированы (HpArcLib) — в кадре только выбор спрайта и цвет.
+    /// </summary>
+    private void UpdateHpArcs() {
+        for (int i = 0; i < _creatures.Count; i++) {
+            var c = _creatures[i];
+            if (c == null || c.IsFood) continue;
+            if (c.HpArc == null) {
+                c.HpArc = SpriteUtil.AddSprite(c.transform, HpArcLib.Get(1f), 1f, 1f,
+                    Color.white, DarknessMask.Order + 5);
+                c.HpArc.transform.localPosition = Vector3.zero;
+            }
+            float frac = c.MaxMass > 0.001 ? Mathf.Clamp01((float)(c.Mass / c.MaxMass)) : 1f;
+            bool show = (c.IsBoss || frac < 0.995f) && c.gameObject.activeSelf;
+            c.HpArc.enabled = show;
+            if (!show) continue;
+            c.HpArc.sprite = HpArcLib.Get(frac);
+            var col = HpArcLib.ColorFor(frac);
+            col.a = 0.95f;
+            c.HpArc.color = col;
+            // дуга шире кольца угрозы (r×2.5): диаметр = r×2.7; спрайт 1 юнит,
+            // родительский масштаб (r/BaseRadius) компенсируем
+            float worldD = (float)SizeRule.RadiusForMass(c.Mass) * 2.7f;
+            float local = worldD / Mathf.Max(0.0001f, c.transform.localScale.x);
+            c.HpArc.transform.localScale = new Vector3(local, local, 1f);
+        }
+    }
 
     /// <summary>Свет для 3D-моделей (тёплый, сверху-сбоку) и фоновая музыка пещеры.</summary>
     private void SetupLightAndMusic() {
