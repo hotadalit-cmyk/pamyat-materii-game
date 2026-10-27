@@ -586,7 +586,8 @@ public sealed partial class RunGame : MonoBehaviour {
             }
         }
         // крупное тело или разбежавшаяся стая — камера отъезжает
-        float zoom = Mathf.Clamp(0.75f + 0.125f * Mathf.Sqrt((float)Run.Mass), 0.95f, 1.6f) * (Run.OpenWorld ? 1.9f : 1f);
+        // v0.15: масса по кривой BALANCE_v14 доходит до 250+ — потолок 1.6 оставлял героя на пол-экрана; теперь радиус и обзор растут вместе
+        float zoom = Mathf.Clamp(0.75f + 0.125f * Mathf.Sqrt((float)Run.Mass), 0.95f, 3.6f) * (Run.OpenWorld ? 1.9f : 1f);
         if (_player != null && _fragList.Count > 1) zoom = Mathf.Max(zoom, Mathf.Min(2.0f, FragmentSpread() / 7f)); // клоны самостоятельны — камера почти не отъезжает
         FollowCamera.ZoomMult = zoom;
     }

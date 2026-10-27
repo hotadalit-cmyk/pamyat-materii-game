@@ -18,13 +18,15 @@ public sealed class FollowCamera : MonoBehaviour {
     public static bool Snap;
     private Vector3 _smoothPos;
     private bool _hasPos;
-    public const float BackDistance = -10f; // мир живёт на z=0, камера обязана отойти
+    public const float BackDistance = -120f; // мир на z=0; 3D-модели крупных стражей наклонены к камере — даём им глубину, чтобы не срезала ближняя плоскость
 
     private Camera _cam;
 
     void Awake() {
         _cam = GetComponent<Camera>();
         _cam.orthographic = true;
+        _cam.nearClipPlane = 0.3f;
+        _cam.farClipPlane = 260f;   // камера на −120: видно и пол (z=0), и модели, выступающие к камере
         var p = transform.position;
         if (p.z > BackDistance + 0.3f) transform.position = new Vector3(p.x, p.y, BackDistance);
     }

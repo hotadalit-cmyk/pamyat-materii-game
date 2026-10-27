@@ -32,7 +32,11 @@ public sealed class ThirdPartyModelImport : AssetPostprocessor {
         ti.wrapMode = TextureWrapMode.Clamp;
         // v0.15: пол биома повторяется плиткой; пропсы и иконки — небольшие спрайты с прозрачностью
         string p = assetPath.Replace('\\', '/');
-        if (p.Contains("/AiArt/Floors/")) { ti.wrapMode = TextureWrapMode.Repeat; ti.maxTextureSize = 1024; ti.mipmapEnabled = true; }
+        if (p.Contains("/AiArt/Floors/")) {
+            // WorldView смешивает пол с картой на CPU (GetPixelBilinear): нужна читаемая несжатая текстура
+            ti.wrapMode = TextureWrapMode.Repeat; ti.maxTextureSize = 512; ti.mipmapEnabled = false;
+            ti.isReadable = true; ti.textureCompression = TextureImporterCompression.Uncompressed;
+        }
         else if (p.Contains("/AiArt/Props/")) { ti.maxTextureSize = 512; ti.alphaIsTransparency = true; }
         else if (p.Contains("/AiArt/Icons/")) { ti.maxTextureSize = 256; ti.alphaIsTransparency = true; }
         else if (p.Contains("/AiArt/Guardians/")) ti.maxTextureSize = 768;

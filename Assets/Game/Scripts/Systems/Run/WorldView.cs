@@ -312,7 +312,7 @@ public sealed class WorldView {
         for (int i = 0; i < props.Length; i++) {
             var tex = Resources.Load<Texture2D>("AiArt/Props/" + props[i]);
             sprites[i] = tex != null
-                ? Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f)
+                ? Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), Mathf.Max(tex.width, tex.height)) // 1 ед. мира — масштаб ниже задаёт размер
                 : null;
         }
         foreach (var item in plan.Items) {
@@ -326,6 +326,7 @@ public sealed class WorldView {
             go.transform.rotation = Quaternion.Euler(0f, 0f, (float)item.RotationDeg);
             var sr = go.AddComponent<SpriteRenderer>();
             sr.sprite = spr;
+            sr.color = new Color(0.78f, 0.78f, 0.82f, 0.92f);   // чуть притушен: существа и кольца читаются поверх декора
             sr.sortingOrder = 2;                             // над полом, под существами
             if (item.Glow) {
                 var g = accent; g.a = 0.42f;

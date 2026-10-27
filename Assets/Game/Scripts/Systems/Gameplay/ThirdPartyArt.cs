@@ -91,8 +91,8 @@ public static class ThirdPartyArt {
         { "salamander", "Q_Dragon" }, { "leech", "Snake" }, { "bubble_jelly", "Q_Slime" }, { "shard_crab", "Crab" },
         { "wisp", "Bat" }, { "warden", "Cthulhu" }, { "nemesis", "GreenDemon" }, { "hero", "Q_Slime" },
         { "cave_rat", "Rat" }, { "piranha", "Piranha" }, { "bomb_toad", "Frog" }, { "deep_shark", "Shark" },
-        { "gd_spore_mother", "Mushroom" }, { "gd_forge", "LavaGolem" }, { "gd_abyss_choir", "Octopus" },
-        { "gd_grinder", "Cyclops" }, { "gd_pulsar", "Heart" },
+        { "gd_spore_mother", "Mushroom" }, { "gd_forge", "Demon" }, { "gd_abyss_choir", "Q_Slime" },
+        { "gd_grinder", "Cyclops" }, { "gd_pulsar", "Cthulhu" },
     };
     private static readonly Dictionary<string, GameObject> _prefabs = new Dictionary<string, GameObject>();
     private static readonly Dictionary<string, float> _footprint = new Dictionary<string, float>();
@@ -187,6 +187,7 @@ public static class ThirdPartyArt {
         animator.applyRootMotion = false;
         var mm = tilt.gameObject.AddComponent<MonsterModel>();
         mm.Yaw = yaw;
+        mm.TargetSize = diameter * fit;
         mm.Animator = animator;
         if (!_clips.TryGetValue(model, out var clips)) {
             clips = Resources.LoadAll<AnimationClip>("Monsters/" + model);
@@ -217,6 +218,10 @@ public sealed class MonsterModel : MonoBehaviour {
     public AnimationClip Loop, IdleClip, HitClip;
     /// <summary>v0.15: пульс масштаба (Пульсар-сердце) — дышит в такт ударам.</summary>
     public bool ScalePulse;
+    /// <summary>Желаемый видимый размер (локальные единицы существа). Модели с чужими единицами/скелетом
+    /// (конвертированные из Blender) бывают в разы крупнее расчёта — первые кадры подгоняем по реальным рамкам.</summary>
+    public float TargetSize;
+    private int _fitFrames = 6;
     private Vector3 _baseScale = Vector3.one;
     private float _yaw = 180f;     // по умолчанию — лицом к игроку (вниз по экрану)
     private Rigidbody2D _rb;
@@ -233,6 +238,23 @@ public sealed class MonsterModel : MonoBehaviour {
         if (clip == null || Animator == null) return;
         if (_graph.IsValid()) _graph.Destroy();
         UnityEngine.Playables.AnimationPlayableUtilities.PlayClip(Animator, clip, out _graph);
+    }
+
+    void LateUpdate() {
+        if (_fitFrames <= 0 || Yaw == null || TargetSize <= 0f) return;
+        _fitFrames--;
+        bool any = false; var bb = new Bounds();
+        foreach (var r in Yaw.GetComponentsInChildren<Renderer>()) {
+            if (!r.enabled || r.bounds.size.sqrMagnitude < 1e-8f) continue;
+            if (!any) { bb = r.bounds; any = true; } else bb.Encapsulate(r.bounds);
+        }
+        if (!any) return;
+        float seen = Mathf.Max(bb.size.x, bb.size.y);                       // на экране: x и y мира
+        float want = TargetSize * Mathf.Abs(transform.lossyScale.x) * 1.15f;  // с запасом на позу/хвосты
+        if (seen > want && seen > 1e-4f) {
+            Yaw.localScale *= want / seen;
+            _baseScale = Yaw.localScale;
+        }
     }
 
     public void PlayLoop(bool moving) { _moving = moving; Play(moving ? Loop : (IdleClip ?? Loop)); }
