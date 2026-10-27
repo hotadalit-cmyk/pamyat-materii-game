@@ -606,7 +606,7 @@ public sealed class RunUi : MonoBehaviour {
         var box = Box(_legacyModal.transform, "legacy_box", Vector2.zero, new Vector2(1000, 780), Modal, new Vector2(0.5f, 0.5f));
         Label(box, "Наследие прошлой жизни", 44, TextAnchor.MiddleCenter, new Vector2(0, 320), new Vector2(900, 70),
             new Vector2(0.5f, 0.5f)).color = new Color(1f, 0.82f, 0.3f);
-        AddIcon(box, "icon_legacy|lorc_scroll-unfurled", new Vector2(-400, 320), 64); // v0.15
+        AddIcon(box.gameObject, "icon_legacy|lorc_scroll-unfurled", new Vector2(-400, 320), 64); // v0.15
         _legacyBody = Label(box, "", 26, TextAnchor.UpperLeft, new Vector2(0, 110), new Vector2(880, 380), new Vector2(0.5f, 0.5f));
         var nodeBtn = Button(box, "legacy_node", new Vector2(0, -110), new Vector2(760, 92), GameBootstrap.CSoul, 0.7f, "", 26);
         _legacyNodeText = nodeBtn.GetComponentInChildren<Text>();
