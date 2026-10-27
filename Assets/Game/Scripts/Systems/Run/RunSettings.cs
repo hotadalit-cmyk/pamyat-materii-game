@@ -155,17 +155,16 @@ public sealed class RunSettingsUi : MonoBehaviour {
 
     /// <summary>v0.13: «Для тестов» — кнопки «Страж 1…5»: новая жизнь сразу у стража глубины.</summary>
     private void BuildDevRow(ref float y) {
-        Text(_rows, "Для тестов", 30, TextAnchor.MiddleLeft, new Vector2(0, y - 12), new Vector2(460, 70)).color = GameBootstrap.COutline;
+        // в строке заголовка, между «НАСТРОЙКИ» и «Закрыть»: внизу окна места нет
         var devCol = new Color(0.85f, 0.55f, 0.3f, 0.95f);
         for (int i = 0; i < PM.Domain.Run.RunState.MaxDepth; i++) {
             int depth = i + 1;
-            var b = Btn(_rows, "Страж " + depth, new Vector2(480f + i * 192f, y - 6), new Vector2(180, 68), devCol, new Vector2(0, 1));
+            var b = Btn(_rows, "Страж " + depth, new Vector2(330f + i * 140f, 112f), new Vector2(130, 60), devCol, new Vector2(0, 1));
             b.onClick.AddListener(() => {
                 _game.StartDevGuardianRun(depth);
                 Close();
             });
         }
-        y -= 80f;
     }
 
     private static int IndexOf(float v, params float[] opts) {

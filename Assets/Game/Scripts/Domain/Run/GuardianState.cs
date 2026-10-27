@@ -394,7 +394,7 @@ public sealed class GuardianState {
         double reach = _def.ArenaRadius * 0.85;
         for (int i = 0; i < _zones.Length; i++) {
             _zones[i] = new GuardianZone {
-                Pos = RandomDirection().Scaled(_rng.NextDouble01() * reach),
+                Pos = _lastSelfPos + RandomDirection().Scaled(_rng.NextDouble01() * reach), // вокруг стража, а не центра карты
                 Radius = _def.ZoneRadius,
                 DamagePerSec = _def.ZoneDamagePerSec,
                 Slow01 = _def.ZoneSlow,

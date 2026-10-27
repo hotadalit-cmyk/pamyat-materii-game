@@ -24,6 +24,17 @@ public static class RunGuardianTests {
         True(g.Hp <= targetHp + 1e-9, "страж сбит до " + targetHp.ToString("0.##"));
     }
 
+    /// <summary>Страж у шахты далеко от центра карты: зоны спор — в его арене, а не вокруг (0,0).</summary>
+    public static void SporeZones_AroundGuardianNotMapOrigin() {
+        var def = GuardianCatalog.ForDepth(1);
+        var g = new GuardianState(def, 40.0, 7UL);
+        var self = new Vec2(60, -35);
+        var o = g.Think(new GuardianInput { SelfPos = self, PlayerPos = self + new Vec2(3, 0), PlayerMass = 30.0, Dt = 0.1 });
+        True(o.Zones != null && o.Zones.Length == def.ZoneCount, "зоны выданы");
+        for (int i = 0; i < o.Zones.Length; i++)
+            True((o.Zones[i].Pos - self).Length <= def.ArenaRadius + 1e-9, "зона " + i + " в арене стража");
+    }
+
     // ---------- каталог ----------
 
     public static void Catalog_FiveGuardians() {

@@ -156,6 +156,7 @@ public sealed partial class RunGame : MonoBehaviour {
         Meta.TakeLegacy();
         _legacyNode = null;
         StartRun(RunState.CreateDevGuardianRun(Meta, NewSeed(), depth), null, null);
+        _ui.HideTitle(); // запуск с заставки: сразу в бой
     }
 
     private ulong NewSeed() => (ulong)System.DateTime.UtcNow.Ticks;

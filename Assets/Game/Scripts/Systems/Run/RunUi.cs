@@ -430,7 +430,7 @@ public sealed class RunUi : MonoBehaviour {
                 _goal.text = run.ExitOpen
                     ? (run.OpenWorld ? "Шахта вниз открыта — следуйте за огоньком" : "Выход открыт — ищите светящуюся трещину")
                     : run.OpenWorld && run.GuardianAwake && run.Guardian != null
-                        ? run.Guardian.Def.Name + " стережёт шахту — победите стража"
+                        ? run.Guardian.Def.Name + " стережёт шахту"
                         : string.Format(run.OpenWorld ? "Страж пробудится: {0:0.0} / {1:0.0}" : "Поглощено {0:0.0} / {1:0.0}", run.RoomAbsorbed, goal);
                 _goal.color = run.ExitOpen ? GameBootstrap.CFood : TextColor;
             }
@@ -685,6 +685,13 @@ public sealed class RunUi : MonoBehaviour {
         var credits = Button(_titleModal.transform, "credits", new Vector2(660, -190), new Vector2(460, 100), GameBootstrap.COutline, 0.6f, "Титры", 32);
         credits.GetComponent<Button>().onClick.AddListener(() => ShowInfo("Титры", CreditsText()));
         _titleModal.SetActive(false);
+    }
+
+    /// <summary>Закрыть заставку без подсказки (тестовый старт у стража из настроек на титуле).</summary>
+    public void HideTitle() {
+        if (_titleModal == null || !_titleModal.activeSelf) return;
+        _titleModal.SetActive(false);
+        PM.Systems.Input.PullGestureInput.Blocked = false;
     }
 
     public void ShowTitle() {
