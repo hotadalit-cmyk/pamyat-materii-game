@@ -26,6 +26,12 @@ public sealed class RunCreature : MonoBehaviour {
     public bool IsFood => Species == null || Species.Behavior == CreatureBehavior.Food;
     /// <summary>Источник урона для «Отпечатка жизни»: имя души или id вида.</summary>
     public string SourceId => IsNemesis || !string.IsNullOrEmpty(SoulName) ? SoulName : Species?.Id;
+    // v0.13: шкала HP — масса при спавне; растёт, если существо ест/растёт (максимум в ApplySize)
+    public double MaxMass;
+    /// <summary>Дуга-шкала HP снаружи кольца угрозы (создаётся лениво в RunGame).</summary>
+    public SpriteRenderer HpArc;
+    /// <summary>Радиус тела при спавне — для локальных масштабов дочерних спрайтов.</summary>
+    public float BaseRadius => _baseRadius;
 
     private float _baseRadius = 1f;
 
@@ -36,11 +42,13 @@ public sealed class RunCreature : MonoBehaviour {
         Brain = brain;
         View = view;
         _baseRadius = Mathf.Max(0.01f, baseRadius);
+        MaxMass = System.Math.Max(MaxMass, mass);
         ApplySize();
     }
 
-    /// <summary>Масштаб корня и масса тела — от текущей массы.</summary>
+    /// <summary>Масштаб корня и масса тела — от текущей массы. Попутно ведёт MaxMass (существо подросло).</summary>
     public void ApplySize() {
+        if (Mass > MaxMass) MaxMass = Mass;
         float r = (float)SizeRule.RadiusForMass(Mass);
         float s = r / _baseRadius;
         transform.localScale = new Vector3(s, s, 1f);

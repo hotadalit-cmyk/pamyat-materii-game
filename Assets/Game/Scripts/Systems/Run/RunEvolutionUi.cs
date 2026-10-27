@@ -412,6 +412,8 @@ public sealed class RunEvolutionUi : MonoBehaviour {
                         case "soul_transfer": return "lorc_dragon-spiral";
                         case "clone_return": return "lorc_bubbles";
                         case "clone_hunter": return "lorc_claw-slashes";
+                        case "puppet": return "lorc_brain";          // v0.13: автопилот
+                        case "puppet_master": return "lorc_light-bulb"; // v0.13: нити клонам
                     }
                     break;
                 case EvoEffectKind.CloneLeash: return "lorc_divert";

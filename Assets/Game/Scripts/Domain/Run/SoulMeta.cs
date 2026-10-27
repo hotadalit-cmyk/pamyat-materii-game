@@ -21,6 +21,10 @@ public sealed class SoulMeta {
     public HashSet<string> SeenSpecies = new HashSet<string>();  // виды, хоть раз поглощённые
     public HashSet<string> Codex = new HashSet<string>();        // v0.9: открытые записи энциклопедии (sp:/bi:/res:)
     public NemesisRegistry Nemeses = new NemesisRegistry();
+    // v0.13: наследие прошлой жизни — снимок при смерти; сгорает при старте жизни без применения
+    public LegacyPack Legacy;
+    /// <summary>Сколько раз наследие было применено (за все жизни).</summary>
+    public int LegacyUses;
 
     private readonly int[] _levels = new int[3];
 
@@ -75,6 +79,12 @@ public sealed class SoulMeta {
         }
     }
 
+    /// <summary>
+    /// v0.13: забрать наследие перед стартом новой жизни. Возвращает снимок и стирает его:
+    /// наследие сгорает, если жизнь начата без применения (или применяется этим же вызовом в Unity).
+    /// </summary>
+    public LegacyPack TakeLegacy() { var p = Legacy; Legacy = null; return p; }
+
     public string ToJson() {
         var w = new MiniJson.Writer();
         w.BeginObject();
@@ -108,6 +118,19 @@ public sealed class SoulMeta {
             }
         }
         w.EndArray();
+        w.Key("legacyUses").Value((long)LegacyUses);
+        if (Legacy != null) {
+            w.Key("legacy").BeginObject();
+            w.Key("mass").Value(Legacy.StartMassBonus);
+            w.Key("res").BeginArray();
+            for (int i = 0; i < Legacy.Resources.Length; i++) w.Value(Legacy.Resources[i]);
+            w.EndArray();
+            w.Key("nodes").BeginArray();
+            if (Legacy.Nodes != null)
+                for (int i = 0; i < Legacy.Nodes.Length; i++) w.Value(Legacy.Nodes[i] ?? "");
+            w.EndArray();
+            w.EndObject();
+        }
         w.EndObject();
         return w.ToString();
     }
@@ -133,6 +156,29 @@ public sealed class SoulMeta {
         meta.KnownGenes = AsSet(At(dict, "knownGenes"));
         meta.SeenSpecies = AsSet(At(dict, "seenSpecies"));
         meta.Codex = AsSet(At(dict, "codex"));
+        meta.LegacyUses = AsInt(At(dict, "legacyUses"), 0);
+        if (At(dict, "legacy") is Dictionary<string, object> lg) {
+            var pack = new LegacyPack();
+            double mass = AsDouble(At(lg, "mass"), 0.0);
+            if (double.IsNaN(mass) || double.IsInfinity(mass) || mass < 0.0) mass = 0.0;
+            if (mass > LegacyPack.MassCap) mass = LegacyPack.MassCap;
+            pack.StartMassBonus = mass;
+            if (At(lg, "res") is List<object> res)
+                for (int i = 0; i < res.Count && i < pack.Resources.Length; i++) {
+                    double v = AsDouble(res[i], 0.0);
+                    pack.Resources[i] = double.IsNaN(v) || double.IsInfinity(v) || v < 0.0 ? 0.0 : v;
+                }
+            if (At(lg, "nodes") is List<object> nodes) {
+                var nl = new List<string>();
+                for (int i = 0; i < nodes.Count; i++) {
+                    string s = nodes[i] as string;
+                    if (string.IsNullOrEmpty(s) || s == LegacyPack.ExcludedNode) continue;
+                    if (EvolutionTree.Get(s) != null) nl.Add(s);   // только существующие узлы
+                }
+                pack.Nodes = nl.ToArray();
+            }
+            meta.Legacy = pack;
+        }
         if (At(dict, "nemeses") is List<object> records) {
             meta.Nemeses = new NemesisRegistry();
             for (int i = 0; i < records.Count; i++) {

@@ -27,6 +27,11 @@ public sealed class RunUi : MonoBehaviour {
     private Text _imprintBody;
     private readonly Text[] _upgradeLabels = new Text[3];
     private Text _essenceText;
+    // v0.13: «Наследие прошлой жизни» за просмотр рекламы (заглушка)
+    private GameObject _legacyBtn, _legacyModal;
+    private Text _legacyBody, _legacyNodeText;
+    private LegacyPack _legacyPack;
+    private int _legacyNodeIdx;
     private Text _combo, _mutations, _biomeTitle, _biomeSub, _bossLabel;
     private RectTransform _bossFill;
     private GameObject _bossBar;
@@ -49,7 +54,7 @@ public sealed class RunUi : MonoBehaviour {
     public RectTransform SplitRt => _skSplit != null ? _skSplit.Rt : null;
     public RectTransform GatherRt => _skGather != null ? _skGather.Rt : null;
     // умения справа внизу и круглые кнопки сверху (раскладка в духе MOBA, v0.9)
-    private SkillButton _skDash, _skSplit, _skGather, _skSoul, _skMenu, _skBook;
+    private SkillButton _skDash, _skSplit, _skGather, _skSoul, _skAuto, _skMenu, _skBook;
     private float _dashLock; // v0.12: оглушение Хора — рывок недоступен
     private GameObject _pauseModal;
     private RawImage _vignette;
@@ -59,6 +64,7 @@ public sealed class RunUi : MonoBehaviour {
                              (_imprintModal != null && _imprintModal.activeSelf) ||
                              (_titleModal != null && _titleModal.activeSelf) ||
                              (_infoModal != null && _infoModal.activeSelf) ||
+                             (_legacyModal != null && _legacyModal.activeSelf) ||
                              (_minimap != null && _minimap.IsBig) ||
                              (_evo != null && _evo.ModalOpen) ||
                              (_settings != null && _settings.IsOpen) ||
@@ -141,6 +147,8 @@ public sealed class RunUi : MonoBehaviour {
         _skGather.OnPress = () => _game.RequestGather();
         _skSoul = SkillButton.Create(_root, "soul_btn", 150, new Color(0.75f, 0.55f, 1f), "lorc_dragon-spiral", "Душа ⇄");
         _skSoul.OnPress = () => _game.RequestSoulTransfer();
+        _skAuto = SkillButton.Create(_root, "auto_btn", 150, new Color(0.55f, 0.85f, 1f), "lorc_brain", "Авто"); // v0.13: Марионетка
+        _skAuto.OnPress = () => _game.TogglePuppet();
         RunJoystick.Build(_root);
         ApplyHandedness();
 
@@ -320,6 +328,7 @@ public sealed class RunUi : MonoBehaviour {
         Place(_skSplit, anchor, c, 180f, sx);
         Place(_skGather, anchor, c, 138f, sx);
         Place(_skSoul, anchor, c, 96f, sx);
+        Place(_skAuto, anchor, c, 54f, sx); // v0.13: «Авто» ниже «Души ⇄» на той же дуге
         _skDash.gameObject.SetActive(GameSettings.Joystick);
     }
 
@@ -371,6 +380,13 @@ public sealed class RunUi : MonoBehaviour {
             _skSplit.SetBadge(frags > 1 ? frags.ToString() : "");
             _skGather.gameObject.SetActive(frags > 1);
             _skSoul.gameObject.SetActive(_game.CanSoulTransfer);
+            // v0.13: кнопка «Авто» — только с узлом «Марионетка»
+            bool puppet = _game.PuppetAvailable;
+            _skAuto.gameObject.SetActive(puppet);
+            if (puppet) {
+                _skAuto.SetState(true);
+                _skAuto.SetLabel(_game.PuppetOn ? "Авто вкл" : "Авто");
+            }
             bool g = _game.Gathering;
             double carry = _game.TwinCarry;
             _skGather.SetLabel(g ? "Сбор…" : "Собраться");
@@ -489,6 +505,12 @@ public sealed class RunUi : MonoBehaviour {
         var again = Button(box, "again", new Vector2(0, -360), new Vector2(620, 110), GameBootstrap.CFood, 0.9f,
             "НОВАЯ ЖИЗНЬ", 38);
         again.GetComponent<Button>().onClick.AddListener(() => _game.StartNewRun());
+        // v0.13: «Сохранить наследие (реклама)» — видна, когда реклама доступна и есть что наследовать
+        _legacyBtn = Button(box, "legacy", new Vector2(0, -245), new Vector2(620, 100), new Color(1f, 0.82f, 0.3f), 0.85f,
+            "Сохранить наследие (реклама)", 27);
+        _legacyBtn.GetComponent<Button>().onClick.AddListener(OpenLegacyPanel);
+        _legacyBtn.SetActive(false);
+        BuildLegacyModal();
         _imprintModal.SetActive(false);
     }
 
@@ -511,10 +533,96 @@ public sealed class RunUi : MonoBehaviour {
         sb.AppendLine(string.Format("Эссенция за жизнь: +{0:0}", im.EssenceEarned));
         _imprintBody.text = sb.ToString();
         RefreshSoul();
+        _legacyPack = _game.Run != null ? _game.Run.MakeLegacy() : null;   // v0.13: снимок на момент смерти
+        _legacyBtn.SetActive(AdsConfig.RewardedEnabled && AdsService.Current.IsAvailable && HasLegacyContent(_legacyPack));
         _imprintModal.SetActive(true);
     }
 
+    private static bool HasLegacyContent(LegacyPack p) {
+        if (p == null) return false;
+        if (p.StartMassBonus > 0.005) return true;
+        if (p.Nodes != null && p.Nodes.Length > 0) return true;
+        if (p.Resources != null)
+            for (int i = 0; i < p.Resources.Length; i++)
+                if (p.Resources[i] > 0.005) return true;
+        return false;
+    }
+
     public void HideImprint() { _imprintModal.SetActive(false); }
+
+    // ---------- v0.13: Наследие прошлой жизни (за рекламу) ----------
+
+    private void BuildLegacyModal() {
+        _legacyModal = FullScreen("legacy_modal");
+        var box = Box(_legacyModal.transform, "legacy_box", Vector2.zero, new Vector2(1000, 780), Modal, new Vector2(0.5f, 0.5f));
+        Label(box, "Наследие прошлой жизни", 44, TextAnchor.MiddleCenter, new Vector2(0, 320), new Vector2(900, 70),
+            new Vector2(0.5f, 0.5f)).color = new Color(1f, 0.82f, 0.3f);
+        _legacyBody = Label(box, "", 26, TextAnchor.UpperLeft, new Vector2(0, 110), new Vector2(880, 380), new Vector2(0.5f, 0.5f));
+        var nodeBtn = Button(box, "legacy_node", new Vector2(0, -110), new Vector2(760, 92), GameBootstrap.CSoul, 0.7f, "", 26);
+        _legacyNodeText = nodeBtn.GetComponentInChildren<Text>();
+        nodeBtn.GetComponent<Button>().onClick.AddListener(CycleLegacyNode);
+        var watch = Button(box, "legacy_watch", new Vector2(0, -230), new Vector2(560, 100), new Color(0.4f, 1f, 0.55f), 0.9f,
+            "Смотреть рекламу", 32);
+        watch.GetComponent<Button>().onClick.AddListener(WatchLegacyAd);
+        var cancel = Button(box, "legacy_cancel", new Vector2(0, -330), new Vector2(380, 84), GameBootstrap.COutline, 0.6f,
+            "Не сохранять", 28);
+        cancel.GetComponent<Button>().onClick.AddListener(() => _legacyModal.SetActive(false));
+        _legacyModal.SetActive(false);
+    }
+
+    /// <summary>Панель наследия: что перенесётся, выбор узла, затем реклама.</summary>
+    private void OpenLegacyPanel() {
+        if (_legacyPack == null || !AdsService.Current.IsAvailable || !AdsConfig.RewardedEnabled) return;
+        _legacyNodeIdx = 0;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Перенесётся в следующую жизнь:");
+        sb.AppendLine("• ресурсы — по 30% накопленного:");
+        var res = _legacyPack.Resources;
+        bool any = false;
+        for (int i = 0; i < res.Length; i++) {
+            if (res[i] <= 0.005) continue;
+            any = true;
+            sb.AppendLine("      " + ResourceInfo.Name((ResourceKind)i) + " — " + res[i].ToString("0.#"));
+        }
+        if (!any) sb.AppendLine("      (хранилище было пусто)");
+        sb.AppendLine("• один узел эволюции прошлой жизни — на выбор (кнопка ниже)");
+        sb.AppendLine("• стартовая масса +" + _legacyPack.StartMassBonus.ToString("0.#"));
+        sb.AppendLine("Наследие сгорит, если следующая жизнь начнётся без него.");
+        _legacyBody.text = sb.ToString();
+        RefreshLegacyNode();
+        _legacyModal.SetActive(true);
+        _legacyModal.transform.SetAsLastSibling();
+    }
+
+    private void RefreshLegacyNode() {
+        if (_legacyPack == null || _legacyPack.Nodes == null || _legacyPack.Nodes.Length == 0) {
+            _legacyNodeText.text = "Узел: нечего выбирать";
+            return;
+        }
+        var node = EvolutionTree.Get(_legacyPack.Nodes[Mathf.Clamp(_legacyNodeIdx, 0, _legacyPack.Nodes.Length - 1)]);
+        _legacyNodeText.text = "Узел: " + (node != null ? node.Name : "?") + "  (нажмите — следующий)";
+    }
+
+    private void CycleLegacyNode() {
+        if (_legacyPack == null || _legacyPack.Nodes == null || _legacyPack.Nodes.Length == 0) return;
+        _legacyNodeIdx = (_legacyNodeIdx + 1) % _legacyPack.Nodes.Length;
+        RefreshLegacyNode();
+        ProceduralSfx.Instance?.Play("click");
+    }
+
+    private void WatchLegacyAd() {
+        if (_legacyPack == null) return;
+        string chosen = _legacyPack.Nodes != null && _legacyPack.Nodes.Length > 0
+            ? _legacyPack.Nodes[Mathf.Clamp(_legacyNodeIdx, 0, _legacyPack.Nodes.Length - 1)] : null;
+        if (chosen == null) { Flash("Сначала выберите узел эволюции", 1.6f); return; }
+        AdsService.Current.Show(ok => {
+            if (!ok) { Flash("Реклама не досмотрена — наследие не сохранено", 1.8f); return; }
+            var pack = _legacyPack;
+            _legacyPack = null;
+            _legacyModal.SetActive(false);
+            _game.AcceptLegacy(pack, chosen);   // сохранит и сразу начнёт жизнь с наследием
+        });
+    }
 
     public void RefreshSoul() {
         var meta = _game.Meta;

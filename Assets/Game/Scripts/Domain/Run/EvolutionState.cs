@@ -57,6 +57,15 @@ namespace PM.Domain.Run {
             return true;
         }
 
+        /// <summary>v0.13: открыть узел без ресурсов и жетонов (наследие прошлой жизни) — с эффектами.</summary>
+        public bool GrantNode(string id, MutationSet mutations) {
+            var node = EvolutionTree.Get(id);
+            if (node == null || _unlocked.Contains(id)) return false;
+            ApplyEffects(node, mutations);
+            _unlocked.Add(id);
+            return true;
+        }
+
         /// <summary>Прокачка показателей (v0.9): её уровни складываются с бонусами эволюции в Sum.</summary>
         public StatTraining Training { get; set; }
 
