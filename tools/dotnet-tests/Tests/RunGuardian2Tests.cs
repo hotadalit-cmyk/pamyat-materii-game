@@ -108,7 +108,7 @@ public static class RunGuardian2Tests {
         var f = new GuardianState(GuardianCatalog.ForDepth(2), 30.0, 51UL);
         var of = f.Think(Inp(0.0));
         True(of.Telegraphs != null && of.Telegraphs.Length == 3, "три круга гейзеров");
-        Eq(1.6, of.Telegraphs[0].Radius, "радиус круга гейзера 1.6");
+        Eq(f.GeyserRadius, of.Telegraphs[0].Radius, "радиус круга гейзера = BodyR×1.1 (v0.14)");
         Eq(1.0, of.Telegraphs[0].Seconds, "окно уклонения 1.0 с");
         True(of.Telegraphs[0].Pos.Approx(new Vec2(3, 0), 1e-9), "первый круг — у героя");
         for (int i = 1; i < 3; i++)
@@ -122,7 +122,7 @@ public static class RunGuardian2Tests {
         var c = new GuardianState(GuardianCatalog.ForDepth(3), 30.0, 53UL);
         var oc = c.Think(Inp(0.0));
         Eq(0.6, oc.Telegraph.Seconds, "Хор: телеграф 0.6 с");
-        Eq(4.0, oc.Telegraph.Radius, "Хор: кольцо импульса r=4");
+        Eq(c.PulseRadius, oc.Telegraph.Radius, "Хор: кольцо импульса = BodyR×1.9 (v0.14: больше тела)");
         Eq(2.0, oc.Current.Length, "течение 2.0 ед/с²");
         True(!oc.Strike, "Хор: телеграф без удара");
         var oc2 = c.Think(Inp(0.6)); // герой в 3 — внутри кольца
@@ -132,9 +132,9 @@ public static class RunGuardian2Tests {
         var g = new GuardianState(GuardianCatalog.ForDepth(4), 30.0, 55UL);
         var og = g.Think(Inp(0.0, 4.0));
         Eq(0.9, og.Beam.Seconds, "Гранильщик: телеграф луча 0.9 с");
-        Eq(0.6, og.Beam.Width, "ширина луча 0.6");
+        Eq(g.BeamWidth, og.Beam.Width, "ширина луча = BodyR×0.13 (v0.14)");
         True(og.Beam.From.Approx(Vec2.Zero, 1e-9), "луч от стража");
-        True(og.Beam.To.Approx(new Vec2(12.0 * 1.3, 0), 1e-6), "луч в сторону героя");
+        True(og.Beam.To.Approx(new Vec2(g.ArenaRadius * 1.3, 0), 1e-6), "луч в сторону героя (длина = арена×1.3)");
         True(!og.Strike && !og.BeamFlash, "Гранильщик: телеграф без удара");
         var og2 = g.Think(Inp(0.9, 4.0)); // герой на линии
         True(og2.BeamFlash, "вспышка удара лучом");
@@ -154,9 +154,9 @@ public static class RunGuardian2Tests {
         Eq(f.Hp, sum, "сумма капель = HP стража");
         True(o.Center.Length < 1e-6, "центроид капель в центре арены");
         True(o.Parts[0].Id != o.Parts[1].Id && o.Parts[1].Id != o.Parts[2].Id, "у капель разные id");
-        // урон по конкретной капле
+        // урон по конкретной капле (v0.14: формула от массы героя и √доли)
         double partHp = o.Parts[2].Hp;
-        double exp = 0.35 * 8.0 * 10.0 / (10.0 + partHp);
+        double exp = 0.025 * 10.0 * 8.0 * System.Math.Sqrt(10.0 / (10.0 + partHp));
         double loss = f.ApplyHit(8.0, 10.0, null, 0, o.Parts[2].Id);
         Eq(exp, loss, "удар по капле — формула по HP капли");
         var o2 = f.Think(Inp(0.0));
@@ -211,7 +211,7 @@ public static class RunGuardian2Tests {
         True(f.Think(Inp(0.0, 3.0)).ArenaRadiusNow == 0.0, "в фазах 1–2 кольца нет");
         DamageToHp(f, 30.0 * 0.32); // фаза 3: 32%
         var o0 = f.Think(Inp(0.0, 3.0));
-        Eq(10.0, o0.ArenaRadiusNow, "кольцо на полную аренту (радиус 10)");
+        Eq(f.ArenaRadius, o0.ArenaRadiusNow, "кольцо на полную аренту (BodyR×4.5+2, v0.14)");
         True(!o0.RingBurn, "герой в 3 — внутри кольца, жара нет");
         // капли сливаются (герой рядом) — ждём одну каплю, затем проверяем сжатие
         var t = Inp(0.5, 3.0);
@@ -219,19 +219,20 @@ public static class RunGuardian2Tests {
         while (AliveParts(f.Think(t)) > 1 && guardTicks++ < 120) { }
         True(guardTicks < 120, "капли слились в одну");
         Eq(GuardianPhase.Phase3, f.Phase, "одна капля — фаза 3, кольцо сжимается");
+        double full = f.ArenaRadius;
         double prev = f.Think(t).ArenaRadiusNow;
-        True(prev <= 10.0 + 1e-9 && prev > 4.0 + 1e-9, "кольцо между 40% и 100%");
+        True(prev <= full + 1e-9 && prev > full * 0.4 + 1e-9, "кольцо между 40% и 100%");
         bool reachedFloor = false;
         for (int k = 0; k < 14; k++) {
             var o = f.Think(Inp(6.0, 3.0));
             double now = o.ArenaRadiusNow;
             True(now <= prev + 1e-9, "кольцо не расширяется (шаг " + k + ")");
-            True(prev - now <= 1.0 + 1e-9, "шаг сжатия не больше 10% радиуса (шаг " + k + ")");
-            if (now <= 4.0 + 1e-9) { reachedFloor = true; Eq(4.0, now, "пол — 40% арены"); }
+            True(prev - now <= full * 0.1 + 1e-9, "шаг сжатия не больше 10% радиуса (шаг " + k + ")");
+            if (now <= full * 0.4 + 1e-9) { reachedFloor = true; Eq(full * 0.4, now, "пол — 40% арены"); }
             prev = now;
         }
         True(reachedFloor, "кольцо дошло до 40% за 84 с");
-        Eq(4.0, f.Think(Inp(6.0, 3.0)).ArenaRadiusNow, "дальше не сжимается");
+        Eq(full * 0.4, f.Think(Inp(6.0, 3.0)).ArenaRadiusNow, "дальше не сжимается");
         // урон вне кольца: капля у героя (3,0), герой на противоположной стороне (−4,0) —
         // до кольца 4.0 далеко, а от стража всего 4 (не дальше радиуса сна 7)
         True(f.Think(Inp(0.1, -4.0, 0.0)).RingBurn, "вне кольца герой горит (1.0 массы/с — применит Unity)");
@@ -246,7 +247,7 @@ public static class RunGuardian2Tests {
         // герой остался в первом круге (чуть сместился) — удар с отбросом ОТ центра круга
         var f2 = new GuardianState(GuardianCatalog.ForDepth(2), 30.0, 69UL);
         f2.Think(Inp(0.0, 3.5));
-        var hit = f2.Think(Inp(1.0, 3.0)); // внутри круга (0.5 < 1.6), сбоку от центра
+        var hit = f2.Think(Inp(1.0, 3.0)); // внутри круга (0.5 < r гейзера), сбоку от центра
         True(hit.Strike, "герой в круге — удар");
         True(hit.Knockback.X < 0.0 && System.Math.Abs(hit.Knockback.Y) < 1e-9,
             "отброс от центра круга");
@@ -289,10 +290,10 @@ public static class RunGuardian2Tests {
         True(strike1.Strike, "фаза 1: импульс бьёт героя внутри кольца");
         Eq(0.0, strike1.DashLockSeconds, "фаза 1: оглушения нет после импульса");
         True(!strike1.WeakPointOpen, "фаза 1: ядро не открывается");
-        // фаза 1: полный урон без шляпки
+        // фаза 1: полный урон без шляпки (v0.14: 0.025×8×10×√(10/40))
         var fresh = new GuardianState(GuardianCatalog.ForDepth(3), 30.0, 77UL);
         fresh.Think(Inp(0.0));
-        Eq(0.7, fresh.ApplyHit(8.0, 10.0, null, 0), "фаза 1: урон без модификаторов");
+        Eq(1.0, fresh.ApplyHit(8.0, 10.0, null, 0), "фаза 1: урон без модификаторов");
         // фаза 2: после импульса — оглушение 3 с и окно ядра 4 с
         DamageToHp(c, 30.0 * 0.55); // 55% — фаза 2
         c.Think(Inp(0.0, 3.0));
@@ -304,7 +305,7 @@ public static class RunGuardian2Tests {
         True(hit.Strike, "импульс дотянулся");
         Eq(3.0, hit.DashLockSeconds, "оглушение: рывок невозможен 3 с");
         True(hit.WeakPointOpen, "ядро открыто после импульса");
-        double expOpen = 0.35 * 8.0 * 10.0 / (10.0 + c.Hp) * 1.5;
+        double expOpen = 0.025 * 8.0 * 10.0 * System.Math.Sqrt(10.0 / (10.0 + c.Hp)) * 1.5;
         Eq(expOpen, c.ApplyHit(8.0, 10.0, null, 0), "в окне ядра урон ×1.5");
         // оглушение тает за 3 с, окно ещё открыто на третьей секунде
         for (int k = 1; k <= 3; k++) {
@@ -315,7 +316,7 @@ public static class RunGuardian2Tests {
         var closed = c.Think(Inp(1.0, 3.0)); // 4-я секунда — окно закрылось
         True(!closed.WeakPointOpen, "окно ядра закрылось после 4 с");
         Eq(0.0, closed.DashLockSeconds, "оглушение прошло");
-        double expClosed = 0.35 * 8.0 * 10.0 / (10.0 + c.Hp) * 0.5;
+        double expClosed = 0.025 * 8.0 * 10.0 * System.Math.Sqrt(10.0 / (10.0 + c.Hp)) * 0.5;
         Eq(expClosed, c.ApplyHit(8.0, 10.0, null, 0), "вне окна урон ×0.5");
     }
 
@@ -348,19 +349,19 @@ public static class RunGuardian2Tests {
 
     public static void Grinder_ShardBlockBounceAndPenalty() {
         var g = new GuardianState(GuardianCatalog.ForDepth(4), 30.0, 81UL);
-        var o = g.Think(Inp(0.0, 5.0)); // осколки на орбите: r = 0.35×√30 + 1.2 ≈ 3.117
+        var o = g.Think(Inp(0.0, 5.0)); // осколки на орбите: v0.14 — BodyR×2.2 ≈ 4.22
         Eq(4, o.Shards.Length, "четыре осколка на орбите");
-        double orbit = 0.35 * System.Math.Sqrt(30.0) + 1.2;
+        double orbit = g.ShardOrbitRadius;
         for (int i = 0; i < 4; i++)
-            Eq(orbit, (o.Shards[i] - Vec2.Zero).Length, "осколок " + i + " на орбите страж+1.2");
+            Eq(orbit, (o.Shards[i] - Vec2.Zero).Length, "осколок " + i + " на орбите BodyR×2.2");
         // герой в (5,0): линия к стражу проходит через осколок на оси X — блок
         double loss = g.ApplyHit(8.0, 10.0, null, 0, new Vec2(5, 0));
         Eq(0.0, loss, "осколок блокирует удар: урон 0");
         True(g.LastBlock, "флаг блока для Unity (отскок и −5% массы)");
         True(g.LastBlockBounce.Approx(new Vec2(1, 0), 1e-9), "отскок от осколка");
-        // герой сбоку: линия не задевает осколок — обычный урон
+        // герой сбоку: линия не задевает осколок — обычный урон (v0.14: 0.025×8×10×√(10/40))
         double loss2 = g.ApplyHit(8.0, 10.0, null, 0, new Vec2(5, 3));
-        Eq(0.7, loss2, "мимо осколка — формула удара без изменений");
+        Eq(1.0, loss2, "мимо осколка — формула удара без изменений");
         True(!g.LastBlock, "без блока флага нет");
         // орбита вращается: через 3 с — пол-оборота (1 оборот за 6 с)
         var o2 = g.Think(Inp(3.0, 5.0));
@@ -375,7 +376,7 @@ public static class RunGuardian2Tests {
         var o = g.Think(Inp(0.0, 5.0));
         Eq(4, o.SpawnMinions, "осколочный шторм: 4 миньона");
         Eq("shard_crab", o.MinionSpecies, "вид миньона — осколочный краб");
-        Eq(1.5, o.MinionMass, "масса осколочного краба 1.5");
+        Eq(g.MinionMass, o.MinionMass, "масса краба = BodyR²×0.65 (v0.14: от радиуса тела)");
         True(o.Shards == null, "осколков на орбите больше нет");
         var o2 = g.Think(Inp(0.5, 5.0));
         Eq(0, o2.SpawnMinions, "шторм однократный");
@@ -468,15 +469,16 @@ public static class RunGuardian2Tests {
         var far = c.Think(Inp(1.0, 20.0)); // 20 > 7 — спит
         True(far.Telegraph.Seconds == 0.0 && far.Current.Length == 0.0, "во сне Хор не поёт и не течёт");
         Eq(GuardianPhase.Dormant, c.Phase, "вдали — дремлет");
-        // отступление в фазе 1: один прыжок из арены за границу ×1.5 (как в тестах этапа 1)
+        // отступление в фазе 1: один прыжок из арены за границу ×1.5 (v0.14: от поверхностей тел)
         var g = new GuardianState(GuardianCatalog.ForDepth(4), 30.0, 97UL);
         g.Think(Inp(0.0, 5.0));
         DamageToHp(g, 27.0); // 90% — фаза 1
-        var reset = g.Think(Inp(0.1, 19.0)); // 19 > 12×1.5 = 18 — сброс
+        // арена BodyR×4.5+2 ≈ 10.63, граница ×1.5 ≈ 15.9; герой в 20: surf = 20 − 1.82 − 1.11 = 17.1
+        var reset = g.Think(Inp(0.1, 20.0));
         True(reset.ResetFight, "выход из арены в фазе 1 — сброс боя");
         Eq(30.0, g.Hp, "HP восстановлен");
         Eq(GuardianPhase.Phase1, g.Phase, "страж снова в фазе 1");
-        // внутри зоны сброса (14 < 18) бой не сбрасывается — но герой уже вне радиуса сна
+        // внутри зоны сброса (14 → surf ≈ 11.0 < 15.9) бой не сбрасывается
         var g2 = new GuardianState(GuardianCatalog.ForDepth(4), 30.0, 99UL);
         g2.Think(Inp(0.0, 5.0));
         var inside = g2.Think(Inp(0.1, 14.0));

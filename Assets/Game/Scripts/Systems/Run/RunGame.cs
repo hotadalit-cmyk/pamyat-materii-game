@@ -852,7 +852,10 @@ public sealed partial class RunGame : MonoBehaviour {
             if (Run.OpenWorld && GuardianPartIndex(c) >= 0) { OnGuardianPartContact(c, rel, point); return; } // v0.12: капли Горнила
             OnBossContact(c, rel, point); return;
         }
-        var res = SizeRule.Resolve(Run.FragmentMass(fragmentId), Run.Mutations, c.Mass, c.Mutations, rel);
+        var sp = c.Species;
+        var res = SizeRule.Resolve(Run.FragmentMass(fragmentId), Run.Mutations, c.Mass, c.Mutations, rel,
+            sp != null ? sp.Attack : 0.08,                     // v0.14: Attack/Toughness вида, глубина
+            sp != null && sp.Toughness > 0.0 ? sp.Toughness : 1.0, Run.Depth);
         ResolveContact(c, res, point, rel);
     }
 
@@ -999,8 +1002,9 @@ public sealed partial class RunGame : MonoBehaviour {
             GameFeel.Text(point, "Броня! Нужна скорость и рикошеты", new Color(0.7f, 0.85f, 1f), 0.8f);
             ProceduralSfx.Instance?.Play("glass", 0.9f, 0f, 0.45f);
         }
-        // страж бьёт в ответ своей массой
-        var res = SizeRule.Resolve(fragMass, Run.Mutations, boss.Mass, new MutationSet(), rel);
+        // страж бьёт в ответ своим Attack (v0.14: процент массы героя, границы 3–25%)
+        var res = SizeRule.Resolve(fragMass, Run.Mutations, boss.Mass, new MutationSet(), rel,
+            0.11, 1.2, Run.Depth);
         if (res.MassLossA > 0 && !boss.IsExposed) {
             HurtFragment(res.MassLossA, BossState.SpeciesId);
             GameFeel.Text(_player.transform.position, "−" + res.MassLossA.ToString("0.0"), GameBootstrap.CDanger);
@@ -1301,9 +1305,9 @@ public sealed partial class RunGame : MonoBehaviour {
             if (toG.sqrMagnitude > 0.01f)
                 _player.Rb.AddForce(toG.normalized * ((float)o.Pull * _player.Rb.mass), ForceMode2D.Force);
         }
-        if (o.RingBurn) { // v0.12: вне кипящего кольца Горнила — 1.0 массы/с
+        if (o.RingBurn) { // v0.14: вне кипящего кольца Горнила — доля массы героя в секунду
             _hitFrag = Run.Fragments.LeadId;
-            HurtFragment(g.Def.RingDamagePerSec * dt, g.Def.SpeciesId);
+            HurtFragment(Run.Mass * g.Def.RingDamagePerSec * dt, g.Def.SpeciesId);
             _hitFrag = -1;
         }
         if (Run.IsDead) { EndRun(); return; }
@@ -1434,7 +1438,7 @@ public sealed partial class RunGame : MonoBehaviour {
             }
             sr.enabled = true;
             sr.transform.position = new Vector3((float)list[i].X, (float)list[i].Y, 0f);
-            float d = (float)Run.Guardian.Def.ShardRadius * 2.4f;
+            float d = (float)Run.Guardian.ShardRadius * 2.4f;
             sr.transform.localScale = new Vector3(d, d, 1f);
         }
     }
@@ -1704,8 +1708,9 @@ public sealed partial class RunGame : MonoBehaviour {
             GameFeel.Text(point, "Броня! Нужна скорость и рикошеты", new Color(0.7f, 0.85f, 1f), 0.8f);
             ProceduralSfx.Instance?.Play("glass", 0.9f, 0f, 0.45f);
         }
-        // страж бьёт в ответ своей массой
-        var res = SizeRule.Resolve(fragMass, Run.Mutations, g.Hp, new MutationSet(), rel);
+        // страж бьёт в ответ своим Attack (v0.14: процент массы героя, границы 3–25%)
+        var res = SizeRule.Resolve(fragMass, Run.Mutations, g.Hp, new MutationSet(), rel,
+            0.11, 1.2, Run.Depth);
         if (res.MassLossA > 0 && !g.IsExposed) {
             HurtFragment(res.MassLossA, g.Def.SpeciesId);
             GameFeel.Text(_player.transform.position, "−" + res.MassLossA.ToString("0.0"), GameBootstrap.CDanger);

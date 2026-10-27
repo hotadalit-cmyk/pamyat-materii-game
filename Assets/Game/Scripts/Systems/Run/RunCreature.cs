@@ -34,6 +34,7 @@ public sealed class RunCreature : MonoBehaviour {
     public float BaseRadius => _baseRadius;
 
     private float _baseRadius = 1f;
+    private double _spawnMass;        // v0.14: масса спавна — база потолка роста
 
     public void Init(SpeciesDef species, double mass, CreatureBrain brain, SimEntityView2D view,
                      float baseRadius) {
@@ -42,12 +43,20 @@ public sealed class RunCreature : MonoBehaviour {
         Brain = brain;
         View = view;
         _baseRadius = Mathf.Max(0.01f, baseRadius);
+        if (_spawnMass <= 0.0) _spawnMass = mass; // фиксируем один раз
         MaxMass = System.Math.Max(MaxMass, mass);
         ApplySize();
     }
 
-    /// <summary>Масштаб корня и масса тела — от текущей массы. Попутно ведёт MaxMass (существо подросло).</summary>
+    /// <summary>
+    /// Масштаб корня и масса тела — от текущей массы. Попутно ведёт MaxMass (существо подросло).
+    /// v0.14: потолок роста — не больше SizeRule.CreatureGrowthCap (×1.5) от массы спавна:
+    /// пиявка и проглоченные фрагменты не раздувают существо бесконечно.
+    /// </summary>
     public void ApplySize() {
+        double spawnBase = _spawnMass > 0.0 ? _spawnMass : MaxMass;
+        double cap = spawnBase * SizeRule.CreatureGrowthCap;
+        if (Mass > cap) Mass = cap; // не выше потолка от массы спавна
         if (Mass > MaxMass) MaxMass = Mass;
         float r = (float)SizeRule.RadiusForMass(Mass);
         float s = r / _baseRadius;

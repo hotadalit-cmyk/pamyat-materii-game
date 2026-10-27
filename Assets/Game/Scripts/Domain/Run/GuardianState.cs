@@ -90,9 +90,8 @@ public struct GuardianOutput {
 /// </summary>
 public sealed class GuardianState {
     public const double ExposedBelowFrac = 0.30; // ниже 30% стартового HP — обнажён
-    public const double RetreatMult = 1.5;       // сброс боя дальше ArenaRadius × 1.5
+    public const double RetreatMult = 1.5;       // сброс боя дальше арены × 1.5 (от поверхностей тел)
     private const double ArmorSpeed = 6.0;       // удары медленнее — не пробивают броню
-    private const double HitK = 0.35;
     // Пульсар (BossState 1:1)
     private const double ChargeDashEvery = 2.4;
     private const double BroodDashEvery = 3.2;
@@ -107,6 +106,7 @@ public sealed class GuardianState {
     private readonly GuardianZone[] _zones;
     private readonly bool _allowRetreat; // сброс боя при отступлении (в комнатном режиме выключен)
     private double _hp, _maxHp, _startHp;
+    private double _scale;                       // v0.14: радиус тела стража = 0.35×√maxHp
     private GuardianPhase _phase;
     private double _dashTimer, _minionTimer, _waveTimer, _fleeTimer;
     private double _zoneTimer, _weakTimer, _rootCd, _pendingT;
@@ -140,6 +140,20 @@ public sealed class GuardianState {
     public GuardianDef Def => _def;
     public double Hp => _hp;
     public double MaxHp => _maxHp;
+    /// <summary>v0.14: радиус тела стража — от него считаются все радиусы боя.</summary>
+    public double Scale => _scale;
+    public double BodyRadius => _scale;
+    /// <summary>v0.14: масштабированные радиусы боя (доли тела + запас).</summary>
+    public double ArenaRadius => _scale * _def.ArenaMult + GuardianDef.ArenaPad;
+    public double WakeRadius => _scale * _def.WakeMult + GuardianDef.WakePad;
+    public double ZoneRadius => _scale * _def.ZoneMult;
+    public double RootRadius => _scale * _def.RootMult;
+    public double GeyserRadius => _scale * _def.GeyserMult;
+    public double PulseRadius => _scale * _def.PulseMult;
+    public double ShardRadius => _scale * _def.ShardRadiusFrac;
+    public double ShardOrbitRadius => _scale * (1.0 + _def.ShardOrbitFrac);
+    public double BeamWidth => _scale * _def.BeamWidthFrac;
+    public double MinionMass => _scale * _scale * _def.MinionMassFrac;
     /// <summary>Базовая HP текущего боя (от неё считаются фазы и обнажение).</summary>
     public double StartHp => _startHp;
     public GuardianPhase Phase => _phase;
@@ -155,6 +169,7 @@ public sealed class GuardianState {
         _allowRetreat = allowRetreat;
         maxHp = maxHp > 0.0 ? maxHp : 1.0;
         _hp = _maxHp = _startHp = maxHp;
+        _scale = SizeRule.RadiusForMass(_maxHp);
         _phase = GuardianPhase.Dormant;
         _zones = new GuardianZone[def != null ? def.ZoneCount : 0];
         _zoneTimer = 0.0; _weakTimer = -1.0; _rootCd = 0.0; _pendingT = 0.0;
@@ -169,6 +184,7 @@ public sealed class GuardianState {
         _maxHp = maxHp > 0.0 ? maxHp : 1.0;
         _hp = _maxHp;
         _startHp = _maxHp;
+        _scale = SizeRule.RadiusForMass(_maxHp); // v0.14: тело и радиусы — от актуального максимума
         _phase = GuardianPhase.Phase1;
         _dashTimer = _minionTimer = _waveTimer = _fleeTimer = 0.0;
         _zoneTimer = 0.0; _weakTimer = -1.0; _weakOpen = false; _rootCd = 0.0;
@@ -189,11 +205,13 @@ public sealed class GuardianState {
         _counterDir = Vec2.Zero; _counterT = 0.0;
     }
 
-    /// <summary>Такт стража. В Dormant — никаких действий, таймеры стоят.</summary>
+    /// <summary>Такт стража. В Dormant — никаких действий, таймеры стоят.
+    /// v0.14: дистанции до героя — от поверхностей тел (dist − rSelf − rPlayer).</summary>
     public GuardianOutput Think(GuardianInput input) {
         var o = new GuardianOutput { Zones = _zones };
         Vec2 toPlayer = input.PlayerPos - input.SelfPos;
         double dist = toPlayer.Length;
+        double surf = SurfaceDist(dist, input.PlayerMass); // расстояние между поверхностями тел
 
         if (IsExposed) { // обнажён: не атакует, медленно уходит
             _phase = GuardianPhase.Exposed;
@@ -214,16 +232,16 @@ public sealed class GuardianState {
         // v0.11: окно отступления — пока фаза 1, выход из арены сбрасывает бой
         // (проверка до радиуса сна: арена × 1.5 всегда больше WakeRadius).
         if (_allowRetreat && _fightActive && _phase == GuardianPhase.Phase1
-            && dist > Def.ArenaRadius * RetreatMult) {
+            && surf > ArenaRadius * RetreatMult) {
             Restore(_maxHp); // штраф герою (−25% массы, счёт поражений) — RunState.OnGuardianFightReset
             o.ResetFight = true;
             return o;
         }
-        if (dist > Def.WakeRadius) { // спит, пока игрок далеко; таймеры стоят
+        if (surf > WakeRadius) { // спит, пока игрок далеко (от поверхностей тел); таймеры стоят
             _phase = GuardianPhase.Dormant;
             return o;
         }
-        if (dist <= Def.ArenaRadius) _fightActive = true;
+        if (surf <= ArenaRadius) _fightActive = true;
 
         _phase = ComputePhase();
         _lastSelfPos = input.SelfPos; // кэш для проверок в ApplyHit (осколки, деление)
@@ -256,9 +274,12 @@ public sealed class GuardianState {
             mult = _weakOpen ? Def.WeakDamageMult : Def.ClosedCapMult;
         double dealt = playerMut != null ? playerMut.DamageDealtMult : 1.0;
         double ricochet = playerMut != null ? playerMut.RicochetBonus : 0.0;
-        double sum = playerMass + _hp;
-        if (sum <= 0.0) return 0.0;
-        double loss = HitK * relSpeed * (playerMass / sum) * dealt * (1.0 + ricochet * ricochets) * mult;
+        double share = _hp > 0.0 ? playerMass / (playerMass + _hp) : 1.0;
+        if (share < 0.0) share = 0.0;
+        double sf = relSpeed < SizeRule.NominalSpeed ? relSpeed / SizeRule.NominalSpeed : 1.0;
+        // v0.14 (Docs/BALANCE_v14.md §3.2): урон от массы героя, скорости и √доли — TTK стабилен на любом весе
+        double loss = SizeRule.CreatureHitK * playerMass * relSpeed * System.Math.Sqrt(share) * sf
+                      * dealt * (1.0 + ricochet * ricochets) * mult;
         if (loss <= 0.0) return 0.0;
         if (loss > _hp) loss = _hp;
         _hp -= loss;
@@ -286,7 +307,7 @@ public sealed class GuardianState {
         LastBlock = false; LastBlockBounce = Vec2.Zero;
         if (_shardsActive) {
             for (int i = 0; i < _shardWorld.Length; i++) {
-                if (DistPointSegment(playerPos, _lastSelfPos, _shardWorld[i]) <= _def.ShardRadius) {
+                if (DistPointSegment(playerPos, _lastSelfPos, _shardWorld[i]) <= ShardRadius) {
                     LastBlock = true; // урона нет; Unity отражает героя и снимает BlockMassFrac массы
                     Vec2 away = playerPos - _shardWorld[i];
                     LastBlockBounce = away.Length > 1e-6 ? away.Normalized() : RandomDirection();
@@ -303,15 +324,25 @@ public sealed class GuardianState {
         if (relSpeed < ArmorSpeed) return 0.0;
         double dealt = playerMut != null ? playerMut.DamageDealtMult : 1.0;
         double ricochet = playerMut != null ? playerMut.RicochetBonus : 0.0;
-        double sum = playerMass + target.Hp;
-        if (sum <= 0.0) return 0.0;
-        double loss = HitK * relSpeed * (playerMass / sum) * dealt * (1.0 + ricochet * ricochets); // у капель нет брони/шляпки
+        double share = target.Hp > 0.0 ? playerMass / (playerMass + target.Hp) : 1.0;
+        if (share < 0.0) share = 0.0;
+        double sf = relSpeed < SizeRule.NominalSpeed ? relSpeed / SizeRule.NominalSpeed : 1.0;
+        double loss = SizeRule.CreatureHitK * playerMass * relSpeed * System.Math.Sqrt(share) * sf
+                      * dealt * (1.0 + ricochet * ricochets); // у капель нет брони/шляпки
         if (loss <= 0.0) return 0.0;
         if (loss > target.Hp) loss = target.Hp;
         target.Hp -= loss;
         _hp -= loss; // инвариант: _hp — сумма живых капель
         _phase = IsExposed ? GuardianPhase.Exposed : ComputePhase();
         return loss;
+    }
+
+    /// <summary>v0.14: расстояние между поверхностями тел стража и героя.</summary>
+    private double SurfaceDist(double centerDist, double playerMass) {
+        double rSelf = SizeRule.RadiusForMass(System.Math.Max(_hp, 0.05));
+        double rPlayer = SizeRule.RadiusForMass(System.Math.Max(playerMass, 0.05));
+        double surf = centerDist - rSelf - rPlayer;
+        return surf > 0.0 ? surf : 0.0;
     }
 
     /// <summary>Расстояние от точки c до отрезка ab (блок осколком: линия герой→страж).</summary>
@@ -344,7 +375,7 @@ public sealed class GuardianState {
                 if (_minionTimer <= 0.0) {
                     o.SpawnMinions = Def.MinionsPerWave;
                     o.MinionSpecies = Def.MinionSpecies;
-                    o.MinionMass = Def.MinionMass;
+                    o.MinionMass = MinionMass; // v0.14: от радиуса тела
                     _minionTimer = PulsarMinionsEvery;
                 }
                 break;
@@ -363,7 +394,7 @@ public sealed class GuardianState {
         if (_minionTimer <= 0.0) {
             o.SpawnMinions = Def.MinionsPerWave;
             o.MinionSpecies = Def.MinionSpecies;
-            o.MinionMass = Def.MinionMass;
+            o.MinionMass = MinionMass; // v0.14: от радиуса тела
             _minionTimer = _phase == GuardianPhase.Phase3 ? Def.MinionEvery3 : Def.MinionEvery1;
         }
         if (_phase != GuardianPhase.Phase1) {
@@ -376,11 +407,12 @@ public sealed class GuardianState {
     private void UpdateZones(GuardianInput input, ref GuardianOutput o) {
         if (_zones.Length == 0) return;
         if (_phase == GuardianPhase.Phase3) {
+            double drift = _scale * _def.ZoneDriftFrac; // v0.14: доля радиуса тела
             for (int i = 0; i < _zones.Length; i++) {
                 Vec2 d = input.PlayerPos - _zones[i].Pos;
                 double len = d.Length;
-                if (len > _def.ZoneRadius * 0.5 && len > 0.01)
-                    _zones[i].Pos = _zones[i].Pos + d.Scaled(_def.ZoneDriftSpeed * input.Dt / len);
+                if (len > ZoneRadius * 0.5 && len > 0.01)
+                    _zones[i].Pos = _zones[i].Pos + d.Scaled(drift * input.Dt / len);
                 _zones[i].Life = 999.0; // живут, пока страж жив
             }
             return;
@@ -391,12 +423,12 @@ public sealed class GuardianState {
     }
 
     private void ShuffleZones() {
-        double reach = _def.ArenaRadius * 0.85;
+        double reach = ArenaRadius * 0.85;
         for (int i = 0; i < _zones.Length; i++) {
             _zones[i] = new GuardianZone {
                 // v0.14: зоны строились вокруг (0,0) карты — теперь вокруг текущей позиции стража
                 Pos = _lastSelfPos + RandomDirection().Scaled(_rng.NextDouble01() * reach),
-                Radius = _def.ZoneRadius,
+                Radius = ZoneRadius,
                 DamagePerSec = _def.ZoneDamagePerSec,
                 Slow01 = _def.ZoneSlow,
                 Life = _def.ZoneShuffleEvery,
@@ -424,7 +456,7 @@ public sealed class GuardianState {
         }
         _rootCd -= input.Dt;
         if (_rootCd <= 0.0) {
-            _pending = new GuardianTelegraph { Pos = input.PlayerPos, Radius = _def.RootRadius, Seconds = _def.RootTelegraph };
+            _pending = new GuardianTelegraph { Pos = input.PlayerPos, Radius = RootRadius, Seconds = _def.RootTelegraph };
             _pendingT = _def.RootTelegraph;
             o.Telegraph = _pending;
             _rootCd = _phase == GuardianPhase.Phase3 ? _def.RootEvery3 : _def.RootEvery2;
@@ -459,11 +491,12 @@ public sealed class GuardianState {
             _parts = new PartRun[3];
             double share = _hp / 3.0;
             double baseAngle = _rng.NextDouble01() * 2.0 * System.Math.PI;
+            double sep = _scale * 0.9; // v0.14: разбег капель — доля тела
             for (int i = 0; i < _parts.Length; i++) {
                 double a = baseAngle + i * 2.0 * System.Math.PI / 3.0;
                 _parts[i] = new PartRun {
                     Id = _nextPartId++,
-                    Pos = _lastSelfPos + new Vec2(System.Math.Cos(a), System.Math.Sin(a)) * 2.0,
+                    Pos = _lastSelfPos + new Vec2(System.Math.Cos(a), System.Math.Sin(a)) * sep,
                     Hp = share,
                     Radius = PartRadius(share),
                 };
@@ -472,7 +505,7 @@ public sealed class GuardianState {
         }
     }
 
-    private double PartRadius(double hp) => 0.8 + 0.06 * hp;
+    private double PartRadius(double hp) => _scale * 0.55 + 0.03 * hp; // v0.14: от радиуса тела
 
     private void UpdateParts(GuardianInput input, ref GuardianOutput o) {
         if (!_divided) return;
@@ -483,11 +516,12 @@ public sealed class GuardianState {
             Vec2 d = input.PlayerPos - p.Pos;
             double len = d.Length;
             if (len <= 0.05) continue;
-            double step = Def.PartCrawlSpeed * input.Dt;
+            double step = _scale * Def.PartCrawlFrac * input.Dt; // v0.14: доля тела
             if (step > len) step = len;
             p.Pos += d.Scaled(step / len);
         }
-        // слияние: пара ближе rA+rB+0.3 непрерывно PartMergeEvery секунд
+        // слияние: пара ближе rA+rB+запас непрерывно PartMergeEvery секунд
+        double gap = _scale * 0.15; // v0.14: запас — доля тела
         for (int i = 0; i < _parts.Length; i++) {
             var a = _parts[i];
             if (a.Hp <= 0.0) continue;
@@ -496,7 +530,7 @@ public sealed class GuardianState {
                 if (b.Hp <= 0.0) continue;
                 int pi = PairIndex(i, j);
                 double dist = (a.Pos - b.Pos).Length;
-                if (dist <= a.Radius + b.Radius + Def.PartGap && input.Dt > 0.0) _pairT[pi] += input.Dt;
+                if (dist <= a.Radius + b.Radius + gap && input.Dt > 0.0) _pairT[pi] += input.Dt;
                 else _pairT[pi] = 0.0;
                 if (_pairT[pi] >= Def.PartMergeEvery) {
                     double bonus = Def.PartMergeBonus * System.Math.Min(a.Hp, b.Hp);
@@ -540,11 +574,11 @@ public sealed class GuardianState {
                 _geyserPendingT = 0.0;
                 // круги держат позиции на момент создания: ушел — не попал; кольца не лгут
                 for (int i = 0; i < n; i++) {
-                    if ((input.PlayerPos - _geysers[i].Pos).Length <= Def.GeyserRadius) {
+                    if ((input.PlayerPos - _geysers[i].Pos).Length <= GeyserRadius) {
                         o.Strike = true;
                         o.StrikeDamageFrac = Def.GeyserDamageFrac;
                         o.StrikePos = _geysers[i].Pos;
-                        o.StrikeRadius = Def.GeyserRadius;
+                        o.StrikeRadius = GeyserRadius;
                         Vec2 away = input.PlayerPos - _geysers[i].Pos;
                         o.Knockback = away.Length > 1e-6
                             ? away.Normalized().Scaled(Def.GeyserKnockback)
@@ -563,9 +597,9 @@ public sealed class GuardianState {
         if (_geyserCd <= 0.0) {
             for (int i = 0; i < n; i++) {
                 Vec2 pos = i == 0 ? input.PlayerPos
-                    : input.PlayerPos + RandomDirection().Scaled(2.0 + _rng.NextDouble01() * 3.0);
+                    : input.PlayerPos + RandomDirection().Scaled(_scale * 1.2 + _rng.NextDouble01() * _scale * 1.3);
                 _geysers[i] = new GuardianTelegraph {
-                    Pos = pos, Radius = Def.GeyserRadius,
+                    Pos = pos, Radius = GeyserRadius,
                     Seconds = Def.GeyserTelegraph, Window = Def.GeyserTelegraph,
                 };
             }
@@ -591,9 +625,9 @@ public sealed class GuardianState {
                 _ringTimer += Def.RingShrinkEvery;
             }
         }
-        o.ArenaRadiusNow = Def.ArenaRadius * _ringFrac;
+        o.ArenaRadiusNow = ArenaRadius * _ringFrac;
         Vec2 center = _center.Length > 1e-9 ? _center : _lastSelfPos;
-        o.RingBurn = (input.PlayerPos - center).Length > o.ArenaRadiusNow; // вне кольца — 1.0 массы/с (Unity)
+        o.RingBurn = (input.PlayerPos - center).Length > o.ArenaRadiusNow; // вне кольца — доля массы/с (Unity)
     }
 
     // ---------- Хор Бездны (Г3): ток, оглушение, воронка ----------
@@ -614,11 +648,11 @@ public sealed class GuardianState {
             _pulsePendingT -= input.Dt;
             if (_pulsePendingT <= 0.0) {
                 _pulsePendingT = 0.0;
-                if ((input.PlayerPos - _pulse.Pos).Length <= Def.PulseRadius) { // внутри — удар
+                if ((input.PlayerPos - _pulse.Pos).Length <= PulseRadius) { // внутри — удар
                     o.Strike = true;
                     o.StrikeDamageFrac = Def.PulseDamageFrac;
                     o.StrikePos = _pulse.Pos;
-                    o.StrikeRadius = Def.PulseRadius;
+                    o.StrikeRadius = PulseRadius;
                 }
                 if (CoreCapped()) { // Ф2+: импульс оглушает и открывает ядро
                     _dashLock = Def.DashLockSec;
@@ -634,7 +668,7 @@ public sealed class GuardianState {
             _pulseCd -= input.Dt;
             if (_pulseCd <= 0.0) {
                 _pulse = new GuardianTelegraph {
-                    Pos = _lastSelfPos, Radius = Def.PulseRadius,
+                    Pos = _lastSelfPos, Radius = PulseRadius,
                     Seconds = Def.PulseTelegraph, Window = Def.PulseTelegraph,
                 };
                 _pulsePendingT = Def.PulseTelegraph;
@@ -667,13 +701,13 @@ public sealed class GuardianState {
         _crabsOut = true;             // однократно
         o.SpawnMinions = Def.MinionsPerWave;
         o.MinionSpecies = Def.MinionSpecies;
-        o.MinionMass = Def.MinionMass;
+        o.MinionMass = MinionMass;    // v0.14: от радиуса тела
     }
 
     private void UpdateShards(GuardianInput input, ref GuardianOutput o) {
         if (_phase != GuardianPhase.Phase1) { _shardsActive = false; o.Shards = null; return; }
         _orbitT += input.Dt;
-        double orbit = SizeRule.RadiusForMass(System.Math.Max(_hp, 1.0)) + Def.ShardOrbitExtra;
+        double orbit = ShardOrbitRadius; // v0.14: доля радиуса тела
         for (int i = 0; i < _shardOut.Length; i++) {
             double a = _orbitT * 2.0 * System.Math.PI / Def.ShardOrbitPeriod
                 + i * 2.0 * System.Math.PI / _shardOut.Length;
@@ -696,11 +730,11 @@ public sealed class GuardianState {
                 Vec2 rel = input.PlayerPos - _beamPending.From;
                 double proj = Vec2.Dot(rel, _beamDir);
                 double perp = (rel - _beamDir.Scaled(proj)).Length;
-                if (proj >= 0.0 && proj <= _beamLen && perp <= Def.BeamWidth * 0.5) {
+                if (proj >= 0.0 && proj <= _beamLen && perp <= BeamWidth * 0.5) {
                     o.Strike = true; // кольца не лгут: герой в коридоре луча
                     o.StrikeDamageFrac = Def.BeamDamageFrac;
                     o.StrikePos = input.PlayerPos;
-                    o.StrikeRadius = Def.BeamWidth;
+                    o.StrikeRadius = BeamWidth;
                 }
                 _beamPending = default;
                 return;
@@ -714,11 +748,11 @@ public sealed class GuardianState {
             Vec2 d = input.PlayerPos - _lastSelfPos;
             _beamDir = d.Length > 1e-6 ? d.Normalized() : RandomDirection();
             if (_beamDir.Length < 0.5) _beamDir = RandomDirection();
-            _beamLen = Def.ArenaRadius * Def.BeamLengthMult;
+            _beamLen = ArenaRadius * Def.BeamLengthMult;
             _beamPending = new GuardianBeam {
                 From = _lastSelfPos,
                 To = _lastSelfPos + _beamDir.Scaled(_beamLen),
-                Width = Def.BeamWidth,
+                Width = BeamWidth,
                 Seconds = Def.BeamTelegraph,
             };
             _beamPendingT = Def.BeamTelegraph;
