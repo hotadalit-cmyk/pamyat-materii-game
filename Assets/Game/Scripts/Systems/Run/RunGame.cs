@@ -130,9 +130,11 @@ public sealed partial class RunGame : MonoBehaviour {
         _dark = DarknessMask.Create(transform);
         _ui = RunUi.Build(this);
         RunTutorial.Build(_ui.Root, this);
-        // первая комната строится сразу — за титулом видна живая пещера
-        StartNewRun();
+        // первая комната строится сразу — за титулом видна живая пещера.
+        // v0.16: титул — до комнаты, иначе окно знакомства с глубиной открылось бы поверх титула
         _ui.ShowTitle();
+        StartNewRun();
+        PullGestureInput.Blocked = true;   // StartRun снимает блок жеста, а титул ещё открыт
     }
 
     void OnDestroy() {
@@ -236,10 +238,24 @@ public sealed partial class RunGame : MonoBehaviour {
 
     /// <summary>Титул закрыт — показать карточку биома (за титулом её бы никто не увидел).</summary>
     public void OnTitleClosed() {
-        RunTutorial.Instance?.BeginIfNeeded();
-        if (Run == null || Run.Room == null) return;
+        if (Run == null || Run.Room == null) { RunTutorial.Instance?.BeginIfNeeded(); return; }
         var biome = Run.Layout != null ? Run.Layout.Biome : BiomeCatalog.ForDepth(Run.Depth);
-        _ui.BiomeCard(Run.Depth, biome.Name, biome.Subtitle, RunWorldBuilder.Hex(biome.AccentColor), biome.Id.ToString().ToLowerInvariant());
+        IntroduceDepth(Run.Depth, biome, () => RunTutorial.Instance?.BeginIfNeeded());   // обучение — после знакомства с глубиной
+    }
+
+    /// <summary>
+    /// v0.16: новая глубина — окно знакомства (впервые в этой области или при включённых подсказках),
+    /// иначе прежняя короткая карточка с картиной. after — когда игрок нажмёт «Погрузиться».
+    /// </summary>
+    private void IntroduceDepth(int depth, BiomeDef biome, System.Action after = null) {
+        if (_ui.TitleOpen) return;   // жизнь началась за титулом — знакомство покажет OnTitleClosed
+        bool first = !Codex.IsUnlocked(Codex.ForBiome(biome), Meta);
+        if (first || GameSettings.Hints) {
+            _ui.ShowDepthIntro(DepthIntro.For(depth), RunWorldBuilder.Hex(biome.AccentColor), first, after);
+            return;
+        }
+        _ui.BiomeCard(depth, biome.Name, biome.Subtitle, RunWorldBuilder.Hex(biome.AccentColor), biome.Id.ToString().ToLowerInvariant());
+        after?.Invoke();
     }
 
     /// <summary>Пауза для экранов эволюции и показателей (мир замирает, жест рывка выключен).</summary>
@@ -329,7 +345,7 @@ public sealed partial class RunGame : MonoBehaviour {
 
         if (plan.Depth != _lastDepthShown) {
             _lastDepthShown = plan.Depth;
-            _ui.BiomeCard(plan.Depth, biome.Name, biome.Subtitle, RunWorldBuilder.Hex(biome.AccentColor), biome.Id.ToString().ToLowerInvariant());
+            IntroduceDepth(plan.Depth, biome);
         } else if (layout != null && layout.Kind != RoomKind.Normal) {
             _ui.Banner(layout.Title, 2.4f);
             if (!string.IsNullOrEmpty(layout.Hint)) _ui.Flash(layout.Hint, 3f);
@@ -389,8 +405,7 @@ public sealed partial class RunGame : MonoBehaviour {
         StreamCreatures(true);
         _ui.SetMinimap(_world);
         _lastDepthShown = plan.Depth;
-        _ui.BiomeCard(plan.Depth, biome.Name, biome.Subtitle, RunWorldBuilder.Hex(biome.AccentColor), biome.Id.ToString().ToLowerInvariant());
-        _ui.Hint("Найдите шахту вниз. Поглощайте — чтобы её открыть", 4f);
+        IntroduceDepth(plan.Depth, biome, () => _ui.Hint("Найдите шахту вниз. Поглощайте — чтобы её открыть", 4f));
     }
 
     /// <summary>Появление отложенных существ рядом и усыпление дальних — сотни существ без потерь FPS.</summary>
@@ -1078,6 +1093,7 @@ public sealed partial class RunGame : MonoBehaviour {
     /// <summary>Область и ресурсы открываются в энциклопедии без карточки — коротким сообщением.</summary>
     private void CodexStep() {
         if (Run == null || Run.Resources == null) return;
+        if (_ui != null && _ui.TitleOpen) return;   // v0.16: область «открывается», когда игрок в неё вошёл (окно знакомства)
         _codexTimer -= Time.unscaledDeltaTime;
         if (_codexTimer > 0f) return;
         _codexTimer = 0.5f;

@@ -78,7 +78,7 @@ public sealed class RunCodexUi : MonoBehaviour {
 
     public void ShowCard(CodexEntry e) {
         if (e == null) return;
-        if (_card.activeSelf || _book.activeSelf) { _queue.Enqueue(e); return; }
+        if (_card.activeSelf || _book.activeSelf || (Blocked != null && Blocked())) { _queue.Enqueue(e); return; }
         _cardEntry = e;
         SetArt(_cardArt, e.ArtKey, null);
         _cardName.text = e.Name;
@@ -89,6 +89,12 @@ public sealed class RunCodexUi : MonoBehaviour {
         PauseIfRunning();
         ProceduralSfx.Instance?.Play("evolve");
     }
+
+    /// <summary>v0.16: пока открыто окно знакомства с глубиной — карточки ждут в очереди.</summary>
+    public System.Func<bool> Blocked;
+
+    /// <summary>Показать отложенную карточку, если ничего не открыто.</summary>
+    public void Flush() { if (!IsOpen && _queue.Count > 0) ShowCard(_queue.Dequeue()); }
 
     /// <summary>Кнопка «Назад»: карточка → следующая, книга → закрыть.</summary>
     public bool CloseTop() {

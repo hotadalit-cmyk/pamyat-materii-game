@@ -45,6 +45,13 @@ public sealed class RunUi : MonoBehaviour {
     private RunSettingsUi _settings;
     private RunCodexUi _codex;
     public RunCodexUi Codex => _codex;
+    private RunDepthIntroUi _intro;
+    public bool TitleOpen => _titleModal != null && _titleModal.activeSelf;
+
+    /// <summary>v0.16: окно знакомства с глубиной (пауза до «Погрузиться»); после — onClose и отложенные карточки энциклопедии.</summary>
+    public void ShowDepthIntro(DepthIntroInfo info, Color accent, bool firstVisit, System.Action onClose) {
+        _intro.Show(info, accent, firstVisit, _game.Meta, () => { onClose?.Invoke(); _codex.Flush(); });
+    }
     public RunEvolutionUi Evo => _evo;
     public Transform Root => _root;
     public RectTransform DashRt => _skDash != null ? _skDash.Rt : null;
@@ -69,6 +76,7 @@ public sealed class RunUi : MonoBehaviour {
                              (_evo != null && _evo.ModalOpen) ||
                              (_settings != null && _settings.IsOpen) ||
                              (_codex != null && _codex.IsOpen) ||
+                             (_intro != null && _intro.IsOpen) ||
                              (_pauseModal != null && _pauseModal.activeSelf);
 
     public static RunUi Build(RunGame game) {
@@ -102,6 +110,8 @@ public sealed class RunUi : MonoBehaviour {
         RunEvolutionUi.Corner(ui._skBook.Rt, new Vector2(1, 1), new Vector2(-214, -72));
         ui._skBook.OnPress = () => { ProceduralSfx.Instance?.Play("click"); if (!ui.ModalOpen) ui._codex.Open(); };
         ui._codex = RunCodexUi.Build(ui._root, game);
+        ui._intro = RunDepthIntroUi.Build(ui._root, game);         // v0.16: знакомство с новой глубиной
+        ui._codex.Blocked = () => ui._intro.IsOpen;
         ui.BuildPause();
         ui.BuildVignette();
         GameSettings.Changed += ui.ApplyHandedness;
@@ -284,6 +294,7 @@ public sealed class RunUi : MonoBehaviour {
 
     /// <summary>«Назад»: закрыть верхнее окно; в игре без окон — пауза.</summary>
     private void OnBack() {
+        if (_intro != null && _intro.CloseIfOpen()) return;
         if (_codex != null && _codex.CloseTop()) return;
         if (_settings != null && _settings.CloseIfOpen()) return;
         if (_evo != null && _evo.CloseTop()) return;
