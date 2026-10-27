@@ -673,7 +673,7 @@ public sealed partial class RunGame : MonoBehaviour {
             return;
         }
         var dec = PuppetBrain.Think(BuildPuppetInput(_player.Rb.position, Run.FragmentMass(Run.Fragments.LeadId),
-            Run.Fragments.LeadId, false, _player.Rb.position));
+            Run.Fragments.LeadId, false, _player.Rb.position, _player.Rb.linearVelocity));
         Vector2 dir = new Vector2((float)dec.Move.X, (float)dec.Move.Y);
         if (dir.sqrMagnitude > 0.001f) {
             dir.Normalize();
@@ -691,8 +691,8 @@ public sealed partial class RunGame : MonoBehaviour {
         }
     }
 
-    /// <summary>Снимок мира для PuppetBrain: существа в радиусе 14, зоны стража, ноша/лидер для клона.</summary>
-    private PuppetInput BuildPuppetInput(Vector2 me, double selfMass, int fragId, bool clone, Vector2 lead) {
+    /// <summary>Снимок мира для PuppetBrain: существа в радиусе 14, тело стража, зоны стража, ноша/лидер для клона.</summary>
+    private PuppetInput BuildPuppetInput(Vector2 me, double selfMass, int fragId, bool clone, Vector2 lead, Vector2 selfVel) {
         int n = 0;
         for (int i = 0; i < _creatures.Count && n < _senseTmp.Length; i++) {
             var c = _creatures[i];
@@ -707,11 +707,21 @@ public sealed partial class RunGame : MonoBehaviour {
                 Threatens = !c.IsFood && !edible && cm > selfMass * 0.9,
             };
         }
+        // v0.14 (аудит): тело стража — главный ранящий глубины, автопилот обязан его видеть
+        // (иначе встаёт вплотную и ловит удары; по ТЗ — «бежать от ранящих ближе 4»)
+        if (Run.OpenWorld && Run.Guardian != null && Run.GuardianAwake && !Run.GuardianAbsorbed
+            && _guardian != null && n < _senseTmp.Length) {
+            Vector2 gp = (Vector2)_guardian.transform.position;
+            _senseTmp[n++] = new PuppetSense {
+                Pos = new Vec2(gp.x, gp.y), Mass = Run.Guardian.Hp,
+                IsFood = false, IsShimmering = false, Threatens = true,
+            };
+        }
         var sense = new PuppetSense[n];
         System.Array.Copy(_senseTmp, sense, n);
         return new PuppetInput {
             SelfPos = new Vec2(me.x, me.y), SelfMass = selfMass,
-            SelfVel = new Vec2(0, 0),
+            SelfVel = new Vec2(selfVel.x, selfVel.y), // v0.14 (аудит): реальная скорость — работает дрейф по инерции
             DashCharges = clone ? 0 : Run.DashCharges,
             MaxDashCharges = clone ? 0 : Run.MaxDashCharges,
             Creatures = sense, Zones = _puppetZones,
@@ -819,7 +829,7 @@ public sealed partial class RunGame : MonoBehaviour {
     private void PuppetCloneStep(FragView fv, Rigidbody2D rb, Vector2 lead, float dist, float dt) {
         var me = rb.position;
         double m = Run.FragmentMass(fv.Id);
-        var dec = PuppetBrain.Think(BuildPuppetInput(me, m, fv.Id, true, lead));
+        var dec = PuppetBrain.Think(BuildPuppetInput(me, m, fv.Id, true, lead, rb.linearVelocity));
         Vector2 dir = new Vector2((float)dec.Move.X, (float)dec.Move.Y);
         if (dir.sqrMagnitude > 0.001f) {
             dir.Normalize();
