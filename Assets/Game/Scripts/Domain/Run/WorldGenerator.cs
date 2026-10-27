@@ -30,6 +30,7 @@ public sealed class WorldMap {
     public List<ObstacleSpec> Obstacles = new List<ObstacleSpec>();
     public List<WallRect> WallRects = new List<WallRect>();
     public List<Vec2> CrackMouths = new List<Vec2>();   // входы в узкие трещины (подсказка: «разделитесь»)
+    public DecorPlan Decor;                             // v0.15: план декора биома (визуал)
     public double GoalMass;
 
     public bool IsFloor(int x, int y) => x >= 0 && y >= 0 && x < Width && y < Height && Cells[y * Width + x] == 1;
@@ -376,6 +377,7 @@ public static class WorldGenerator {
         m.GoalMass = System.Math.Max(6.0, goal);
         BuildWallRects(m);
         AssignShimmer(m, seed);
+        m.Decor = DecorPlanner.Plan(m, biome.Id, seed); // v0.15: декор строится последним — по готовой карте
         return m;
     }
 
