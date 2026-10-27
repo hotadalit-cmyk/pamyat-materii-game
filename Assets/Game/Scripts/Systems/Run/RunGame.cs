@@ -134,12 +134,23 @@ public sealed partial class RunGame : MonoBehaviour {
 
     // ---------- Жизнь ----------
     public void StartNewRun() {
+        StartRun(new RunState(Meta, NewSeed(), true));
+    }
+
+    /// <summary>v0.13: тестовый бой (DevTools) — новая жизнь сразу у стража глубины.</summary>
+    public void StartDevGuardianRun(int depth) {
+        StartRun(RunState.CreateDevGuardianRun(Meta, NewSeed(), depth));
+    }
+
+    private ulong NewSeed() => (ulong)System.DateTime.UtcNow.Ticks;
+
+    private void StartRun(RunState run) {
         _ui.HideImprint();
         Time.timeScale = 1f;
         PullGestureInput.Blocked = false;
-        _seed = (ulong)System.DateTime.UtcNow.Ticks;
+        _seed = NewSeed();
         _rng = new PmRandom(_seed ^ 0x5DEECE66DUL);
-        Run = new RunState(Meta, _seed, true); // v0.6: каждая глубина — одно огромное подземелье
+        Run = run;
         _ended = false;
         _offerShown = false;
         _lastHitSource = null;

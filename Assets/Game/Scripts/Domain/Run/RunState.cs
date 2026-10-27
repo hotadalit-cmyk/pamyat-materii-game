@@ -848,6 +848,39 @@ public sealed class RunState {
         _regionsTotal++;
     }
 
+    // ---------- v0.13: DevTools — тестовый старт у стража глубины ----------
+    /// <summary>Стартовая дистанция героя от шахты в тестовом забеге (ед.).</summary>
+    public const double DevGuardianStartDist = 6.0;
+
+    /// <summary>
+    /// v0.13: новая жизнь в открытом мире сразу у стража глубины depth (проверка боёв).
+    /// Масса героя = GoalMass глубины × 1.1, цель глубины засчитана (страж просыпается сразу),
+    /// герой стоит в ~6 ед. от шахты, 2 жетона эволюции, по 20 каждого ресурса.
+    /// Глубина зажимается в 1..MaxDepth; детерминировано от seed.
+    /// </summary>
+    public static RunState CreateDevGuardianRun(SoulMeta meta, ulong seed, int depth) {
+        if (depth < 1) depth = 1;
+        if (depth > MaxDepth) depth = MaxDepth;
+        var rs = new RunState(meta, seed, true);
+        rs.Depth = depth;
+        rs.SetupWorld();
+        rs.RoomAbsorbed = rs.Room.GoalMass;      // цель набрана — страж проснётся сразу
+        rs.Mass = rs.Room.GoalMass * 1.1;
+        if (rs.Mass > rs.PeakMass) rs.PeakMass = rs.Mass;
+        rs.CheckGuardianWake();
+        var exit = rs.Room.ExitPos;
+        Vec2 back = new Vec2(-exit.X, -exit.Y);  // от шахты к центру карты
+        double len = back.Length;
+        Vec2 start = len > 0.5
+            ? exit + back / len * DevGuardianStartDist
+            : new Vec2(exit.X, exit.Y + DevGuardianStartDist);
+        rs.Room.PlayerStart = start;
+        rs.Evolution.FreeTokens = 2;
+        if (rs.Resources != null)
+            for (int i = 0; i < ResourceInfo.Count; i++) rs.Resources.Add((ResourceKind)i, 20.0);
+        return rs;
+    }
+
     /// <summary>Комната + раскладка; элита усиливается после генерации, у босса — только споры.</summary>
     private void SetupRoom() {
         ulong roomSeed = _rng.NextUInt();
