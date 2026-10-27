@@ -26,7 +26,7 @@ public static class BiomeCatalog {
             Name = "Грибной коридор", Subtitle = "Здесь всё начинается…",
             FloorColor = 0x3E3550, WallColor = 0x241E33, AccentColor = 0xC39BE8, GlowColor = 0xEAD9FF,
             Darkness01 = 0.55, EvaporationPerSec = 0.0,
-            SpeciesPool = new string[] { "spore", "mite", "beetle", "soul_slime" },
+            SpeciesPool = new string[] { "spore", "mite", "beetle", "soul_slime", "cave_rat" },
             ObstaclePool = new ObstacleKind[] { ObstacleKind.Pillar, ObstacleKind.Mushroom },
         },
         new BiomeDef {
@@ -42,7 +42,7 @@ public static class BiomeCatalog {
             Name = "Затопленные залы", Subtitle = "Вода помнит всех, кто здесь тонул",
             FloorColor = 0x1C4646, WallColor = 0x0E2B2E, AccentColor = 0x5CE0C8, GlowColor = 0xAAF2E3,
             Darkness01 = 0.725, EvaporationPerSec = 0.0,
-            SpeciesPool = new string[] { "spore", "mite", "beetle", "glowworm", "spikeback", "jelly", "soul_slime", "leech", "bubble_jelly" },
+            SpeciesPool = new string[] { "spore", "mite", "beetle", "glowworm", "spikeback", "jelly", "soul_slime", "leech", "bubble_jelly", "piranha", "bomb_toad" },
             ObstaclePool = new ObstacleKind[] { ObstacleKind.Pillar, ObstacleKind.Pool, ObstacleKind.Sticky },
         },
         new BiomeDef {

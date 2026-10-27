@@ -170,6 +170,23 @@ namespace PM.Domain.Run {
                 case "spikeback":
                     l.Add(new CostItem(ResourceKind.Chitin, 1.0 * mass));
                     break;
+                // v0.15: новые виды
+                case "cave_rat":
+                    l.Add(new CostItem(ResourceKind.Organic, 0.7 * mass));
+                    l.Add(new CostItem(ResourceKind.Slime, 0.3 * mass));
+                    break;
+                case "piranha":
+                    l.Add(new CostItem(ResourceKind.Organic, 0.6 * mass));
+                    l.Add(new CostItem(ResourceKind.Slime, 0.5 * mass));
+                    break;
+                case "bomb_toad":
+                    l.Add(new CostItem(ResourceKind.Organic, 0.8 * mass));
+                    l.Add(new CostItem(ResourceKind.Slime, 0.4 * mass));
+                    break;
+                case "deep_shark":
+                    l.Add(new CostItem(ResourceKind.Chitin, 0.6 * mass));
+                    l.Add(new CostItem(ResourceKind.Organic, 0.5 * mass));
+                    break;
                 case "soul_slime":
                     l.Add(new CostItem(ResourceKind.Psyche, 1.2 * mass));
                     l.Add(new CostItem(ResourceKind.Slime, 0.4 * mass));

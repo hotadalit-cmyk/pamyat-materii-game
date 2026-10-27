@@ -72,6 +72,15 @@ public sealed partial class RunGame : MonoBehaviour {
     private readonly SpriteRenderer[] _guardianTelegraphs = new SpriteRenderer[3]; // круги гейзеров
     private SpriteRenderer _guardianRing, _guardianBeam;                  // кипящее кольцо, луч
     private readonly SpriteRenderer[] _guardianShards = new SpriteRenderer[4];     // осколки Гранильщика
+
+    // v0.15: опасности биома — лава Г2, течения Г3, жилы Г5 (вид + удар)
+    private sealed class HazardView {
+        public HazardSpec Spec;
+        public SpriteRenderer Strip, Glow, Telegraph;
+        public long LastStrike = -1;
+    }
+    private readonly List<HazardView> _hazards = new List<HazardView>();
+    private float _lavaTextT, _crystalBoostUntil;
     private readonly SpriteRenderer[] _currentDots = new SpriteRenderer[8];        // частицы течения Хора
     private float _guardianDashLock;                                            // запрет рывка (Хор)
     private bool _playerDashed; private Vec2 _playerDashDir;             // рывок в этом такте (Гранильщик)
@@ -281,6 +290,7 @@ public sealed partial class RunGame : MonoBehaviour {
         if (_roomRoot != null) Destroy(_roomRoot.gameObject);
         _creatures.Clear();
         _obstacles.Clear();
+        _hazards.Clear(); // v0.15: в комнатах опасностей нет — списки вида не переживают мир
         _squashBase.Clear(); // v0.14: старые отбойники уничтожены — кэш масштабов не нужен
         _boss = null;
         _altarRing = null;
@@ -346,11 +356,13 @@ public sealed partial class RunGame : MonoBehaviour {
         var layout = Run.Layout;
         var biome = layout != null && layout.Biome != null ? layout.Biome : BiomeCatalog.ForDepth(plan.Depth);
         _builtRoomKey = plan.Depth * 100 + plan.RoomIndex;
+        _hazards.Clear(); // v0.15: визуал опасностей уничтожается вместе с миром
         _world = new WorldView(map, _roomRoot, biome, WallMaterial);
         _audio?.SetBiome(biome.Id, Run.Boss != null || Run.GuardianAwake);
         if (Camera.main != null) Camera.main.backgroundColor = RunWorldBuilder.Hex(biome.WallColor) * 0.3f;
         for (int i = 0; i < map.Obstacles.Count; i++)
             _obstacles.Add(RunWorldBuilder.BuildObstacle(_roomRoot, map.Obstacles[i], biome));
+        BuildHazardViews(biome); // v0.15: лава/течения/жилы — вид, затем удары
         for (int i = 0; i < map.Altars.Count; i++) {
             var a = map.Altars[i];
             _altarRings.Add(RunWorldBuilder.BuildAltar(_roomRoot, ToV2(a.Pos), a.Kind == AltarKind.Spring, a.Kind == AltarKind.Relic));
@@ -439,7 +451,7 @@ public sealed partial class RunGame : MonoBehaviour {
         }
     }
 
-    private RunCreature SpawnCreature(SpawnSpec spec, int index) {
+    private RunCreature SpawnCreature(SpawnSpec spec, int index, string modelKeyOverride = null, bool scalePulse = false) {
         var sp = SpeciesCatalog.Get(spec.SpeciesId);
         if (sp == null) return null;
         if (sp.ColorIndex == 3 && string.IsNullOrEmpty(spec.SoulName))
@@ -470,9 +482,12 @@ public sealed partial class RunGame : MonoBehaviour {
         }
         if (!food) {
             // 3D-модель вместо круга: объёмное существо с анимацией (вид 3/4 сверху)
+            // v0.15: modelKeyOverride — тела стражей (gd_*); null — модель вида (или немезида)
             string modelKey = spec.IsNemesis ? "nemesis" : sp.Id;
+            if (modelKeyOverride != null && !spec.IsNemesis) modelKey = modelKeyOverride;
             var mm = ThirdPartyArt.AttachLook(view.transform, modelKey, r * 2f, spec.IsNemesis ? ColorFor(sp, true) : default);
             if (mm != null) {
+                if (scalePulse) mm.ScalePulse = true;
                 view.Body.gameObject.SetActive(false);
                 pendingModel = mm;
             }
@@ -912,6 +927,16 @@ public sealed partial class RunGame : MonoBehaviour {
                     _obstacles.Remove(o);
                     Destroy(o.gameObject);
                 } else ProceduralSfx.Instance?.Play("glass", 0.8f, 0f, 0.7f);
+                // v0.15 Г4: рикошет от кристалла даёт разгон («кристальные лабиринты»)
+                if (rel >= 3f && _time >= _crystalBoostUntil &&
+                    _frags.TryGetValue(_hitFrag >= 0 ? _hitFrag : Run.Fragments.LeadId, out var boostFrag) && boostFrag.View != null) {
+                    var vel = boostFrag.View.Rb.linearVelocity;
+                    if (vel.sqrMagnitude > 1f) {
+                        _crystalBoostUntil = _time + 0.5f;
+                        boostFrag.View.Rb.linearVelocity = vel.normalized * Mathf.Min(vel.magnitude * 1.25f + 1.2f, vel.magnitude + 8f);
+                        GameFeel.Text(point, "Разгон!", new Color(0.6f, 0.95f, 1f), 0.8f);
+                    }
+                }
                 break;
             default:
                 if (rel > 4f) GameFeel.Shake(0.06f);
@@ -1041,6 +1066,14 @@ public sealed partial class RunGame : MonoBehaviour {
         if (firstEver) _ui.Codex.ShowCard(Codex.ForSpecies(speciesId));
     }
 
+    /// <summary>v0.15: победа над стражем — открыть его запись (портрет, факты, совет) карточкой.</summary>
+    private void UnlockGuardianCodex(PM.Domain.Run.GuardianDef def) {
+        if (def == null) return;
+        if (!Codex.Unlock(Meta, Codex.GuardianKey(def.Id))) return;
+        SaveMeta();
+        _ui.Codex.ShowCard(Codex.ForGuardian(def));
+    }
+
     /// <summary>Область и ресурсы открываются в энциклопедии без карточки — коротким сообщением.</summary>
     private void CodexStep() {
         if (Run == null || Run.Resources == null) return;
@@ -1139,6 +1172,7 @@ public sealed partial class RunGame : MonoBehaviour {
         JoystickStep();
         PuppetStep(dt);   // v0.13: автопилот героя («Марионетка»)
         FragmentsStep(dt);
+        HazardStep(dt);   // v0.15: лава жжёт, течения сносят, жилы бьют по телеграфу
         LootStep();
         if (!InRun) return;
         pPos = _player.Rb.position;
@@ -1182,6 +1216,17 @@ public sealed partial class RunGame : MonoBehaviour {
             });
             if (o.Impulse)
                 rb.linearVelocity += new Vector2((float)o.Direction.X, (float)o.Direction.Y) * (CreatureSpeed * (float)o.Strength01);
+            // v0.15: течения Г3 сносят и существ
+            if (_hazards.Count > 0) {
+                var cp = rb.position;
+                for (int hzi = 0; hzi < _hazards.Count; hzi++) {
+                    var hv = _hazards[hzi];
+                    if (hv.Strip == null || hv.Spec.Kind != HazardKind.Current) continue;
+                    if (HazardRules.Inside(new Vec2(cp.x, cp.y), hv.Spec))
+                        rb.AddForce(new Vector2((float)hv.Spec.Dir.X, (float)hv.Spec.Dir.Y) *
+                            ((float)HazardRules.CurrentForce * rb.mass), ForceMode2D.Force);
+                }
+            }
         }
         _hitFrag = -1;
         BossStep(dt, pPos);
@@ -1254,7 +1299,7 @@ public sealed partial class RunGame : MonoBehaviour {
         }
         if (!_guardianBannerShown) {
             _guardianBannerShown = true;
-            _ui.Banner(g.Def.Name + " пробуждается…", 3f);
+            _ui.Banner(g.Def.Name + " пробуждается…", 3f, g.Def.Portrait); // v0.15: с портретом стража
             ProceduralSfx.Instance?.Play("shock");
             GameFeel.Shake(0.3f);
         }
@@ -1668,7 +1713,9 @@ public sealed partial class RunGame : MonoBehaviour {
     private void SpawnGuardianAt(Vec2 pos) {
         var g = Run.Guardian;
         if (g == null) return;
-        var c = SpawnCreature(new SpawnSpec { SpeciesId = g.Def.SpeciesId, Pos = pos, Mass = g.Hp }, 9001);
+        // v0.15: у стража своё тело (Mushroom/LavaGolem/Octopus/Cyclops/Heart); нет префаба — вид как раньше
+        var c = SpawnCreature(new SpawnSpec { SpeciesId = g.Def.SpeciesId, Pos = pos, Mass = g.Hp }, 9001,
+            g.Def.ModelKey, g.Def.Kind == GuardianKind.Pulsar);
         if (c == null) return;
         c.IsBoss = true; // общий путь стража: не спит, не съедается, контакт через OnGuardianContact
         c.View.Rb.linearDamping = 1.6f;
@@ -1692,6 +1739,7 @@ public sealed partial class RunGame : MonoBehaviour {
         if (g.IsExposed && fragMass >= g.Hp * 0.6) {
             Run.OnBossAbsorbed(); // Domain: награда по глубине, жетон, выход открыт
             CodexOnAbsorb(g.Def.SpeciesId);
+            UnlockGuardianCodex(g.Def); // v0.15: запись стража открывается при победе
             GameFeel.HitStop(0.25f);
             GameFeel.Shake(1f);
             _ui.Banner(g.Def.Name + " поглощён! Шахта открыта", 4f);
@@ -1760,6 +1808,126 @@ public sealed partial class RunGame : MonoBehaviour {
         }
         if (body == _player.Rb) extraDamping = Mathf.Max(extraDamping, _guardianZoneSlow); // v0.11: споры стража тормозят
         body.linearDamping = PlayerBaseDamping + extraDamping;
+    }
+
+    // ---------- Опасности биома (v0.15): лава Г2, течения Г3, жилы Г5 ----------
+
+    private void BuildHazardViews(BiomeDef biome) {
+        if (Run.World == null || Run.World.Hazards.Count == 0) return;
+        foreach (var hz in Run.World.Hazards) {
+            var go = new GameObject("hazard_" + hz.Kind);
+            go.transform.SetParent(_roomRoot, false);
+            go.transform.position = new Vector3((float)hz.Pos.X, (float)hz.Pos.Y, 0f);
+            go.transform.rotation = Quaternion.Euler(0f, 0f, Mathf.Atan2((float)hz.Dir.Y, (float)hz.Dir.X) * Mathf.Rad2Deg);
+            var view = new HazardView { Spec = hz };
+            float len = (float)hz.HalfLen * 2f, wid = (float)hz.HalfWidth * 2f;
+            switch (hz.Kind) {
+                case HazardKind.LavaRiver: {
+                    view.Strip = SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, len, wid, new Color(0.62f, 0.16f, 0.05f, 0.92f), 2);
+                    view.Glow = SpriteUtil.AddSprite(go.transform, SpriteUtil.GlowSprite, len * 1.2f, wid * 2.4f, new Color(1f, 0.42f, 0.1f, 0.4f), DarknessMask.Order + 2);
+                    if (hz.GapR > 0.0) { // «мостик» — каменный остров в разрыве реки
+                        var bridge = SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, (float)hz.GapR * 2f, (float)hz.GapR * 2.2f,
+                            new Color(0.23f, 0.17f, 0.13f, 0.95f), 3);
+                        bridge.transform.localPosition = new Vector3((float)hz.GapAlong, 0f, 0f);
+                    }
+                    break;
+                }
+                case HazardKind.Current: {
+                    view.Strip = SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, len, wid, new Color(0.4f, 0.72f, 1f, 0.15f), 2);
+                    view.Glow = SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, len, wid * 0.22f, new Color(0.8f, 0.95f, 1f, 0.16f), 3);
+                    view.Telegraph = SpriteUtil.AddSprite(go.transform, SpriteUtil.RingSprite, len * 0.94f, wid * 1.2f, new Color(0.6f, 0.85f, 1f, 0.14f), 1);
+                    break;
+                }
+                default: { // Vein — тёмная жила с багровым телеграфом и вспышкой удара
+                    view.Strip = SpriteUtil.AddSprite(go.transform, SpriteUtil.CircleSprite, len, wid, new Color(0.4f, 0.06f, 0.1f, 0.75f), 2);
+                    view.Glow = SpriteUtil.AddSprite(go.transform, SpriteUtil.GlowSprite, len * 1.05f, wid * 2.2f, new Color(1f, 0.2f, 0.25f, 0f), DarknessMask.Order + 2);
+                    view.Telegraph = SpriteUtil.AddSprite(go.transform, SpriteUtil.RingSprite, len * 0.96f, wid * 1.3f, new Color(1f, 0.35f, 0.3f, 0f), DarknessMask.Order + 3);
+                    break;
+                }
+            }
+            _hazards.Add(view);
+        }
+    }
+
+    private void HazardStep(float dt) {
+        if (_hazards.Count == 0) return;
+        float t = _time;
+        // течения сносят героя (существа толкаются в своём цикле ниже)
+        for (int f = 0; f < _fragList.Count; f++) {
+            var fv = _fragList[f];
+            if (fv.View == null) continue;
+            var p = fv.View.Rb.position;
+            for (int i = 0; i < _hazards.Count; i++) {
+                var v = _hazards[i];
+                if (v.Strip == null || v.Spec.Kind != HazardKind.Current) continue;
+                if (!HazardRules.Inside(new Vec2(p.x, p.y), v.Spec)) continue;
+                fv.View.Rb.AddForce(new Vector2((float)v.Spec.Dir.X, (float)v.Spec.Dir.Y) *
+                    ((float)HazardRules.CurrentForce * fv.View.Rb.mass), ForceMode2D.Force);
+            }
+        }
+        // лава: мерцание и урон по фрагментам в полосе
+        _lavaTextT -= dt;
+        for (int f = _fragList.Count - 1; f >= 0; f--) {
+            var fv = _fragList[f];
+            if (fv.View == null) continue;
+            var p = fv.View.Rb.position;
+            for (int i = 0; i < _hazards.Count; i++) {
+                var v = _hazards[i];
+                if (v.Strip == null || v.Spec.Kind != HazardKind.LavaRiver) continue;
+                if (v.Glow != null) {
+                    var gc = v.Glow.color;
+                    gc.a = 0.32f + 0.12f * Mathf.Sin(t * 2.3f + i * 1.7f);
+                    v.Glow.color = gc;
+                }
+                if (!HazardRules.Inside(new Vec2(p.x, p.y), v.Spec)) continue;
+                _hitFrag = fv.Id;
+                double loss = HazardRules.LavaLossPerSec(Run.FragmentMass(fv.Id), Run.Mutations) * dt;
+                HurtFragment(loss, "lava");
+                if (_lavaTextT <= 0f) {
+                    _lavaTextT = 1f;
+                    GameFeel.Text(p, "Лава! Масса испаряется", GameBootstrap.CDanger, 1f);
+                    ProceduralSfx.Instance?.Play("hit", 0.9f, 0f, 0.6f);
+                }
+                if (Run.IsDead) { EndRun(); return; }
+                if (!InRun || fv.View == null) break; // фрагмент растворился — к следующему
+            }
+        }
+        _hitFrag = -1;
+        // жилы: телеграф 0.8 с, удар 0.3 с, урон 8% массы фрагмента
+        for (int i = 0; i < _hazards.Count; i++) {
+            var v = _hazards[i];
+            if (v.Strip == null || v.Spec.Kind != HazardKind.Vein) continue;
+            var hz = v.Spec;
+            int stage = HazardRules.VeinStage(t, hz);
+            long cycle = (long)((t + hz.Phase) / hz.Period);
+            if (v.Glow != null) {
+                var c = v.Glow.color;
+                c.a = stage == 2 ? 0.7f : stage == 1 ? 0.22f + 0.18f * Mathf.Sin(t * 18f) : 0.06f;
+                v.Glow.color = c;
+            }
+            if (v.Telegraph != null) {
+                var c2 = v.Telegraph.color;
+                c2.a = stage == 1 ? 0.5f + 0.3f * Mathf.Sin(t * 14f) : 0f;
+                v.Telegraph.color = c2;
+            }
+            if (stage != 2 || cycle == v.LastStrike) continue;
+            v.LastStrike = cycle;
+            for (int f = _fragList.Count - 1; f >= 0; f--) {
+                var fv = _fragList[f];
+                if (fv.View == null) continue;
+                var p = fv.View.Rb.position;
+                if (!HazardRules.Inside(new Vec2(p.x, p.y), hz)) continue;
+                _hitFrag = fv.Id;
+                double loss = HazardRules.VeinDamageFrac * Run.FragmentMass(fv.Id);
+                HurtFragment(loss, "vein");
+                GameFeel.Text(p, "Жила бьёт! −" + loss.ToString("0.0"), GameBootstrap.CDanger, 1.1f);
+                GameFeel.Shake(0.4f);
+                ProceduralSfx.Instance?.Play("hit");
+                if (Run.IsDead) { EndRun(); return; }
+                if (!InRun) return;
+            }
+            _hitFrag = -1;
+        }
     }
 
     private void ToxicStep(float dt, Vector2 pPos, float pr) {

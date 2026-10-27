@@ -4,7 +4,8 @@ namespace PMHarness {
 /// <summary>v0.9: энциклопедия — записи из каталогов, тексты из JSON, открытие и сохранение.</summary>
 public static class CodexTests {
     public static void Entries_CoverCatalogs() {
-        Eq(SpeciesCatalog.All().Length, Codex.All(CodexKind.Species).Count, "every species");
+        // v0.15: вкладка «Существа» = виды каталога + записи пяти стражей
+        Eq(SpeciesCatalog.All().Length + GuardianCatalog.All().Length, Codex.All(CodexKind.Species).Count, "every species + guardians");
         Eq(BiomeCatalog.All().Length, Codex.All(CodexKind.Biome).Count, "every biome");
         Eq(ResourceInfo.Count, Codex.All(CodexKind.Resource).Count, "every resource");
         var mite = Codex.ForSpecies("mite");
@@ -12,6 +13,27 @@ public static class CodexTests {
         True(mite.Facts.Length >= 3, "facts: habitat, behaviour, yield");
         True(mite.Tip.Length > 0, "tactics from bestiary");
         Eq("portrait_mite", mite.ArtKey, "portrait key");
+    }
+
+    public static void GuardianEntries_HavePortraitAndTip() {
+        foreach (var g in GuardianCatalog.All()) {
+            var e = Codex.ForGuardian(g);
+            Eq("gd:" + g.Id, e.Key, g.Id + ": key");
+            Eq("Страж глубины " + g.Depth, e.Epithet, g.Id + ": epithet");
+            True(!string.IsNullOrEmpty(e.ArtKey) && e.ArtKey.StartsWith("guardian_"), g.Id + ": portrait key");
+            True(e.Facts.Length >= 3, g.Id + ": facts");
+            True(e.Tip.Length > 0, g.Id + ": tip");
+            True(Codex.GuardianKey(g.Id).StartsWith("gd:"), g.Id + ": key prefix");
+        }
+    }
+
+    public static void GuardianUnlock_Persists() {
+        var meta = new SoulMeta();
+        var g = GuardianCatalog.ForDepth(2);
+        True(Codex.Unlock(meta, Codex.GuardianKey(g.Id)), "first victory unlocks");
+        True(!Codex.Unlock(meta, Codex.GuardianKey(g.Id)), "second victory — not new");
+        var back = SoulMeta.FromJson(meta.ToJson());
+        True(back.Codex.Contains(Codex.GuardianKey(g.Id)), "guardian key survives save/load");
     }
 
     public static void Lore_LoadsAndSurvivesGarbage() {

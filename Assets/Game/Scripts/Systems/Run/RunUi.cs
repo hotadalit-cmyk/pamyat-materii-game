@@ -147,7 +147,7 @@ public sealed class RunUi : MonoBehaviour {
         _skGather.OnPress = () => _game.RequestGather();
         _skSoul = SkillButton.Create(_root, "soul_btn", 150, new Color(0.75f, 0.55f, 1f), "lorc_dragon-spiral", "Душа ⇄");
         _skSoul.OnPress = () => _game.RequestSoulTransfer();
-        _skAuto = SkillButton.Create(_root, "auto_btn", 150, new Color(0.55f, 0.85f, 1f), "lorc_brain", "Авто"); // v0.13: Марионетка
+        _skAuto = SkillButton.Create(_root, "auto_btn", 150, new Color(0.55f, 0.85f, 1f), "icon_auto|lorc_brain", "Авто"); // v0.13: Марионетка (v0.15: иконка AiArt с запасной)
         _skAuto.OnPress = () => _game.TogglePuppet();
         RunJoystick.Build(_root);
         ApplyHandedness();
@@ -179,7 +179,25 @@ public sealed class RunUi : MonoBehaviour {
 
         _banner = Label(_root, "", 52, TextAnchor.MiddleCenter, new Vector2(0, 160), new Vector2(1500, 140), new Vector2(0.5f, 0.5f));
         _banner.horizontalOverflow = HorizontalWrapMode.Wrap; _banner.resizeTextForBestFit = true; _banner.resizeTextMinSize = 30; _banner.resizeTextMaxSize = 52; // длинный баннер — в две строки, не обрезается
+        // v0.15: портрет стража в баннере пробуждения (без ассета — просто не рисуется)
+        _bannerArt = RawImageRoot(_root, new Vector2(-880, 160), 140);
         _flash = Label(_root, "", 30, TextAnchor.MiddleCenter, new Vector2(0, 150), new Vector2(1400, 50), new Vector2(0.5f, 0));
+    }
+
+    private RawImage _bannerArt;
+
+    /// <summary>v0.15: квадратный RawImage у баннера (для портретов стражей).</summary>
+    private static RawImage RawImageRoot(Transform root, Vector2 pos, float size) {
+        var go = new GameObject("banner_art");
+        go.transform.SetParent(root, false);
+        var r = go.AddComponent<RawImage>();
+        r.raycastTarget = false;
+        var rt = r.rectTransform;
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = pos;
+        rt.sizeDelta = new Vector2(size, size);
+        go.SetActive(false);
+        return r;
     }
 
     private static string PhaseName(BossPhase p) {
@@ -228,6 +246,7 @@ public sealed class RunUi : MonoBehaviour {
         _pauseModal = FullScreen("pause_modal");
         _pauseModal.GetComponent<Image>().color = new Color(0f, 0.01f, 0.03f, 0.8f);
         var box = Box(_pauseModal.transform, "pause_box", Vector2.zero, new Vector2(760, 930), Modal, new Vector2(0.5f, 0.5f));
+        UiFit.Apply(box); // v0.15: не выше видимой высоты канвы (2400×1080 → 864 ед.)
         var t = Label(box, "ПАУЗА", 56, TextAnchor.MiddleCenter, new Vector2(0, 390), new Vector2(700, 80), new Vector2(0.5f, 0.5f));
         t.color = GameBootstrap.COutline;
         string[] names = { "Продолжить", "Эволюция", "Показатели", "Энциклопедия", "Настройки", "Как играть" };
@@ -341,7 +360,16 @@ public sealed class RunUi : MonoBehaviour {
 
     void OnDestroy() { GameSettings.Changed -= ApplyHandedness; }
 
-    public void Banner(string text, float seconds = 2.2f) { _banner.text = text; _bannerTimer = seconds; }
+    public void Banner(string text, float seconds = 2.2f) => Banner(text, seconds, null);
+
+    /// <summary>v0.15: баннер с портретом (AiArt/<portrait>); нет ассета — текст как раньше.</summary>
+    public void Banner(string text, float seconds, string portrait) {
+        _banner.text = text; _bannerTimer = seconds;
+        var tex = string.IsNullOrEmpty(portrait) ? null : Resources.Load<Texture2D>("AiArt/" + portrait);
+        _bannerArt.texture = tex;
+        _bannerArt.gameObject.SetActive(tex != null);
+        if (tex != null) _banner.transform.SetAsLastSibling();
+    }
     public void Flash(string text, float seconds = 1.4f) { _flash.text = text; _flashTimer = seconds; }
 
     void Update() {
@@ -436,6 +464,10 @@ public sealed class RunUi : MonoBehaviour {
             }
         }
         Fade(_banner, ref _bannerTimer);
+        if (_bannerArt != null && _bannerArt.gameObject.activeSelf) { // v0.15: портрет гаснет вместе с баннером
+            var c = _bannerArt.color; c.a = Mathf.Clamp01(_bannerTimer / 0.4f); _bannerArt.color = c;
+            if (_bannerTimer <= 0f) _bannerArt.gameObject.SetActive(false);
+        }
         Fade(_biomeTitle, ref _biomeTimer);
         var bc = _biomeSub.color; bc.a = _biomeTitle.color.a; _biomeSub.color = bc;
         if (_biomeArt.gameObject.activeSelf) {
@@ -489,6 +521,7 @@ public sealed class RunUi : MonoBehaviour {
     private void BuildImprint() {
         _imprintModal = FullScreen("imprint_modal");
         var box = Box(_imprintModal.transform, "imprint", Vector2.zero, new Vector2(1500, 900), Modal, new Vector2(0.5f, 0.5f));
+        UiFit.Apply(box); // v0.15
         Label(box, "Отпечаток жизни", 48, TextAnchor.MiddleCenter, new Vector2(0, 390), new Vector2(1400, 70),
             new Vector2(0.5f, 0.5f)).color = GameBootstrap.COutline;
         _imprintBody = Label(box, "", 30, TextAnchor.UpperLeft, new Vector2(-330, 90), new Vector2(720, 520), new Vector2(0.5f, 0.5f));
@@ -508,10 +541,26 @@ public sealed class RunUi : MonoBehaviour {
         // v0.13: «Сохранить наследие (реклама)» — видна, когда реклама доступна и есть что наследовать
         _legacyBtn = Button(box, "legacy", new Vector2(0, -245), new Vector2(620, 100), new Color(1f, 0.82f, 0.3f), 0.85f,
             "Сохранить наследие (реклама)", 27);
+        AddIcon(_legacyBtn, "icon_legacy|lorc_scroll-unfurled", new Vector2(-255, 0), 58); // v0.15
         _legacyBtn.GetComponent<Button>().onClick.AddListener(OpenLegacyPanel);
         _legacyBtn.SetActive(false);
         BuildLegacyModal();
         _imprintModal.SetActive(false);
+    }
+
+    /// <summary>v0.15: иконка (AiArt/Icons → Icons) на кнопке/заголовке; без ассета — тихо ничего.</summary>
+    private static void AddIcon(GameObject host, string iconChain, Vector2 offset, float size) {
+        var s = ThirdPartyArt.Icon(iconChain);
+        if (s == null) return;
+        var go = new GameObject("icon");
+        go.transform.SetParent(host.transform, false);
+        var img = go.AddComponent<Image>();
+        img.sprite = s;
+        img.raycastTarget = false;
+        var rt = img.rectTransform;
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = offset;
+        rt.sizeDelta = new Vector2(size, size);
     }
 
     public void ShowImprint(LifeImprint im, bool victory, string killerText) {
@@ -557,6 +606,7 @@ public sealed class RunUi : MonoBehaviour {
         var box = Box(_legacyModal.transform, "legacy_box", Vector2.zero, new Vector2(1000, 780), Modal, new Vector2(0.5f, 0.5f));
         Label(box, "Наследие прошлой жизни", 44, TextAnchor.MiddleCenter, new Vector2(0, 320), new Vector2(900, 70),
             new Vector2(0.5f, 0.5f)).color = new Color(1f, 0.82f, 0.3f);
+        AddIcon(box, "icon_legacy|lorc_scroll-unfurled", new Vector2(-400, 320), 64); // v0.15
         _legacyBody = Label(box, "", 26, TextAnchor.UpperLeft, new Vector2(0, 110), new Vector2(880, 380), new Vector2(0.5f, 0.5f));
         var nodeBtn = Button(box, "legacy_node", new Vector2(0, -110), new Vector2(760, 92), GameBootstrap.CSoul, 0.7f, "", 26);
         _legacyNodeText = nodeBtn.GetComponentInChildren<Text>();
@@ -705,6 +755,7 @@ public sealed class RunUi : MonoBehaviour {
     private void BuildInfo() {
         _infoModal = FullScreen("info_modal");
         var box = Box(_infoModal.transform, "info", Vector2.zero, new Vector2(1500, 900), Modal, new Vector2(0.5f, 0.5f));
+        UiFit.Apply(box); // v0.15
         _infoTitle = Label(box, "", 48, TextAnchor.MiddleCenter, new Vector2(0, 390), new Vector2(1400, 70), new Vector2(0.5f, 0.5f));
         _infoTitle.color = GameBootstrap.COutline;
         _infoBody = Label(box, "", 27, TextAnchor.UpperLeft, new Vector2(0, -20), new Vector2(1380, 690), new Vector2(0.5f, 0.5f));

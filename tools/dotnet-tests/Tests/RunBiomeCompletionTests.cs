@@ -4,10 +4,10 @@ namespace PMHarness {
 
 public static class RunBiomeCompletionTests {
 
-    // Пулы видов биомов (из BiomeCatalog):
-    //   Fungal (глубина 1): spore, mite, beetle, soul_slime
+    // Пулы видов биомов (из BiomeCatalog; v0.15: в Г1 добавлена пещерная крыса, в Г3 — пиранья и жаба-бомба):
+    //   Fungal (глубина 1): spore, mite, beetle, soul_slime, cave_rat
     //   Warm (глубина 2):   spore, mite, beetle, glowworm, spikeback, soul_slime, ember_beetle, salamander
-    //   Ponds (глубина 3):  spore, mite, beetle, glowworm, spikeback, jelly, soul_slime, leech, bubble_jelly
+    //   Ponds (глубина 3):  spore, mite, beetle, glowworm, spikeback, jelly, soul_slime, leech, bubble_jelly, piranha, bomb_toad
     //   Crystal (глубина 4):spore, beetle, glowworm, spikeback, jelly, crystal_mite, soul_slime, shard_crab
     //   Heart (глубина 5):  spore, glowworm, spikeback, jelly, crystal_mite, soul_slime, wisp, warden
 
@@ -20,16 +20,18 @@ public static class RunBiomeCompletionTests {
     public static void Fungal_CompleteGrantsBonusEssence() {
         var st = new RunState(new SoulMeta(), 11UL);
         st.OnAbsorb("spore", 0.3);      // 1
-        Eq(0, st.CompletedBiomesCount, "не хватает mite, beetle, soul_slime");
+        Eq(0, st.CompletedBiomesCount, "не хватает mite, beetle, soul_slime, cave_rat");
         st.OnAbsorb("mite", 0.4);        // 2
         st.OnAbsorb("beetle", 0.4);     // 3
-        Eq(0, st.CompletedBiomesCount, "не хватает soul_slime");
-        st.OnAbsorb("soul_slime", 0.4); // 4 → Fungal complete
+        Eq(0, st.CompletedBiomesCount, "не хватает soul_slime и cave_rat");
+        st.OnAbsorb("soul_slime", 0.4); // 4
+        Eq(0, st.CompletedBiomesCount, "не хватает cave_rat (v0.15: 5 видов в пуле Г1)");
+        st.OnAbsorb("cave_rat", 0.4);   // 5 → Fungal complete
         Eq(1, st.CompletedBiomesCount, "Fungal завершён");
         Eq("Грибной коридор", st.LastBiomeCompleted, "имя завершённого биома");
         var imprint = st.Finish();
-        // Essence = 0 (глубина 1) + 0 (комнат) + 1.5 (3 поглощения не-спор) + 20 (4 новых вида) + 5 (Fungal)
-        Eq(26.5, imprint.EssenceEarned, "1.5 + 20 + 5 = 26.5");
+        // Essence = 0 (глубина 1) + 0 (комнат) + 2.0 (4 поглощения не-спор) + 25 (5 новых видов) + 5 (Fungal)
+        Eq(32.0, imprint.EssenceEarned, "2 + 25 + 5 = 32");
     }
 
     public static void DuplicateAbsorb_DoesntReGrant() {
@@ -38,16 +40,18 @@ public static class RunBiomeCompletionTests {
         st.OnAbsorb("mite", 0.4);
         st.OnAbsorb("beetle", 0.4);
         st.OnAbsorb("soul_slime", 0.4);
+        st.OnAbsorb("cave_rat", 0.4);
         Eq(1, st.CompletedBiomesCount, "Fungal завершён");
         // Повторное поглощение тех же видов — Fungal уже в _completedBiomes.
         st.OnAbsorb("spore", 0.3);
         st.OnAbsorb("mite", 0.4);
         st.OnAbsorb("beetle", 0.4);
         st.OnAbsorb("soul_slime", 0.4);
+        st.OnAbsorb("cave_rat", 0.4);
         Eq(1, st.CompletedBiomesCount, "повторно бонус не даётся");
         // Эссенция за завершение учтена один раз.
-        // Базовая часть: 0.5×6 (3+3 поглощения не-спор) + 5×4 (новых вида) + 5 (Fungal) = 3 + 20 + 5 = 28
-        Eq(28.0, st.Finish().EssenceEarned, "3 (поглощения) + 20 (4 вида) + 5 (Fungal)");
+        // Базовая часть: 0.5×8 (4+4 поглощения не-спор: spore — Food) + 5×5 (новых вида) + 5 (Fungal) = 4 + 25 + 5 = 34
+        Eq(34.0, st.Finish().EssenceEarned, "4 (поглощения) + 25 (5 видов) + 5 (Fungal)");
     }
 
     public static void PoolPartial_NoBonus() {
@@ -86,11 +90,12 @@ public static class RunBiomeCompletionTests {
 
     public static void LastBiomeCompleted_TracksMostRecent() {
         var st = new RunState(new SoulMeta(), 23UL);
-        // Завершим Fungal (4 вида).
+        // Завершим Fungal (5 видов, v0.15 — с пещерной крысой).
         st.OnAbsorb("spore", 0.3);
         st.OnAbsorb("mite", 0.4);
         st.OnAbsorb("beetle", 0.4);
         st.OnAbsorb("soul_slime", 0.4);
+        st.OnAbsorb("cave_rat", 0.4);
         Eq("Грибной коридор", st.LastBiomeCompleted, "Fungal завершён");
         // Завершим Heart: нужны glowworm, spikeback, jelly, crystal_mite, wisp, warden (soul_slime уже поглощён).
         st.OnAbsorb("glowworm", 0.3);

@@ -23,6 +23,7 @@ public sealed class WorldView {
         Map = map;
         BuildTexture(root, biome);
         BuildProps(root, biome);
+        BuildDecor(root, biome); // v0.15: пропсы биома по плану генератора
         BuildColliders(root, wallMat);
         Explored = new bool[map.Width * map.Height];
         _mini = new Color32[map.Width * map.Height];
@@ -38,6 +39,21 @@ public sealed class WorldView {
     }
 
     // ---------- Большая текстура мира ----------
+    // v0.15: тайловый пол биома (AiArt/Floors, Repeat) — притушенно, поверх цвета региона.
+    // Ресурс отсутствует — пол остаётся процедурным (старое поведение).
+    private static string FloorTexFor(BiomeId b) {
+        switch (b) {
+            case BiomeId.Fungal: return "AiArt/Floors/floor_b1_mushroom";
+            case BiomeId.Warm: return "AiArt/Floors/floor_b2_ember";
+            case BiomeId.Ponds: return "AiArt/Floors/floor_b3_flooded";
+            case BiomeId.Crystal: return "AiArt/Floors/floor_b4_crystal";
+            default: return "AiArt/Floors/floor_b5_heart";
+        }
+    }
+
+    private Texture2D _floorTex;
+    private int _tilePx = 56; // 7 мировых единиц × 8 px/клетку
+
     private void BuildTexture(Transform root, BiomeDef biome) {
         int w = Map.Width, h = Map.Height;
         // расстояние стены до пола (0 — пол, 1..3 — стена рядом, 4 — толща) — для светлой кромки
@@ -70,6 +86,9 @@ public sealed class WorldView {
             _cellTint[i] = reg >= 0 && reg < regionTint.Length ? regionTint[reg] : tunnel;
         }
         var bid = biome.Id;
+        _floorTex = Resources.Load<Texture2D>(FloorTexFor(bid)); // v0.15: плитка пола биома
+        if (_floorTex != null) { _floorTex.wrapMode = TextureWrapMode.Repeat; _floorTex.filterMode = FilterMode.Bilinear; }
+        _tilePx = 7 * PxPerCell;
         var px = new Color32[tw * th];
         for (int ty = 0; ty < th; ty++) {
             int cy = ty / P;
@@ -87,6 +106,12 @@ public sealed class WorldView {
                     c = Color.Lerp(c, glow, 0.08f + 0.16f * n1) * (0.8f + 0.32f * n2);
                     float ao = Mathf.Clamp01(edgeT * 3.4f);         // затенение у стен — объём
                     c *= 0.58f + 0.42f * ao;
+                    // v0.15: текстура пола биома — тайлинг ~7 ед., притушенно (~30%), в цвет региона
+                    if (_floorTex != null) {
+                        Color t2 = _floorTex.GetPixelBilinear(tx / (float)_tilePx, ty / (float)_tilePx);
+                        c *= new Color(Mathf.Lerp(1f, t2.r * 2f, 0.30f), Mathf.Lerp(1f, t2.g * 2f, 0.30f),
+                                       Mathf.Lerp(1f, t2.b * 2f, 0.30f), 1f);
+                    }
                     c = FloorDetail(bid, c, accent, tx, ty, n1, n2);
                 } else {
                     // глубина в толще — билинейно по полю расстояний (без ступенек по клеткам)
@@ -271,6 +296,46 @@ public sealed class WorldView {
             }
     }
 
+    /// <summary>
+    /// v0.15: пропсы биома по DecorPlan генератора (детерминирован по сиду карты).
+    /// Спрайты из AiArt/Props; светящиеся — с ореолом над DarknessMask и «дыханием».
+    /// Нет ассета — пропс пропускается (старый вид). Чистая визуализация, без коллайдеров.
+    /// </summary>
+    private void BuildDecor(Transform root, BiomeDef biome) {
+        var plan = Map.Decor;
+        if (plan == null || plan.Items.Count == 0) return;
+        var props = BiomeDecorProps.Props(biome.Id);
+        var propsRoot = new GameObject("decor").transform;
+        propsRoot.SetParent(root, false);
+        Color accent = RunWorldBuilder.Hex(biome.AccentColor);
+        var sprites = new Sprite[props.Length]; // один Sprite.Create на пропс — 6 на биом
+        for (int i = 0; i < props.Length; i++) {
+            var tex = Resources.Load<Texture2D>("AiArt/Props/" + props[i]);
+            sprites[i] = tex != null
+                ? Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f)
+                : null;
+        }
+        foreach (var item in plan.Items) {
+            var spr = sprites[item.PropIndex];
+            if (spr == null) continue; // ассета нет — старое поведение без декора
+            var go = new GameObject("decor_" + props[item.PropIndex]);
+            go.transform.SetParent(propsRoot, false);
+            go.transform.position = new Vector3((float)item.Pos.X, (float)item.Pos.Y, 0f);
+            float size = (float)item.Scale * 1.35f;          // видимый размер, мир. ед.
+            go.transform.localScale = new Vector3(item.Flip ? -size : size, size, 1f);
+            go.transform.rotation = Quaternion.Euler(0f, 0f, (float)item.RotationDeg);
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = spr;
+            sr.sortingOrder = 2;                             // над полом, под существами
+            if (item.Glow) {
+                var g = accent; g.a = 0.42f;
+                // локальные 2.3 × масштаб родителя size = мировой ореол size×2.3
+                SpriteUtil.AddSprite(go.transform, SpriteUtil.GlowSprite, 2.3f, 2.3f, g, DarknessMask.Order + 1);
+                go.AddComponent<DecorBreather>();            // дыхание масштаба + мерцание ореола
+            }
+        }
+    }
+
     private static Color TintFor(RegionKind k, Color floor, Color accent) {
         switch (k) {
             case RegionKind.Start: return Color.Lerp(floor, new Color(0.25f, 0.45f, 0.55f), 0.35f);
@@ -344,6 +409,31 @@ public sealed class WorldView {
         _miniDirty = false;
         MiniTex.SetPixels32(_mini);
         MiniTex.Apply(false);
+    }
+}
+
+/// <summary>v0.15: «дыхание» светящегося декора — мягкое покачивание масштаба и мерцание ореола.</summary>
+public sealed class DecorBreather : MonoBehaviour {
+    private Vector3 _base;
+    private float _phase;
+    private SpriteRenderer _glow;
+    private Color _glowBase;
+
+    void Start() {
+        _base = transform.localScale;
+        _phase = transform.position.x * 0.37f + transform.position.y * 0.61f; // разные фазы у разных пропсов
+        foreach (var r in GetComponentsInChildren<SpriteRenderer>())
+            if (r.sortingOrder > DarknessMask.Order) { _glow = r; _glowBase = r.color; break; }
+    }
+
+    void Update() {
+        float t = Time.time * 1.7f + _phase;
+        float s = 1f + 0.045f * Mathf.Sin(t);
+        transform.localScale = new Vector3(_base.x * s, _base.y * s, _base.z);
+        if (_glow != null) {
+            float f = 0.72f + 0.28f * Mathf.Sin(t * 1.9f);
+            _glow.color = new Color(_glowBase.r, _glowBase.g, _glowBase.b, _glowBase.a * f);
+        }
     }
 }
 }

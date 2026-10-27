@@ -138,6 +138,7 @@ public sealed class RunEvolutionUi : MonoBehaviour {
     private void BuildEvolution() {
         _evoModal = FullScreen("evolution_modal", new Color(0f, 0f, 0f, 0.85f));
         var box = Box(_evoModal.transform, "evo_box", Vector2.zero, new Vector2(1860, 1020), Modal, new Vector2(0.5f, 0.5f));
+        UiFit.Apply(box); // v0.15: не выше видимой высоты канвы
         Label(box, "ЭВОЛЮЦИЯ", 46, TextAnchor.MiddleLeft, new Vector2(40, -20), new Vector2(500, 60), new Vector2(0, 1)).color = GameBootstrap.COutline;
         // вкладки ветвей
         for (int b = 0; b < EvolutionTree.BranchCount; b++) {
@@ -412,8 +413,8 @@ public sealed class RunEvolutionUi : MonoBehaviour {
                         case "soul_transfer": return "lorc_dragon-spiral";
                         case "clone_return": return "lorc_bubbles";
                         case "clone_hunter": return "lorc_claw-slashes";
-                        case "puppet": return "lorc_brain";          // v0.13: автопилот
-                        case "puppet_master": return "lorc_light-bulb"; // v0.13: нити клонам
+                        case "puppet": return "icon_puppet|lorc_brain";          // v0.13: автопилот (v0.15: иконка AiArt)
+                        case "puppet_master": return "icon_puppeteer|lorc_light-bulb"; // v0.13: нити клонам (v0.15)
                     }
                     break;
                 case EvoEffectKind.CloneLeash: return "lorc_divert";
@@ -531,6 +532,7 @@ public sealed class RunEvolutionUi : MonoBehaviour {
     private void BuildStats() {
         _statsModal = FullScreen("stats_modal", new Color(0f, 0f, 0f, 0.8f));
         var box = Box(_statsModal.transform, "stats_box", Vector2.zero, new Vector2(1400, 1000), Modal, new Vector2(0.5f, 0.5f));
+        UiFit.Apply(box); // v0.15
         Label(box, "ПОКАЗАТЕЛИ", 46, TextAnchor.MiddleLeft, new Vector2(40, -20), new Vector2(420, 60), new Vector2(0, 1)).color = GameBootstrap.COutline;
         var tTrain = MakeButton(box, "tab_train", new Vector2(470, -18), new Vector2(250, 70), GameBootstrap.CSlime, 0.9f, "Прокачка", 28, new Vector2(0, 1));
         tTrain.GetComponent<Button>().onClick.AddListener(() => { _statsTab = 0; RefreshStats(); });

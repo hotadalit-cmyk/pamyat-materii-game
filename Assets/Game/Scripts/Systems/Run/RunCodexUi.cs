@@ -109,6 +109,7 @@ public sealed class RunCodexUi : MonoBehaviour {
     private void BuildBook() {
         _book = FullScreen("codex_book", new Color(0f, 0f, 0f, 0.85f));
         var box = Box(_book.transform, "book", Vector2.zero, new Vector2(1860, 1020), Modal, new Vector2(0.5f, 0.5f));
+        UiFit.Apply(box); // v0.15: не выше видимой высоты канвы
         Label(box, "ЭНЦИКЛОПЕДИЯ", 44, TextAnchor.MiddleLeft, new Vector2(40, -22), new Vector2(460, 60), new Vector2(0, 1)).color = GameBootstrap.COutline;
         string[] tabs = { "Существа", "Области", "Ресурсы", "О мире" };
         for (int i = 0; i < 4; i++) {

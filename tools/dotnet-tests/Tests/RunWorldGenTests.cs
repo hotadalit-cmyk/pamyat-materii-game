@@ -112,6 +112,9 @@ public static class RunWorldGenTests {
             var dist = WorldGenerator.Bfs(m, sx, sy);
             True(m.CellOf(m.ExitPos, out int ex, out int ey), "exit cell");
             int exitD = dist[ey * m.Width + ex];
+            // v0.15: на Г5 логово сознательно в центре карты (кольцо вокруг логова),
+            // поэтому «выход среди самых дальних» проверяется только на Г1–Г4.
+            if (d == 5) continue;
             foreach (var r in m.Regions) {
                 if (r.Kind != RegionKind.Cavern) continue;
                 var c = WorldGenerator.NearestFloor(m, r.Center);

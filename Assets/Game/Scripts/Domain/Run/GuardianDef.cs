@@ -16,6 +16,8 @@ public sealed class GuardianDef {
     public string Name;
     public int Depth;
     public string SpeciesId;       // вид тела для Unity/энциклопедии (этап 1 — "warden" у всех)
+    public string ModelKey;        // v0.15: ключ модели в ThirdPartyArt (gd_*); null — как у вида
+    public string Portrait;        // v0.15: Resources-ключ портрета (AiArt/Guardians/*); null — без портрета
     public uint Tint;              // 0xRRGGBB — цвет свечения/подписи в Unity
     public GuardianKind Kind;
     public double HpMult;          // HP стража = max(8, GoalMass × HpMult)
@@ -84,6 +86,7 @@ public static class GuardianCatalog {
     private static readonly GuardianDef[] AllDefs = new GuardianDef[] {
         new GuardianDef {
             Id = "spore_mother", Name = "Спороносица", Depth = 1, SpeciesId = "warden", Tint = 0x7CE07C,
+            ModelKey = "gd_spore_mother", Portrait = "guardian_sporonosa",
             Kind = GuardianKind.SporeMother, HpMult = 1.3, ArenaMult = 4.5, WakeMult = 3.6,
             PhaseThreshold2 = 0.66, PhaseThreshold3 = 0.33,
             ZoneCount = 4, ZoneMult = 1.7, ZoneDriftFrac = 0.68, ZoneDamagePerSec = 0.4, ZoneSlow = 0.30,
@@ -95,6 +98,7 @@ public static class GuardianCatalog {
         // Горнило (Г2): экономия массы — гейзеры, деление на капли, кипящее кольцо.
         new GuardianDef {
             Id = "forge", Name = "Горнило", Depth = 2, SpeciesId = "warden", Tint = 0xE08A4A,
+            ModelKey = "gd_forge", Portrait = "guardian_gornilo",
             Kind = GuardianKind.Forge, HpMult = 1.35, ArenaMult = 4.5, WakeMult = 3.6,
             PhaseThreshold2 = 0.66, PhaseThreshold3 = 0.33,
             GeyserEvery1 = 5.0, GeyserEvery3 = 4.0, GeyserCount = 3, GeyserMult = 1.1,
@@ -105,6 +109,7 @@ public static class GuardianCatalog {
         // Хор Бездны (Г3): экономия рывков и тайминг — ток, оглушение, воронка.
         new GuardianDef {
             Id = "abyss_choir", Name = "Хор Бездны", Depth = 3, SpeciesId = "warden", Tint = 0x7A8CE0,
+            ModelKey = "gd_abyss_choir", Portrait = "guardian_hor_bezdny",
             Kind = GuardianKind.AbyssChoir, HpMult = 1.4, ArenaMult = 4.5, WakeMult = 3.6,
             PhaseThreshold2 = 0.66, PhaseThreshold3 = 0.33,
             CurrentForce = 2.0, CurrentChangeEvery = 6.0,
@@ -115,6 +120,7 @@ public static class GuardianCatalog {
         // Гранильщик (Г4): точность рывков — осколки-блок, лучи, зеркало-контрудар.
         new GuardianDef {
             Id = "grinder", Name = "Гранильщик", Depth = 4, SpeciesId = "warden", Tint = 0xC0C8D8,
+            ModelKey = "gd_grinder", Portrait = "guardian_granilshchik",
             Kind = GuardianKind.Grinder, HpMult = 1.45, ArenaMult = 4.5, WakeMult = 3.6,
             PhaseThreshold2 = 0.66, PhaseThreshold3 = 0.33,
             ShardCount = 4, ShardOrbitFrac = 1.2, ShardOrbitPeriod = 6.0, ShardRadiusFrac = 0.11, BlockMassFrac = 0.05,
@@ -125,6 +131,7 @@ public static class GuardianCatalog {
         // Пульсар: поведение старого BossState 1:1 (пороги 0.60/0.45 — RunBossTests зелёные).
         new GuardianDef {
             Id = "pulsar", Name = "Пульсар", Depth = 5, SpeciesId = "warden", Tint = 0xFF6A5A,
+            ModelKey = "gd_pulsar", Portrait = "guardian_pulsar",
             Kind = GuardianKind.Pulsar, HpMult = 1.5, ArenaMult = 4.5, WakeMult = 3.6,
             PhaseThreshold2 = 0.60, PhaseThreshold3 = 0.45,
             MinionSpecies = "mite", MinionMassFrac = 0.65, MinionsPerWave = 3, MinionEvery1 = 7.0, MinionEvery3 = 7.0,

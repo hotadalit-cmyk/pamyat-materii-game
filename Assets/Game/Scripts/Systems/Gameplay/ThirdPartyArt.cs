@@ -35,11 +35,20 @@ public static class ThirdPartyArt {
     }
 
     // ---------- Иконки game-icons.net (белые на прозрачном — тонируются) ----------
+    // v0.15: имя может быть цепочкой «a|b|c» — берётся первый найденный; символ | — запасной вариант.
+    // AiArt-иконки ищутся в AiArt/Icons/, старые — в Icons/.
     private static readonly Dictionary<string, Sprite> _icons = new Dictionary<string, Sprite>();
     public static Sprite Icon(string name) {
         if (string.IsNullOrEmpty(name)) return null;
         if (_icons.TryGetValue(name, out var s)) return s;
+        int bar = name.IndexOf('|');
+        if (bar >= 0) {
+            s = Icon(name.Substring(0, bar)) ?? Icon(name.Substring(bar + 1));
+            _icons[name] = s;
+            return s;
+        }
         var tex = Resources.Load<Texture2D>("Icons/" + name);
+        if (tex == null) tex = Resources.Load<Texture2D>("AiArt/Icons/" + name); // v0.15: новый арт
         s = tex != null ? Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f) : null;
         _icons[name] = s;
         return s;
@@ -76,10 +85,14 @@ public static class ThirdPartyArt {
     // ---------- 3D-монстры (Quaternius) ----------
     private static readonly Dictionary<string, string> MonsterFor = new Dictionary<string, string> {
         // v0.10: подобраны под портреты энциклопедии (членистоногие — краб, светлячок — летун, души — призрак)
-        { "mite", "Crab" }, { "beetle", "Crab" }, { "glowworm", "Bee" }, { "spikeback", "Cactus" },
-        { "jelly", "Q_Slime" }, { "crystal_mite", "Cyclops" }, { "soul_slime", "Ghost" }, { "ember_beetle", "Demon" },
-        { "salamander", "Q_Dragon" }, { "leech", "Q_Slime" }, { "bubble_jelly", "Q_Slime" }, { "shard_crab", "Crab" },
-        { "wisp", "Ghost" }, { "warden", "Cthulhu" }, { "nemesis", "GreenDemon" }, { "hero", "Q_Slime" },
+        // v0.15: пересажены на новый зоомир (Spider/Wasp/Snake/Slime/Bat) + 4 новых вида + тела стражей
+        { "mite", "Spider" }, { "beetle", "Crab" }, { "glowworm", "Wasp" }, { "spikeback", "Cactus" },
+        { "jelly", "Q_Slime" }, { "crystal_mite", "Cyclops" }, { "soul_slime", "Slime" }, { "ember_beetle", "Demon" },
+        { "salamander", "Q_Dragon" }, { "leech", "Snake" }, { "bubble_jelly", "Q_Slime" }, { "shard_crab", "Crab" },
+        { "wisp", "Bat" }, { "warden", "Cthulhu" }, { "nemesis", "GreenDemon" }, { "hero", "Q_Slime" },
+        { "cave_rat", "Rat" }, { "piranha", "Piranha" }, { "bomb_toad", "Frog" }, { "deep_shark", "Shark" },
+        { "gd_spore_mother", "Mushroom" }, { "gd_forge", "LavaGolem" }, { "gd_abyss_choir", "Octopus" },
+        { "gd_grinder", "Cyclops" }, { "gd_pulsar", "Heart" },
     };
     private static readonly Dictionary<string, GameObject> _prefabs = new Dictionary<string, GameObject>();
     private static readonly Dictionary<string, float> _footprint = new Dictionary<string, float>();
@@ -114,6 +127,17 @@ public static class ThirdPartyArt {
         { "wisp", (new Color(0.4f, 0.7f, 1f), 0.65f) },           // голубой огонёк
         { "warden", (new Color(0.6f, 0.25f, 0.2f), 0.35f) },      // каменно-багровый страж
         { "hero", (new Color(0.3f, 0.78f, 1f), 0.85f) },          // наша капля — как на заставке
+        // v0.15: новые виды
+        { "cave_rat", (new Color(0.55f, 0.5f, 0.45f), 0.5f) },    // пепельная крыса
+        { "piranha", (new Color(0.75f, 0.25f, 0.3f), 0.55f) },    // кровавая пиранья
+        { "bomb_toad", (new Color(0.5f, 0.6f, 0.25f), 0.5f) },    // болотная жаба
+        { "deep_shark", (new Color(0.35f, 0.5f, 0.62f), 0.55f) }, // стальная акула
+        // v0.15: тела стражей
+        { "gd_spore_mother", (new Color(0.45f, 0.85f, 0.42f), 0.5f) }, // грибная зелень
+        { "gd_forge", (new Color(1f, 0.5f, 0.18f), 0.55f) },           // раскалённый оранжевый
+        { "gd_abyss_choir", (new Color(0.45f, 0.52f, 0.95f), 0.55f) },// бездонный сине-фиолетовый
+        { "gd_grinder", (new Color(0.72f, 0.85f, 1f), 0.6f) },        // кристальный тинт
+        { "gd_pulsar", (new Color(0.9f, 0.22f, 0.2f), 0.65f) },       // багровый пульс
     };
 
     /// <summary>Посадить модель вида с его обликом из таблицы (для души-немезиды — свой цвет).</summary>
@@ -191,13 +215,19 @@ public sealed class MonsterModel : MonoBehaviour {
     public Transform Yaw;
     public Animator Animator;
     public AnimationClip Loop, IdleClip, HitClip;
+    /// <summary>v0.15: пульс масштаба (Пульсар-сердце) — дышит в такт ударам.</summary>
+    public bool ScalePulse;
+    private Vector3 _baseScale = Vector3.one;
     private float _yaw = 180f;     // по умолчанию — лицом к игроку (вниз по экрану)
     private Rigidbody2D _rb;
     private bool _moving = true;
     private UnityEngine.Playables.PlayableGraph _graph;
     private float _hitUntil;
 
-    void Start() { _rb = GetComponentInParent<Rigidbody2D>(); }
+    void Start() {
+        _rb = GetComponentInParent<Rigidbody2D>();
+        if (Yaw != null) _baseScale = Yaw.localScale; // база для пульса (задаётся при посадке модели)
+    }
 
     private void Play(AnimationClip clip) {
         if (clip == null || Animator == null) return;
@@ -209,6 +239,10 @@ public sealed class MonsterModel : MonoBehaviour {
 
     void Update() {
         if (Yaw == null) return;
+        if (ScalePulse) {
+            float ps = 1f + 0.055f * Mathf.Sin(Time.time * 2.6f);
+            Yaw.localScale = new Vector3(_baseScale.x * ps, _baseScale.y * ps, _baseScale.z);
+        }
         Vector2 v = _rb != null ? _rb.linearVelocity : Vector2.zero;
         float sp = v.magnitude;
         if (sp > 0.3f) {
