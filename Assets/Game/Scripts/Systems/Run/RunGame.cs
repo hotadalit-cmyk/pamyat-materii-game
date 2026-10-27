@@ -439,7 +439,7 @@ public sealed partial class RunGame : MonoBehaviour {
         }
     }
 
-    private RunCreature SpawnCreature(SpawnSpec spec, int index) {
+    private RunCreature SpawnCreature(SpawnSpec spec, int index, string modelKeyOverride = null, bool scalePulse = false) {
         var sp = SpeciesCatalog.Get(spec.SpeciesId);
         if (sp == null) return null;
         if (sp.ColorIndex == 3 && string.IsNullOrEmpty(spec.SoulName))
@@ -470,9 +470,12 @@ public sealed partial class RunGame : MonoBehaviour {
         }
         if (!food) {
             // 3D-модель вместо круга: объёмное существо с анимацией (вид 3/4 сверху)
+            // v0.15: modelKeyOverride — тела стражей (gd_*); null — модель вида (или немезида)
             string modelKey = spec.IsNemesis ? "nemesis" : sp.Id;
+            if (modelKeyOverride != null && !spec.IsNemesis) modelKey = modelKeyOverride;
             var mm = ThirdPartyArt.AttachLook(view.transform, modelKey, r * 2f, spec.IsNemesis ? ColorFor(sp, true) : default);
             if (mm != null) {
+                if (scalePulse) mm.ScalePulse = true;
                 view.Body.gameObject.SetActive(false);
                 pendingModel = mm;
             }
@@ -1041,6 +1044,14 @@ public sealed partial class RunGame : MonoBehaviour {
         if (firstEver) _ui.Codex.ShowCard(Codex.ForSpecies(speciesId));
     }
 
+    /// <summary>v0.15: победа над стражем — открыть его запись (портрет, факты, совет) карточкой.</summary>
+    private void UnlockGuardianCodex(PM.Domain.Run.GuardianDef def) {
+        if (def == null) return;
+        if (!Codex.Unlock(Meta, Codex.GuardianKey(def.Id))) return;
+        SaveMeta();
+        _ui.Codex.ShowCard(Codex.ForGuardian(def));
+    }
+
     /// <summary>Область и ресурсы открываются в энциклопедии без карточки — коротким сообщением.</summary>
     private void CodexStep() {
         if (Run == null || Run.Resources == null) return;
@@ -1254,7 +1265,7 @@ public sealed partial class RunGame : MonoBehaviour {
         }
         if (!_guardianBannerShown) {
             _guardianBannerShown = true;
-            _ui.Banner(g.Def.Name + " пробуждается…", 3f);
+            _ui.Banner(g.Def.Name + " пробуждается…", 3f, g.Def.Portrait); // v0.15: с портретом стража
             ProceduralSfx.Instance?.Play("shock");
             GameFeel.Shake(0.3f);
         }
@@ -1668,7 +1679,9 @@ public sealed partial class RunGame : MonoBehaviour {
     private void SpawnGuardianAt(Vec2 pos) {
         var g = Run.Guardian;
         if (g == null) return;
-        var c = SpawnCreature(new SpawnSpec { SpeciesId = g.Def.SpeciesId, Pos = pos, Mass = g.Hp }, 9001);
+        // v0.15: у стража своё тело (Mushroom/LavaGolem/Octopus/Cyclops/Heart); нет префаба — вид как раньше
+        var c = SpawnCreature(new SpawnSpec { SpeciesId = g.Def.SpeciesId, Pos = pos, Mass = g.Hp }, 9001,
+            g.Def.ModelKey, g.Def.Kind == GuardianKind.Pulsar);
         if (c == null) return;
         c.IsBoss = true; // общий путь стража: не спит, не съедается, контакт через OnGuardianContact
         c.View.Rb.linearDamping = 1.6f;
@@ -1692,6 +1705,7 @@ public sealed partial class RunGame : MonoBehaviour {
         if (g.IsExposed && fragMass >= g.Hp * 0.6) {
             Run.OnBossAbsorbed(); // Domain: награда по глубине, жетон, выход открыт
             CodexOnAbsorb(g.Def.SpeciesId);
+            UnlockGuardianCodex(g.Def); // v0.15: запись стража открывается при победе
             GameFeel.HitStop(0.25f);
             GameFeel.Shake(1f);
             _ui.Banner(g.Def.Name + " поглощён! Шахта открыта", 4f);

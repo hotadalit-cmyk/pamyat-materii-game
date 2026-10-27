@@ -26,6 +26,7 @@ namespace PM.Domain.Run {
         private static readonly Dictionary<string, string> _epithet = new Dictionary<string, string>();
 
         public static string SpeciesKey(string id) => "sp:" + id;
+        public static string GuardianKey(string guardianId) => "gd:" + guardianId; // v0.15
         public static string BiomeKey(BiomeId id) => "bi:" + BiomeArtId(id);
         public static string ResourceKey(ResourceKind k) => "res:" + k;
         public static string BiomeArtId(BiomeId id) => id.ToString().ToLowerInvariant();
@@ -60,10 +61,48 @@ namespace PM.Domain.Run {
 
         public static List<CodexEntry> All(CodexKind kind) {
             var l = new List<CodexEntry>();
-            if (kind == CodexKind.Species) foreach (var s in SpeciesCatalog.All()) l.Add(ForSpecies(s.Id));
+            if (kind == CodexKind.Species) {
+                foreach (var s in SpeciesCatalog.All()) l.Add(ForSpecies(s.Id));
+                foreach (var g in GuardianCatalog.All()) l.Add(ForGuardian(g)); // v0.15: стражи — в конце вкладки
+            }
             else if (kind == CodexKind.Biome) foreach (var b in BiomeCatalog.All()) l.Add(ForBiome(b));
             else for (int i = 0; i < ResourceInfo.Count; i++) l.Add(ForResource((ResourceKind)i));
             return l;
+        }
+
+        /// <summary>v0.15: запись стража — открывается при победе, портрет AiArt/Guardians.</summary>
+        public static CodexEntry ForGuardian(GuardianDef g) {
+            string key = GuardianKey(g.Id);
+            var body = SpeciesCatalog.Get(g.SpeciesId);
+            var facts = new List<string> { "Глубина " + g.Depth };
+            facts.Add("Существо-тело: " + (body != null ? body.Name : g.SpeciesId));
+            facts.Add(GuardianFacts(g.Kind));
+            return new CodexEntry {
+                Key = key, Kind = CodexKind.Species, Id = g.Id, Name = g.Name,
+                Epithet = "Страж глубины " + g.Depth,
+                Lore = _lore.TryGetValue(key, out var lo) ? lo : "",
+                Facts = facts.ToArray(), Tip = GuardianTip(g.Kind), ArtKey = g.Portrait,
+            };
+        }
+
+        private static string GuardianFacts(GuardianKind k) {
+            switch (k) {
+                case GuardianKind.SporeMother: return "Зоны спор, выводок клещей, удар корней с телеграфом";
+                case GuardianKind.Forge: return "Гейзеры, капли, кипящее кольцо: держись внутри и экономь массу";
+                case GuardianKind.AbyssChoir: return "Течение, импульсы, оглушение рывка, воронка в ярости";
+                case GuardianKind.Grinder: return "Осколки-блок, луч и зеркало-контрудар: точные рывки";
+                default: return "Таранит, выпускает выводок, берсеркит на последних фазах";
+            }
+        }
+
+        private static string GuardianTip(GuardianKind k) {
+            switch (k) {
+                case GuardianKind.SporeMother: return "Бейте между волнами выводка; в фазах 2–3 окно уязвимости открывается после удара корней.";
+                case GuardianKind.Forge: return "Не выходи из кольца — оно жжёт. Гейзеры обходи по телеграфу, капли не давай сливаться.";
+                case GuardianKind.AbyssChoir: return "Течение экономит рывки; импульс — сигнал: после него ядро открыто на 4 с.";
+                case GuardianKind.Grinder: return "Осколки блокируют удар — бей со стороны, где их нет. Луч читается по телеграфу 0.9 с.";
+                default: return "Таран каждые 2.4 с — колите на рикошетах и добивайте, когда истает и обнажится.";
+            }
         }
 
         public static CodexEntry ForSpecies(string id) {

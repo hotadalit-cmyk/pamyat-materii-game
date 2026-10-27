@@ -83,6 +83,7 @@ public sealed class RunSettingsUi : MonoBehaviour {
         mrt.offsetMin = new Vector2(-200, -200); mrt.offsetMax = new Vector2(200, 200);
         _modal.AddComponent<Image>().color = new Color(0, 0, 0, 0.82f);
         var box = Box(_modal.transform, new Vector2(1500, 1060), Modal);
+        UiFit.Apply(box); // v0.15: окно настроек на 2400×1080 не обрезается
         Text(box, "НАСТРОЙКИ", 46, TextAnchor.MiddleLeft, new Vector2(40, -20), new Vector2(600, 60)).color = GameBootstrap.COutline;
         var close = Btn(box, "Закрыть", new Vector2(-24, -18), new Vector2(190, 74), GameBootstrap.CSlime, new Vector2(1, 1));
         close.onClick.AddListener(Close);
@@ -117,6 +118,9 @@ public sealed class RunSettingsUi : MonoBehaviour {
     private void Rebuild() {
         for (int i = _rows.childCount - 1; i >= 0; i--) Destroy(_rows.GetChild(i).gameObject);
         float y = 0;
+        // v0.15: «Страж N» — первой полосой внутри списка (раньше прижимались к рамке окна);
+        // заголовок «НАСТРОЙКИ» и кнопка «Закрыть» остаются выше, налезаний нет
+        if (DevTools.Enabled) BuildDevRow(ref y);
         Row(ref y, "Громкость", new[] { "0", "25", "50", "75", "100" }, Mathf.RoundToInt(GameSettings.Volume * 4f),
             i => GameSettings.Volume = i / 4f);
         Row(ref y, "Музыка", new[] { "0", "25", "50", "75", "100" }, Mathf.RoundToInt(GameSettings.MusicVolume * 4f),
@@ -150,20 +154,21 @@ public sealed class RunSettingsUi : MonoBehaviour {
             else { _game.ResetSoul(); _resetLabel.text = "Душа очищена"; _resetStage = 0; }
         });
         y -= 100f;
-        if (DevTools.Enabled) BuildDevRow(ref y); // v0.13: секция «Для тестов» — только при DevTools.Enabled
+        // v0.15: BuildDevRow вызывается из начала Rebuild (первой полосой) — служебные кнопки ниже
     }
 
-    /// <summary>v0.14: кнопки «Страж 1…5» в строке заголовка настроек — новая жизнь сразу у стража глубины.</summary>
+    /// <summary>v0.15: кнопки «Страж 1…5» первой полосой списка настроек — новая жизнь сразу у стража глубины.</summary>
     private void BuildDevRow(ref float y) {
         var devCol = new Color(0.85f, 0.55f, 0.3f, 0.95f);
         for (int i = 0; i < PM.Domain.Run.RunState.MaxDepth; i++) {
             int depth = i + 1;
-            var b = Btn(_rows, "Страж " + depth, new Vector2(330f + i * 140f, 112f), new Vector2(130, 60), devCol, new Vector2(0, 1));
+            var b = Btn(_rows, "Страж " + depth, new Vector2(330f + i * 140f, y - 6f), new Vector2(130, 60), devCol, new Vector2(0, 1));
             b.onClick.AddListener(() => {
                 _game.StartDevGuardianRun(depth);
                 Close();
             });
         }
+        y -= 74f;
     }
 
     private static int IndexOf(float v, params float[] opts) {
@@ -180,7 +185,7 @@ public sealed class RunSettingsUi : MonoBehaviour {
             var b = Btn(_rows, options[i], new Vector2(x + i * w, y - 6), new Vector2(w - 12, 68), i == selected ? On : Off, new Vector2(0, 1));
             b.onClick.AddListener(() => { onPick(idx); ProceduralSfx.Instance?.Play("click"); Rebuild(); });
         }
-        y -= 80f;
+        y -= 74f; // v0.15: шаг строк ужат (80→74) — с полосой «Страж N» всё влезает в окно 1060
     }
 
     // ---------- строители ----------
