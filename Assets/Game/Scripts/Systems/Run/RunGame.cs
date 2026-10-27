@@ -280,7 +280,7 @@ public sealed partial class RunGame : MonoBehaviour {
         if (Run.OpenWorld && Run.World != null) { BuildWorld(); return; }
         if (_roomRoot != null) Destroy(_roomRoot.gameObject);
         _creatures.Clear();
-        _obstacles.Clear();
+        _obstacles.Clear(); _squashBase.Clear();
         _boss = null;
         _altarRing = null;
         _roomRoot = new GameObject("room").transform;
@@ -330,7 +330,7 @@ public sealed partial class RunGame : MonoBehaviour {
     private void BuildWorld() {
         if (_roomRoot != null) Destroy(_roomRoot.gameObject);
         _creatures.Clear();
-        _obstacles.Clear();
+        _obstacles.Clear(); _squashBase.Clear();
         _pending.Clear();
         _pendingIndex.Clear();
         _altarRings.Clear();
@@ -904,9 +904,12 @@ public sealed partial class RunGame : MonoBehaviour {
         }
     }
 
+    // исходный размер шляпки гриба: повторный удар во время анимации не должен считать раздутый размер исходным
+    private readonly Dictionary<Transform, Vector3> _squashBase = new Dictionary<Transform, Vector3>();
+
     private System.Collections.IEnumerator Squash(Transform t) {
         if (t == null) yield break;
-        var baseS = t.localScale;
+        if (!_squashBase.TryGetValue(t, out var baseS)) { baseS = t.localScale; _squashBase[t] = baseS; }
         for (float k = 0; k < 1f; k += Time.deltaTime * 6f) {
             if (t == null) yield break;
             float s = 1f + 0.18f * Mathf.Sin(k * Mathf.PI);
