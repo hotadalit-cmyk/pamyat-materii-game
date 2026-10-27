@@ -182,6 +182,24 @@ public static class RunGuardianTests {
         }
     }
 
+    // v0.14: зоны строились вокруг (0,0) карты — должны строиться вокруг стража
+    public static void SporeZones_AroundGuardianNotMapOrigin() {
+        var self = new Vec2(60.0, -35.0);
+        var def = GuardianCatalog.ForDepth(1);
+        True(self.Length > def.ArenaRadius, "фикстура: страж далеко от (0,0) карты");
+        var g = new GuardianState(def, 20.0, 101UL);
+        var o = g.Think(new GuardianInput { SelfPos = self, PlayerPos = self + new Vec2(3, 0), PlayerMass = 10.0, Dt = 0.0 });
+        Eq(4, o.Zones.Length, "четыре зоны спор");
+        double reach = def.ArenaRadius * 0.85 + o.Zones[0].Radius;
+        for (int i = 0; i < o.Zones.Length; i++) {
+            double fromGuardian = (o.Zones[i].Pos - self).Length;
+            True(fromGuardian <= def.ArenaRadius + 1e-9,
+                "зона " + i + " в пределах арены стража (60,−35): " + fromGuardian.ToString("0.##"));
+            True(fromGuardian <= reach, "зона " + i + " внутри досягаемости перемешивания");
+            True(fromGuardian > 0.5, "зона " + i + " не прилипла к центру стража");
+        }
+    }
+
     // ---------- окно уязвимости ----------
 
     public static void SporeMother_WeakPointWindow2of8() {

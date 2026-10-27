@@ -156,6 +156,7 @@ public sealed partial class RunGame : MonoBehaviour {
         Meta.TakeLegacy();
         _legacyNode = null;
         StartRun(RunState.CreateDevGuardianRun(Meta, NewSeed(), depth), null, null);
+        _ui.HideTitle(); // v0.14: DevTools-старт может быть из главного меню — титул закрываем принудительно
     }
 
     private ulong NewSeed() => (ulong)System.DateTime.UtcNow.Ticks;
@@ -280,6 +281,7 @@ public sealed partial class RunGame : MonoBehaviour {
         if (_roomRoot != null) Destroy(_roomRoot.gameObject);
         _creatures.Clear();
         _obstacles.Clear();
+        _squashBase.Clear(); // v0.14: старые отбойники уничтожены — кэш масштабов не нужен
         _boss = null;
         _altarRing = null;
         _roomRoot = new GameObject("room").transform;
@@ -330,6 +332,7 @@ public sealed partial class RunGame : MonoBehaviour {
         if (_roomRoot != null) Destroy(_roomRoot.gameObject);
         _creatures.Clear();
         _obstacles.Clear();
+        _squashBase.Clear(); // v0.14: старые отбойники уничтожены — кэш масштабов не нужен
         _pending.Clear();
         _pendingIndex.Clear();
         _altarRings.Clear();
@@ -903,11 +906,18 @@ public sealed partial class RunGame : MonoBehaviour {
         }
     }
 
+    // v0.14: исходный масштаб отбойников — иначе частые удары стартуют корутину от уже сжатого
+    // масштаба и гриб растёт бесконечно. Кэш живёт до пересборки комнаты/мира.
+    private readonly Dictionary<Transform, Vector3> _squashBase = new Dictionary<Transform, Vector3>();
+
     private System.Collections.IEnumerator Squash(Transform t) {
         if (t == null) yield break;
-        var baseS = t.localScale;
+        if (!_squashBase.TryGetValue(t, out var baseS)) {
+            baseS = t.localScale;
+            _squashBase[t] = baseS;
+        }
         for (float k = 0; k < 1f; k += Time.deltaTime * 6f) {
-            if (t == null) yield break;
+            if (t == null) { _squashBase.Remove(t); yield break; }
             float s = 1f + 0.18f * Mathf.Sin(k * Mathf.PI);
             t.localScale = new Vector3(baseS.x * s, baseS.y * s, 1f);
             yield return null;

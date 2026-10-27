@@ -430,7 +430,7 @@ public sealed class RunUi : MonoBehaviour {
                 _goal.text = run.ExitOpen
                     ? (run.OpenWorld ? "Шахта вниз открыта — следуйте за огоньком" : "Выход открыт — ищите светящуюся трещину")
                     : run.OpenWorld && run.GuardianAwake && run.Guardian != null
-                        ? run.Guardian.Def.Name + " стережёт шахту — победите стража"
+                        ? run.Guardian.Def.Name + " стережёт шахту"
                         : string.Format(run.OpenWorld ? "Страж пробудится: {0:0.0} / {1:0.0}" : "Поглощено {0:0.0} / {1:0.0}", run.RoomAbsorbed, goal);
                 _goal.color = run.ExitOpen ? GameBootstrap.CFood : TextColor;
             }
@@ -694,6 +694,12 @@ public sealed class RunUi : MonoBehaviour {
             : "Первая жизнь. Душа ещё ничего не помнит.";
         _titleModal.SetActive(true);
         PM.Systems.Input.PullGestureInput.Blocked = true;
+    }
+
+    /// <summary>v0.14: принудительно закрыть титул (DevTools-старт у стража может быть из главного меню).</summary>
+    public void HideTitle() {
+        if (_titleModal != null && _titleModal.activeSelf) _titleModal.SetActive(false);
+        PM.Systems.Input.PullGestureInput.Blocked = false;
     }
 
     private void BuildInfo() {
