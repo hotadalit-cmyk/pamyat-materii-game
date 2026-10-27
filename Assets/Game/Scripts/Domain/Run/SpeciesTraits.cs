@@ -23,6 +23,7 @@ public static class SpeciesTraitsCatalog {
             case "warden": t.ArmorSpeed = 6.0; break;
             case "bubble_jelly": t.SplitsOnHit = true; break;
             case "leech": t.LeechPerSec = 0.25; break;
+            case "deep_shark": t.ArmorSpeed = 2.5; break; // v0.15: элитная акула гасит медленные удары
         }
         if (speciesId == "glowworm" || speciesId == "wisp"
             || speciesId == "crystal_mite" || speciesId == "ember_beetle") t.Glows = true;

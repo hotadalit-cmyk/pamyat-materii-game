@@ -380,14 +380,30 @@ public static class WorldGenerator {
             if (reg >= 0 && (m.Regions[reg].Kind == RegionKind.Start || m.Regions[reg].Kind == RegionKind.Maze)) continue;
             if (!Clear(m, p, SizeRule.RadiusForMass(mass) + 0.2)) continue;
             m.Spawns.Add(new SpawnSpec { SpeciesId = sp.Id, Pos = p, Mass = mass });
+            // v0.15: пираньи ходят стайкой — двое товарок рядом (не в лабиринт/старт и не в течение)
+            if (sp.Id == "piranha") {
+                for (int pk = 0; pk < 2; pk++) {
+                    double pa = rng.Range(0, System.Math.PI * 2), pd = rng.Range(1.2, 2.6);
+                    var pp = p + new Vec2(System.Math.Cos(pa) * pd, System.Math.Sin(pa) * pd);
+                    double pm = mass * rng.Range(0.9, 1.1);
+                    if (m.CellOf(pp, out int px, out int py)) {
+                        int preg = m.RegionOf[py * w + px];
+                        if (preg >= 0 && (m.Regions[preg].Kind == RegionKind.Maze || m.Regions[preg].Kind == RegionKind.Start)) continue;
+                    }
+                    if (SpawnInHazard(m, pp)) continue;
+                    if (!Clear(m, pp, SizeRule.RadiusForMass(pm) + 0.2)) continue;
+                    m.Spawns.Add(new SpawnSpec { SpeciesId = "piranha", Pos = pp, Mass = pm });
+                }
+            }
             k++;
         }
-        // элитным гнёздам — гарантированные обитатели
+        // элитным гнёздам — гарантированные обитатели (v0.15: включая виды «только для элиты» — глубинная акула)
         for (int r = 0; r < m.Regions.Count; r++) {
             if (m.Regions[r].Kind != RegionKind.Elite) continue;
+            var poolE = SpeciesPoolFor(depth, biome, true);
             for (int k = 0; k < 3; k++) {
-                var sp = pool[System.Math.Max(0, pool.Count - 1 - rng.NextInt(2))];
-                if (sp.Id == "soul_slime") sp = pool[0];
+                var sp = poolE[System.Math.Max(0, poolE.Count - 1 - rng.NextInt(2))];
+                if (sp.Id == "soul_slime") sp = poolE[0];
                 var p = NearestFloor(m, m.Regions[r].Center + new Vec2(rng.Range(-3, 3), rng.Range(-3, 3)));
                 double mass = sp.MassAtDepth(depth) * RunState.EliteMassMult;
                 if (Clear(m, p, SizeRule.RadiusForMass(mass) + 0.1)) m.Spawns.Add(new SpawnSpec { SpeciesId = sp.Id, Pos = p, Mass = mass });
@@ -774,12 +790,13 @@ public static class WorldGenerator {
     }
 
     // ===================== Наполнение =====================
-    private static List<SpeciesDef> SpeciesPoolFor(int depth, BiomeDef biome) {
+    private static List<SpeciesDef> SpeciesPoolFor(int depth, BiomeDef biome, bool includeEliteOnly = false) {
         var list = new List<SpeciesDef>();
         var all = SpeciesCatalog.All();
         for (int i = 0; i < all.Length; i++) {
             var s = all[i];
             if (s.Behavior == CreatureBehavior.Food || s.Id == BossState.SpeciesId) continue;
+            if (s.EliteOnly && !includeEliteOnly) continue; // v0.15: акулы и прочие — только в элитных гнёздах
             bool inBiome = false;
             if (biome.SpeciesPool != null) for (int k = 0; k < biome.SpeciesPool.Length; k++) if (biome.SpeciesPool[k] == s.Id) inBiome = true;
             if (inBiome || (s.MinDepth <= depth && depth <= s.MaxDepth)) list.Add(s);

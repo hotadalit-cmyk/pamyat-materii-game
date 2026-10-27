@@ -64,9 +64,11 @@ public static class RunBiomeTests {
                     "вид " + sp.Id + " в пуле биома глубины " + biome.Depth + " уважает свои глубины");
             }
             // обратное: каждый не-_food вид, подходящий по глубине, есть в пуле
+            // (v0.15: EliteOnly-виды — исключение, они живут только в элитных гнёздах)
             var catalog = SpeciesCatalog.All();
             for (int i = 0; i < catalog.Length; i++) {
                 if (catalog[i].Behavior == CreatureBehavior.Food) continue;
+                if (catalog[i].EliteOnly) continue;
                 if (catalog[i].MinDepth <= biome.Depth && biome.Depth <= catalog[i].MaxDepth)
                     True(Contains(biome.SpeciesPool, catalog[i].Id),
                         "вид " + catalog[i].Id + " подходит биому " + biome.Name + " и должен быть в пуле");

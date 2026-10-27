@@ -21,6 +21,7 @@ public sealed class SpeciesDef {
     public double Attack;          // v0.14: базовый урон, доля массы героя за удар (0 — пища)
     public double Toughness;       // v0.14: жёсткость (1.0 по умолчанию)
     public double GrowthRate;      // v0.14: рост массы по глубине: BaseMass × (1 + rate×(d−1))
+    public bool EliteOnly;         // v0.15: не в общем пуле — только элитные гнёзда
 
     /// <summary>Масса вида на глубине depth.</summary>
     public double MassAtDepth(int depth) {
@@ -48,6 +49,11 @@ public static class SpeciesCatalog {
         new SpeciesDef { Id = "shard_crab",    Name = "Осколочный краб",BaseMass = 5.0,  Behavior = CreatureBehavior.Drift,   GeneMutationId = "m_ricochet", MinDepth = 4, MaxDepth = 4, ColorIndex = 4, Attack = 0.13, Toughness = 1.8, GrowthRate = 0.50 },
         new SpeciesDef { Id = "wisp",          Name = "Огонёк",         BaseMass = 2.0,  Behavior = CreatureBehavior.Flee,    GeneMutationId = "m_echo",     MinDepth = 5, MaxDepth = 5, ColorIndex = 1, Attack = 0.06, Toughness = 0.8, GrowthRate = 0.30 },
         new SpeciesDef { Id = "warden",        Name = "Страж глубины",  BaseMass = 30.0, Behavior = CreatureBehavior.Charger, GeneMutationId = null,         MinDepth = 5, MaxDepth = 5, ColorIndex = 2, Attack = 0.11, Toughness = 1.2, GrowthRate = 0.0 },
+        // v0.15: новые виды биомов (модели ThirdPartyArt; баланс — Docs/BALANCE_v14.md §2.3)
+        new SpeciesDef { Id = "cave_rat",      Name = "Пещерная крыса",  BaseMass = 1.6, Behavior = CreatureBehavior.Flee,    GeneMutationId = null,         MinDepth = 1, MaxDepth = 1, ColorIndex = 1, Attack = 0.05, Toughness = 0.9, GrowthRate = 0.15 },
+        new SpeciesDef { Id = "piranha",       Name = "Пиранья",         BaseMass = 1.1, Behavior = CreatureBehavior.Chase,   GeneMutationId = null,         MinDepth = 3, MaxDepth = 3, ColorIndex = 2, Attack = 0.13, Toughness = 0.9, GrowthRate = 0.35 },
+        new SpeciesDef { Id = "bomb_toad",     Name = "Жаба-бомба",      BaseMass = 3.2, Behavior = CreatureBehavior.Charger, GeneMutationId = null,         MinDepth = 3, MaxDepth = 3, ColorIndex = 2, Attack = 0.18, Toughness = 1.2, GrowthRate = 0.40 },
+        new SpeciesDef { Id = "deep_shark",    Name = "Глубинная акула", BaseMass = 7.0, Behavior = CreatureBehavior.Chase,   GeneMutationId = null,         MinDepth = 3, MaxDepth = 3, ColorIndex = 2, Attack = 0.16, Toughness = 1.5, GrowthRate = 0.40, EliteOnly = true },
     };
 
     /// <summary>Все виды. Возвращаемое значение считать read-only.</summary>

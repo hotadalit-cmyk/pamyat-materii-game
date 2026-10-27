@@ -73,6 +73,7 @@ namespace PM.Domain.Run {
             var homes = new List<string>();
             foreach (var b in BiomeCatalog.All())
                 if (b.SpeciesPool != null && System.Array.IndexOf(b.SpeciesPool, id) >= 0) homes.Add(b.Name);
+            if (homes.Count == 0 && s != null && s.EliteOnly) facts.Add("Где живёт: только элитные гнёзда"); // v0.15
             if (homes.Count > 0) facts.Add("Где живёт: " + string.Join(", ", homes));
             facts.Add("Нрав: " + BehaviorText(s != null ? s.Behavior : CreatureBehavior.Drift));
             var y = YieldTable.For(id, 1.0);
