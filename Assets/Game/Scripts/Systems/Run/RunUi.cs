@@ -365,7 +365,7 @@ public sealed class RunUi : MonoBehaviour {
     /// <summary>v0.15: баннер с портретом (AiArt/<portrait>); нет ассета — текст как раньше.</summary>
     public void Banner(string text, float seconds, string portrait) {
         _banner.text = text; _bannerTimer = seconds;
-        var tex = string.IsNullOrEmpty(portrait) ? null : Resources.Load<Texture2D>("AiArt/" + portrait);
+        var tex = PM.Systems.UI.UiFit.LoadArt(portrait);   // портреты стражей — в AiArt/Guardians
         _bannerArt.texture = tex;
         _bannerArt.gameObject.SetActive(tex != null);
         if (tex != null) _banner.transform.SetAsLastSibling();

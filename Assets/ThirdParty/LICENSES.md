@@ -36,3 +36,4 @@
 `Assets/Game/Resources/AiArt/{Floors,Props,Guardians,Icons}` — сгенерированы Z.ai (image generation) 2026-10-27,
 фон пропсов вырезан rembg; промпты и sha256 — `Docs/art_v14/MANIFEST.csv`. Лицензии моделей — `Docs/art_v14/MODEL_LICENSES.txt`
 (модели lava golem, Ocean Trio и Human Heart в сборку не вошли — некорректно импортировались).
+`Assets/Game/Resources/AiArt/portrait_{cave_rat,piranha,bomb_toad,deep_shark}.jpg` — портреты новых видов для энциклопедии, Z.ai (image generation) 2026-10-27.

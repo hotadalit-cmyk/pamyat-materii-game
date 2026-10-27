@@ -31,7 +31,8 @@ public sealed class RunCodexUi : MonoBehaviour {
     private CodexKind _tab = CodexKind.Species;
     private bool _worldTab;
     private string _selected;
-    private Transform _grid;
+    private RectTransform _grid;          // v0.16: содержимое прокрутки (стражи и новые виды не влезали)
+    private bool _revealSel;
     private RawImage _detArt;
     private Image _detIcon;
     private Text _detName, _detEpithet, _detBody, _counter;
@@ -65,6 +66,7 @@ public sealed class RunCodexUi : MonoBehaviour {
         _cardEpithet = Label(box, "", 28, TextAnchor.MiddleLeft, new Vector2(640, -160), new Vector2(820, 40), new Vector2(0, 1));
         _cardEpithet.color = Dim;
         _cardBody = Label(box, "", 26, TextAnchor.UpperLeft, new Vector2(640, -215), new Vector2(820, 420), new Vector2(0, 1));
+        FitText(_cardBody, 18);
         var cont = Btn(box, "Продолжить", new Vector2(-40, 40), new Vector2(380, 100), GameBootstrap.CFood, new Vector2(1, 0), 34);
         cont.onClick.AddListener(NextCard);
         var open = Btn(box, "Энциклопедия", new Vector2(-440, 40), new Vector2(360, 100), GameBootstrap.CSoul, new Vector2(1, 0), 30);
@@ -107,7 +109,7 @@ public sealed class RunCodexUi : MonoBehaviour {
 
     // ================= Книга =================
     private void BuildBook() {
-        _book = FullScreen("codex_book", new Color(0f, 0f, 0f, 0.85f));
+        _book = FullScreen("codex_book", new Color(0f, 0f, 0f, 0.93f));   // кнопки титула не просвечивают
         var box = Box(_book.transform, "book", Vector2.zero, new Vector2(1860, 1020), Modal, new Vector2(0.5f, 0.5f));
         UiFit.Apply(box); // v0.15: не выше видимой высоты канвы
         Label(box, "ЭНЦИКЛОПЕДИЯ", 44, TextAnchor.MiddleLeft, new Vector2(40, -22), new Vector2(460, 60), new Vector2(0, 1)).color = GameBootstrap.COutline;
@@ -115,20 +117,14 @@ public sealed class RunCodexUi : MonoBehaviour {
         for (int i = 0; i < 4; i++) {
             int idx = i;
             var b = Btn(box, tabs[i], new Vector2(500 + i * 232, -18), new Vector2(220, 74), GameBootstrap.CSlime, new Vector2(0, 1), 28);
-            b.onClick.AddListener(() => { _worldTab = idx == 3; if (idx < 3) _tab = (CodexKind)idx; _selected = null; Refresh(); });
+            b.onClick.AddListener(() => { _worldTab = idx == 3; if (idx < 3) _tab = (CodexKind)idx; _selected = null; UiFit.ScrollTop(_grid); Refresh(); });
             _tabImgs[i] = b.GetComponent<Image>();
         }
         var close = Btn(box, "Закрыть", new Vector2(-22, -18), new Vector2(170, 74), GameBootstrap.CSlime, new Vector2(1, 1), 28);
         close.onClick.AddListener(Close);
         _counter = Label(box, "", 24, TextAnchor.MiddleLeft, new Vector2(40, -96), new Vector2(700, 36), new Vector2(0, 1));
         _counter.color = Dim;
-        var grid = new GameObject("grid");
-        grid.transform.SetParent(box, false);
-        var grt = grid.AddComponent<RectTransform>();
-        grt.anchorMin = grt.anchorMax = grt.pivot = new Vector2(0, 1);
-        grt.anchoredPosition = new Vector2(40, -140);
-        grt.sizeDelta = new Vector2(900, 850);
-        _grid = grid.transform;
+        _grid = UiFit.Scroll(box, new Vector2(40, -140), new Vector2(900, 850));
         var det = Box(box, "detail", new Vector2(-30, -120), new Vector2(860, 870), Panel, new Vector2(1, 1));
         _detArt = Raw(det, new Vector2(380, 380));
         var art = _detArt.rectTransform;
@@ -146,12 +142,13 @@ public sealed class RunCodexUi : MonoBehaviour {
         _detEpithet = Label(det, "", 26, TextAnchor.UpperLeft, new Vector2(430, -160), new Vector2(410, 220), new Vector2(0, 1));
         _detEpithet.color = Dim;
         _detBody = Label(det, "", 25, TextAnchor.UpperLeft, new Vector2(24, -425), new Vector2(810, 430), new Vector2(0, 1));
+        FitText(_detBody, 18);               // длинные записи (стражи) — мельче, а не обрезаны
         _book.SetActive(false);
     }
 
     /// <summary>Открыть книгу (на записи e, если задана).</summary>
     public void Open(CodexEntry e = null) {
-        if (e != null) { _tab = e.Kind; _worldTab = false; _selected = e.Key; }
+        if (e != null) { _tab = e.Kind; _worldTab = false; _selected = e.Key; _revealSel = true; }
         _book.SetActive(true);
         transform.SetAsLastSibling();
         PauseIfRunning();
@@ -171,6 +168,7 @@ public sealed class RunCodexUi : MonoBehaviour {
         var meta = _game.Meta;
         if (_worldTab) {
             _counter.text = "Что известно о пещере";
+            UiFit.SetContentHeight(_grid, 0f);
             ShowText("Память Материи", "Мир", Codex.World + "\n\n<b>Капля</b>\n" + Codex.Hero, "title");
             return;
         }
@@ -204,6 +202,13 @@ public sealed class RunCodexUi : MonoBehaviour {
             }
             var name = Label(_grid, unlocked ? e.Name : "???", 22, TextAnchor.UpperCenter, pos + new Vector2(0, -size - 2), new Vector2(size, 32), new Vector2(0, 1));
             name.color = unlocked ? TextC : Dim;
+            FitText(name, 14);                 // «Пещерная крыса», «Глубинная акула» — в одну плитку
+        }
+        float pitch = size + gap + 34f;
+        UiFit.SetContentHeight(_grid, (list.Count + cols - 1) / cols * pitch);
+        if (_revealSel) {
+            _revealSel = false;
+            for (int i = 0; i < list.Count; i++) if (list[i].Key == _selected) UiFit.Reveal(_grid, i / cols * pitch, pitch);
         }
         CodexEntry sel = null;
         foreach (var e in list) if (e.Key == _selected) sel = e;
@@ -260,7 +265,7 @@ public sealed class RunCodexUi : MonoBehaviour {
 
     // ================= Строители =================
     private static void SetArt(RawImage r, string key, Texture fallback) {
-        var tex = string.IsNullOrEmpty(key) ? null : Resources.Load<Texture2D>("AiArt/" + key);
+        var tex = UiFit.LoadArt(key);
         r.texture = tex != null ? tex : fallback;
         r.enabled = r.texture != null;
         if (tex != null) {
@@ -314,6 +319,13 @@ public sealed class RunCodexUi : MonoBehaviour {
         t.rectTransform.sizeDelta = size - new Vector2(16, 8);
         t.raycastTarget = false;
         return b;
+    }
+
+    /// <summary>Текст ужимается до minSize, чтобы влезть в рамку целиком.</summary>
+    private static void FitText(Text t, int minSize) {
+        t.resizeTextForBestFit = true;
+        t.resizeTextMinSize = minSize;
+        t.resizeTextMaxSize = t.fontSize;
     }
 
     private static Text Label(Transform parent, string s, int size, TextAnchor a, Vector2 pos, Vector2 box, Vector2 anchor) {

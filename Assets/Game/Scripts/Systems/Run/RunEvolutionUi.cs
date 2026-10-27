@@ -35,7 +35,7 @@ public sealed class RunEvolutionUi : MonoBehaviour {
     private string _selected;
     // показатели
     private GameObject _statsModal;
-    private Transform _statsList;
+    private RectTransform _statsList;
     private int _statsTab;                 // 0 — прокачка, 1 — итоги с разбором источников
     private Text _statsHint, _statsStore;
     private Image _tabTrain, _tabSum;
@@ -256,6 +256,11 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         for (int i = 0; i < nodes.Length; i++) minTier = Mathf.Min(minTier, nodes[i].Tier);
         for (int i = 0; i < nodes.Length; i++)
             pos[nodes[i].Id] = new Vector2(nodes[i].Column * cw + 140f, -(nodes[i].Tier - minTier) * ch - 90f);
+        // v0.16: ветка «Клоны» с Марионеткой и Кукловодом — 4 колонки, поле 900: ужимаем поле целиком, а не налезаем на детали
+        int maxCol = 0, maxRow = 0;
+        for (int i = 0; i < nodes.Length; i++) { maxCol = Mathf.Max(maxCol, nodes[i].Column); maxRow = Mathf.Max(maxRow, nodes[i].Tier - minTier); }
+        float k = Mathf.Min(1f, 900f / (maxCol * cw + 280f), 880f / (maxRow * ch + 180f));
+        _nodeLayer.localScale = new Vector3(k, k, 1f);
         // связи — тонкие линии (под карточками)
         for (int i = 0; i < nodes.Length; i++) {
             var n = nodes[i];
@@ -287,7 +292,16 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         }
         Color bg = owned ? new Color(bc.r * 0.6f, bc.g * 0.6f, bc.b * 0.6f, 0.95f)
                  : avail != 0 ? new Color(bc.r * 0.42f, bc.g * 0.42f, bc.b * 0.42f, 0.98f)
-                 : new Color(0.07f, 0.08f, 0.1f, 0.92f);                  // недоступные — приглушены
+                 : new Color(0.07f, 0.08f, 0.1f, 1f);                     // недоступные — приглушены (непрозрачно: связи не просвечивают)
+        // сплошная подложка: стеклянная карточка полупрозрачна, и линии связей просвечивали сквозь название
+        var back = new GameObject("back_" + n.Id);
+        back.transform.SetParent(_nodeLayer, false);
+        var bimg = back.AddComponent<Image>();
+        bimg.color = new Color(0.03f, 0.05f, 0.08f, 1f);
+        bimg.raycastTarget = false;
+        var brt = bimg.rectTransform;
+        brt.anchorMin = brt.anchorMax = new Vector2(0, 1); brt.pivot = new Vector2(0.5f, 0.5f);
+        brt.anchoredPosition = p; brt.sizeDelta = new Vector2(258, 158);
         var card = MakeButton(_nodeLayer, "node_" + n.Id, p, new Vector2(270, 170), bg, 1f, "", 24, new Vector2(0, 1), center: true);
         var outline = card.AddComponent<Outline>();
         outline.effectColor = n.Id == _selected ? new Color(1f, 1f, 1f, 0.95f) : avail != 0 ? hl : new Color(0, 0, 0, 0);
@@ -298,8 +312,8 @@ public sealed class RunEvolutionUi : MonoBehaviour {
             ig.transform.SetParent(card.transform, false);
             var irt = ig.AddComponent<RectTransform>();
             irt.anchorMin = irt.anchorMax = irt.pivot = new Vector2(0.5f, 0.5f);
-            irt.anchoredPosition = new Vector2(0, 2);
-            irt.sizeDelta = new Vector2(54, 54);
+            irt.anchoredPosition = new Vector2(0, -22);   // под названием в две строки, над ценой
+            irt.sizeDelta = new Vector2(44, 44);
             var iimg = ig.AddComponent<Image>();
             iimg.sprite = nodeIcon;
             iimg.raycastTarget = false;
@@ -310,7 +324,8 @@ public sealed class RunEvolutionUi : MonoBehaviour {
             tag.color = hl;
         }
         string title = gene ? "??? (" + GeneName(n.RequiredGene) + ")" : n.Name;
-        var tt = Label(card.transform, title, 25, TextAnchor.UpperCenter, new Vector2(0, -22), new Vector2(250, 66), new Vector2(0.5f, 1));
+        var tt = Label(card.transform, title, 24, TextAnchor.UpperCenter, new Vector2(0, -24), new Vector2(250, 58), new Vector2(0.5f, 1));
+        tt.resizeTextForBestFit = true; tt.resizeTextMinSize = 16; tt.resizeTextMaxSize = 24;
         if (!owned && avail == 0) tt.color = new Color(0.62f, 0.66f, 0.72f);
         string sub = owned ? "развито" : CostShort(n.Cost);
         var st = Label(card.transform, sub, 21, TextAnchor.LowerCenter, new Vector2(0, 10), new Vector2(256, 84), new Vector2(0.5f, 0));
@@ -535,23 +550,17 @@ public sealed class RunEvolutionUi : MonoBehaviour {
         UiFit.Apply(box); // v0.15
         Label(box, "ПОКАЗАТЕЛИ", 46, TextAnchor.MiddleLeft, new Vector2(40, -20), new Vector2(420, 60), new Vector2(0, 1)).color = GameBootstrap.COutline;
         var tTrain = MakeButton(box, "tab_train", new Vector2(470, -18), new Vector2(250, 70), GameBootstrap.CSlime, 0.9f, "Прокачка", 28, new Vector2(0, 1));
-        tTrain.GetComponent<Button>().onClick.AddListener(() => { _statsTab = 0; RefreshStats(); });
+        tTrain.GetComponent<Button>().onClick.AddListener(() => { _statsTab = 0; UiFit.ScrollTop(_statsList); RefreshStats(); });
         _tabTrain = tTrain.GetComponent<Image>();
         var tSum = MakeButton(box, "tab_sum", new Vector2(735, -18), new Vector2(250, 70), GameBootstrap.CSlime, 0.9f, "Итоги", 28, new Vector2(0, 1));
-        tSum.GetComponent<Button>().onClick.AddListener(() => { _statsTab = 1; RefreshStats(); });
+        tSum.GetComponent<Button>().onClick.AddListener(() => { _statsTab = 1; UiFit.ScrollTop(_statsList); RefreshStats(); });
         _tabSum = tSum.GetComponent<Image>();
         _statsHint = Label(box, "", 24, TextAnchor.MiddleLeft, new Vector2(40, -88), new Vector2(760, 40), new Vector2(0, 1));
         _statsHint.color = new Color(0.7f, 0.8f, 0.9f);
         _statsStore = Label(box, "", 24, TextAnchor.MiddleRight, new Vector2(-40, -88), new Vector2(560, 40), new Vector2(1, 1));
         var close = MakeButton(box, "close", new Vector2(-22, -18), new Vector2(170, 74), GameBootstrap.CSlime, 0.6f, "Закрыть", 28, new Vector2(1, 1));
         close.GetComponent<Button>().onClick.AddListener(() => { _statsModal.SetActive(false); _game.SetPaused(false); });
-        var list = new GameObject("list");
-        list.transform.SetParent(box, false);
-        var lrt = list.AddComponent<RectTransform>();
-        lrt.anchorMin = lrt.anchorMax = lrt.pivot = new Vector2(0, 1);
-        lrt.anchoredPosition = new Vector2(40, -130);
-        lrt.sizeDelta = new Vector2(1320, 850);
-        _statsList = list.transform;
+        _statsList = UiFit.Scroll(box, new Vector2(40, -130), new Vector2(1320, 840)); // v0.16: 10+ показателей не влезали
         _statsModal.SetActive(false);
     }
 
@@ -602,8 +611,8 @@ public sealed class RunEvolutionUi : MonoBehaviour {
             string key = l.Key;
             row.GetComponent<Button>().onClick.AddListener(() => { _expanded = _expanded == key ? null : key; RefreshStats(); });
             y -= h;
-            if (y < -840f) break;
         }
+        UiFit.SetContentHeight(_statsList, -y);
     }
 
     /// <summary>
@@ -673,6 +682,7 @@ public sealed class RunEvolutionUi : MonoBehaviour {
             }
             y -= 92f;
         }
+        UiFit.SetContentHeight(_statsList, -y);
     }
 
     /// <summary>Доли (0.08) показываем процентами, плоские величины — как есть.</summary>
