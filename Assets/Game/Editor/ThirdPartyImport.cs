@@ -30,6 +30,12 @@ public sealed class ThirdPartyModelImport : AssetPostprocessor {
         ti.mipmapEnabled = false;
         ti.maxTextureSize = 2048;
         ti.wrapMode = TextureWrapMode.Clamp;
+        // v0.15: пол биома повторяется плиткой; пропсы и иконки — небольшие спрайты с прозрачностью
+        string p = assetPath.Replace('\\', '/');
+        if (p.Contains("/AiArt/Floors/")) { ti.wrapMode = TextureWrapMode.Repeat; ti.maxTextureSize = 1024; ti.mipmapEnabled = true; }
+        else if (p.Contains("/AiArt/Props/")) { ti.maxTextureSize = 512; ti.alphaIsTransparency = true; }
+        else if (p.Contains("/AiArt/Icons/")) { ti.maxTextureSize = 256; ti.alphaIsTransparency = true; }
+        else if (p.Contains("/AiArt/Guardians/")) ti.maxTextureSize = 768;
     }
 
     void OnPreprocessAnimation() {
@@ -39,7 +45,7 @@ public sealed class ThirdPartyModelImport : AssetPostprocessor {
         for (int i = 0; i < clips.Length; i++) {
             string n = clips[i].name;
             // ходьба/полёт/покой — по кругу; удары и смерть — один раз
-            clips[i].loopTime = n.Contains("Walk") || n.Contains("Flying") || n.Contains("Idle") || n.Contains("Running") || n.Contains("Dance");
+            clips[i].loopTime = n.Contains("Walk") || n.Contains("Flying") || n.Contains("Idle") || n.Contains("Running") || n.Contains("Dance") || n.Contains("Swim");
         }
         mi.clipAnimations = clips;
     }

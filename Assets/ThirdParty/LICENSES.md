@@ -12,6 +12,14 @@
 | Resources/Music/dungeon.ogg | Loopable Dungeon Ambience | JaggedStone | CC0 1.0 | https://opengameart.org/content/loopable-dungeon-ambience |
 | Resources/Monsters/Q_*.fbx | LowPoly Animated Monsters | Quaternius | CC0 1.0 | https://opengameart.org/content/lowpoly-animated-monsters |
 | Resources/Monsters/(остальные) | Textured Cute Monster Pack | Quaternius | CC0 1.0 | https://opengameart.org/content/textured-cute-monster-pack |
+| Resources/Monsters/Bat.fbx | Textured Cute Monster Pack | Quaternius | CC0 1.0 | https://opengameart.org/content/textured-cute-monster-pack |
+| Resources/Monsters/Frog, Rat, Snake, Spider, Wasp .fbx | Animated Easy Enemies | Quaternius | CC0 1.0 | https://quaternius.itch.io/animated-easy-enemies |
+| Resources/Monsters/Slime.fbx | LowPoly Animated Monsters | Quaternius | CC0 1.0 | https://quaternius.itch.io/lowpoly-animated-monsters |
+| Resources/Monsters/Piranha.fbx | Animated Animals Low Poly | Quaternius | CC0 1.0 | https://opengameart.org/content/animated-animales-low-poly |
+| Resources/Monsters/Shark.fbx | Animated Fish | Quaternius | CC0 1.0 | https://opengameart.org/content/animated-fish |
+| Resources/Monsters/LavaGolem.fbx | lava golem (.blend → FBX) | gavlig | CC0 1.0 | https://opengameart.org/content/lava-golem |
+| Resources/Monsters/Octopus.fbx | Ocean Trio (осьминог) | Fleurman | CC0 1.0 | https://opengameart.org/content/ocean-trio |
+| Resources/Monsters/Heart.fbx | Human Heart (.blend → FBX) | Scribe | CC0 1.0 | https://opengameart.org/content/human-heart |
 | Resources/Fonts/RussoOne.ttf | Russo One | Jovanny Lemonad | SIL OFL 1.1 (Licenses/OFL_RussoOne.txt) | https://github.com/google/fonts/tree/main/ofl/russoone |
 | Resources/Fonts/Rubik.ttf | Rubik | Hubert & Fischer, Cyreal | SIL OFL 1.1 (Licenses/OFL_Rubik.txt) | https://github.com/google/fonts/tree/main/ofl/rubik |
 | Resources/Icons/lorc_*.png | game-icons.net | Lorc | CC BY 3.0 — **нужна атрибуция** | https://game-icons.net |
@@ -21,9 +29,13 @@
 
 Иконки: Lorc и Delapouite, https://game-icons.net (CC BY 3.0).
 Шрифты: Russo One (Jovanny Lemonad), Rubik (Hubert & Fischer) — SIL Open Font License 1.1.
-Модели монстров: Quaternius (CC0). Интерфейс и звуки: Kenney (CC0). Музыка: Paul Wortmann, JaggedStone (CC0).
+Модели монстров: Quaternius, gavlig, Fleurman, Scribe (CC0). Интерфейс и звуки: Kenney (CC0). Музыка: Paul Wortmann, JaggedStone (CC0).
 
 ## Иллюстрации, созданные ИИ
 
 `Assets/Game/Resources/AiArt/*` — сгенерированы нейросетью Z.ai (chat.z.ai, инструмент image-generation) по описаниям автора игры, 2026-10-26.
 По условиям Z.ai (Terms of Service, разд. IV.4) права на результаты принадлежат пользователю; при этом созданное ИИ нужно помечать (разд. III.5.d) — пометка есть в «Титрах».
+
+`Assets/Game/Resources/AiArt/{Floors,Props,Guardians,Icons}` — сгенерированы Z.ai (image generation) 2026-10-27,
+фон пропсов вырезан rembg; промпты и sha256 — `Docs/art_v14/MANIFEST.csv`. Лицензии моделей — `Docs/art_v14/MODEL_LICENSES.txt`
+(лицензии lava golem, Ocean Trio и Human Heart проверены на страницах OpenGameArt 2026-10-27: CC0).

@@ -1,0 +1,122 @@
+== creature_bat
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Quaternius
+Source: https://opengameart.org/content/textured-cute-monster-pack
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== creature_bee
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Quaternius
+Source: https://opengameart.org/content/textured-cute-monster-pack
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== creature_crab
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Quaternius
+Source: https://opengameart.org/content/textured-cute-monster-pack
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== creature_cthulhu
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Quaternius
+Source: https://opengameart.org/content/textured-cute-monster-pack
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== creature_frog
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Quaternius
+Source: https://quaternius.itch.io/animated-easy-enemies
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== creature_piranha
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Quaternius
+Source: https://opengameart.org/content/animated-animales-low-poly
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== creature_rat
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Quaternius
+Source: https://quaternius.itch.io/animated-easy-enemies
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== creature_shark
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Quaternius
+Source: https://opengameart.org/content/animated-fish
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== creature_slime
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Quaternius
+Source: https://quaternius.itch.io/lowpoly-animated-monsters
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== creature_snake
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Quaternius
+Source: https://quaternius.itch.io/animated-easy-enemies
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== creature_spider
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Quaternius
+Source: https://quaternius.itch.io/animated-easy-enemies
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== creature_wasp
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Quaternius
+Source: https://quaternius.itch.io/animated-easy-enemies
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== guardian_gornilo
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: gavlig
+Source: https://opengameart.org/content/lava-golem
+Note: конвертация .blend -> FBX/OBJ (Blender 4.5)
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== guardian_granilshchik
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Quaternius
+Source: https://opengameart.org/content/textured-cute-monster-pack
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== guardian_hor_bezdny
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Fleurman
+Source: https://opengameart.org/content/ocean-trio
+Note: разделение FBX, извлечён осьминог (Pieuvre)
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== guardian_pulsar
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Scribe
+Source: https://opengameart.org/content/human-heart
+Note: конвертация .blend -> FBX/OBJ (Blender 4.5)
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
+== guardian_sporonosa
+License: CC0 1.0 Universal (Public Domain Dedication)
+Author: Quaternius
+Source: https://opengameart.org/content/textured-cute-monster-pack
+Creative Commons CC0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required, but credited above.
+
