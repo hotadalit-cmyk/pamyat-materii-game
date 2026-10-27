@@ -917,6 +917,69 @@ public sealed class RunState {
         room.GoalMass *= EliteGoalMult;
     }
 
+    // ---------- v0.13: Наследие прошлой жизни ----------
+    private bool _legacyApplied;
+    /// <summary>Наследие уже применено в этой жизни (не чаще 1 раза).</summary>
+    public bool LegacyApplied => _legacyApplied;
+    /// <summary>Сколько стартовой массы дало наследие (0 — не применялось).</summary>
+    public double LegacyMassBonus { get; private set; }
+
+    /// <summary>
+    /// Снимок «наследия» на момент смерти: 30% ресурсов по каждому виду, открытые узлы
+    /// эволюции (в порядке каталога, без узла «Деление»), +15% пика массы (не больше +3).
+    /// </summary>
+    public LegacyPack MakeLegacy() {
+        var pack = new LegacyPack();
+        if (Resources != null) {
+            var res = Resources.ToArray();
+            for (int i = 0; i < res.Length && i < pack.Resources.Length; i++)
+                pack.Resources[i] = res[i] > 0.0 ? res[i] * LegacyPack.ResourceFrac : 0.0;
+        }
+        var nodes = new List<string>();
+        var all = EvolutionTree.All();
+        for (int i = 0; i < all.Length; i++) {
+            if (all[i].Id == LegacyPack.ExcludedNode) continue;
+            if (Evolution != null && Evolution.Unlocked.Contains(all[i].Id)) nodes.Add(all[i].Id);
+        }
+        pack.Nodes = nodes.ToArray();
+        pack.StartMassBonus = PeakMass > 0.0
+            ? System.Math.Min(PeakMass * LegacyPack.MassFrac, LegacyPack.MassCap) : 0.0;
+        return pack;
+    }
+
+    /// <summary>
+    /// Применить наследие к новой жизни: ресурсы снимка, выбранный узел (должен быть в
+    /// списке снимка и не «Деление»; если в снимке нет узлов — достаточно null), стартовая
+    /// масса. Один раз за жизнь; счётчик — в SoulMeta.
+    /// </summary>
+    public bool ApplyLegacy(LegacyPack pack, string chosenNode) {
+        if (pack == null || _legacyApplied || IsDead || IsVictory) return false;
+        if (Evolution == null || Resources == null || Fragments == null) return false;
+        bool hasNodes = pack.Nodes != null && pack.Nodes.Length > 0;
+        if (hasNodes) {
+            if (string.IsNullOrEmpty(chosenNode) || chosenNode == LegacyPack.ExcludedNode) return false;
+            bool listed = false;
+            for (int i = 0; i < pack.Nodes.Length; i++)
+                if (pack.Nodes[i] == chosenNode) { listed = true; break; }
+            if (!listed) return false;
+        } else if (!string.IsNullOrEmpty(chosenNode)) {
+            return false;   // выбирать не из чего — узел не переносится
+        }
+        if (pack.Resources != null)
+            for (int i = 0; i < pack.Resources.Length && i < ResourceInfo.Count; i++)
+                Resources.Add((ResourceKind)i, pack.Resources[i]);
+        if (!string.IsNullOrEmpty(chosenNode)) Evolution.GrantNode(chosenNode, Mutations);
+        LegacyMassBonus = pack.StartMassBonus > 0.0 ? pack.StartMassBonus : 0.0;
+        if (LegacyMassBonus > 0.0) {
+            Mass += LegacyMassBonus;
+            if (Mass > PeakMass) PeakMass = Mass;
+        }
+        RecomputeLimits();
+        _legacyApplied = true;
+        _meta.LegacyUses++;
+        return true;
+    }
+
     /// <summary>Итог жизни + эссенция; повторный вызов возвращает тот же объект.</summary>
     public LifeImprint Finish() {
         if (_finished != null) return _finished;

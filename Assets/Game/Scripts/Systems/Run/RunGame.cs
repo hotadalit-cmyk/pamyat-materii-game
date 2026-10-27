@@ -133,18 +133,34 @@ public sealed partial class RunGame : MonoBehaviour {
     }
 
     // ---------- Жизнь ----------
+    private string _legacyNode;   // v0.13: узел, выбранный для наследия (перед применением)
+
     public void StartNewRun() {
-        StartRun(new RunState(Meta, NewSeed(), true));
+        var pack = Meta.TakeLegacy();   // наследие сгорает, если жизнь начата без применения
+        string node = _legacyNode;
+        _legacyNode = null;
+        StartRun(new RunState(Meta, NewSeed(), true), pack, node);
     }
 
-    /// <summary>v0.13: тестовый бой (DevTools) — новая жизнь сразу у стража глубины.</summary>
+    /// <summary>v0.13: реклама просмотрена — сохранить наследие и сразу начать жизнь с ним.</summary>
+    public void AcceptLegacy(LegacyPack pack, string chosenNode) {
+        if (pack == null) return;
+        Meta.Legacy = pack;
+        _legacyNode = chosenNode;
+        SaveMeta();
+        StartNewRun();
+    }
+
+    /// <summary>v0.13: тестовый бой (DevTools) — новая жизнь сразу у стража глубины. Наследие сгорает.</summary>
     public void StartDevGuardianRun(int depth) {
-        StartRun(RunState.CreateDevGuardianRun(Meta, NewSeed(), depth));
+        Meta.TakeLegacy();
+        _legacyNode = null;
+        StartRun(RunState.CreateDevGuardianRun(Meta, NewSeed(), depth), null, null);
     }
 
     private ulong NewSeed() => (ulong)System.DateTime.UtcNow.Ticks;
 
-    private void StartRun(RunState run) {
+    private void StartRun(RunState run, LegacyPack legacy, string legacyNode) {
         _ui.HideImprint();
         Time.timeScale = 1f;
         PullGestureInput.Blocked = false;
@@ -160,6 +176,12 @@ public sealed partial class RunGame : MonoBehaviour {
         _manualT = 0f;
         _puppetMarked.Clear();
         if (_intentLabel != null) _intentLabel.text = "";
+        if (legacy != null && Run.ApplyLegacy(legacy,
+                !string.IsNullOrEmpty(legacyNode) ? legacyNode
+                    : (legacy.Nodes != null && legacy.Nodes.Length > 0 ? legacy.Nodes[0] : null))) {
+            _ui.Banner("Наследие прошлой жизни принято", 3f);
+            ProceduralSfx.Instance?.Play("evolve");
+        }
         EnsurePlayer();
         BuildRoom();
     }
