@@ -30,6 +30,7 @@ public sealed class WorldMap {
     public List<ObstacleSpec> Obstacles = new List<ObstacleSpec>();
     public List<WallRect> WallRects = new List<WallRect>();
     public List<Vec2> CrackMouths = new List<Vec2>();   // входы в узкие трещины (подсказка: «разделитесь»)
+    public List<HazardSpec> Hazards = new List<HazardSpec>(); // v0.15: лавовые реки (Г2), течения (Г3), жилы (Г5)
     public DecorPlan Decor;                             // v0.15: план декора биома (визуал)
     public double GoalMass;
 
@@ -128,8 +129,8 @@ public static class WorldGenerator {
             CarveTunnel(m, a.Cx, a.Cy, b.Cx, b.Cy, 1 + rng.NextInt(2), rng, true);
         }
 
-        // ---------- 3. Лабиринты ----------
-        int mazes = depth == 1 ? 2 : depth <= 3 ? 3 : 4;
+        // ---------- 3. Лабиринты (Г4 — узкие лабиринты: их вдвое больше) ----------
+        int mazes = depth == 1 ? 2 : depth <= 3 ? 3 : depth == 4 ? 6 : 4;
         var mazeRelics = new List<AltarSpec>();
         for (int k = 0, tries = 0; k < mazes && tries < 600; tries++) {
             int mw = 7, mh = 5;                                    // ячеек → 22×16 клеток
@@ -206,14 +207,26 @@ public static class WorldGenerator {
         FillRegionBounds(m);
 
         // ---------- 6. Назначение регионов ----------
-        Chamber exit = start; int far = -1;
-        for (int i = 0; i < chambers.Count; i++) {
-            var c = chambers[i];
-            int d = dist[c.Cy * w + c.Cx];
-            if (c != start && d > far) { far = d; exit = c; }
-        }
-        m.Regions[start.Region].Kind = RegionKind.Start;
         bool bossDepth = depth == RunState.MaxDepth;
+        Chamber exit = start; int far = -1;
+        if (bossDepth) {
+            // v0.15 Г5: логово в центре, залы вокруг него кольцом
+            double bcx = w * 0.5, bcy = h * 0.5, bd = double.MaxValue;
+            for (int i = 0; i < chambers.Count; i++) {
+                if (chambers[i] == start) continue;
+                double dx = chambers[i].Cx - bcx, dy = chambers[i].Cy - bcy, d = dx * dx + dy * dy;
+                if (d < bd) { bd = d; exit = chambers[i]; far = 1; }
+            }
+        } else {
+            for (int i = 0; i < chambers.Count; i++) {
+                var c = chambers[i];
+                int d = dist[c.Cy * w + c.Cx];
+                if (c != start && d > far) { far = d; exit = c; }
+            }
+        }
+        // v0.15 Г5: кольцо тоннелей вокруг логова — соседи по углу соединяются напрямую
+        if (bossDepth && chambers.Count > 3) AddRingEdges(m, chambers, exit, edges, rng);
+        m.Regions[start.Region].Kind = RegionKind.Start;
         m.Regions[exit.Region].Kind = bossDepth ? RegionKind.BossLair : RegionKind.Exit;
         if (bossDepth) {
             m.BossPos = new Vec2(exit.Cx + 0.5, exit.Cy + 0.5);
@@ -263,9 +276,13 @@ public static class WorldGenerator {
         for (int i = 0; i < chambers.Count; i++) {
             var c = chambers[i];
             var kind = m.Regions[c.Region].Kind;
-            int count = 2 + rng.NextInt(4);
+            // v0.15 Г1: «грибные поляны» — часть залов получает 3 лишних отбойника
+            bool glade = depth == 1 && kind == RegionKind.Cavern && rng.NextDouble01() < 0.6;
+            int count = 2 + rng.NextInt(4) + (glade ? 3 : 0);
             for (int k = 0, tries = 0; k < count && tries < 40; tries++) {
-                var ok = biome.ObstaclePool[rng.NextInt(biome.ObstaclePool.Length)];
+                var ok = glade && k >= count - 3
+                    ? ObstacleKind.Mushroom
+                    : biome.ObstaclePool[rng.NextInt(biome.ObstaclePool.Length)];
                 bool solid = ObstacleRules.IsSolid(ok);
                 double rad = solid ? rng.Range(0.5, 1.3) : rng.Range(1.2, 2.2);
                 double ang = rng.Range(0, System.Math.PI * 2), dd = rng.Range(0, c.R * 0.7);
@@ -286,6 +303,38 @@ public static class WorldGenerator {
                 k++;
             }
         }
+
+        // ---------- 8б. Колонны-кристаллы Г4 (v0.15): линии из трёх, рикошет даёт разгон ----------
+        if (depth == 4) {
+            for (int i = 0; i < chambers.Count; i++) {
+                var c = chambers[i];
+                var kind = m.Regions[c.Region].Kind;
+                if (kind != RegionKind.Cavern && kind != RegionKind.Elite) continue;
+                if (rng.NextDouble01() < 0.35) continue;
+                double ang = rng.Range(0, System.Math.PI * 2);
+                var dir = new Vec2(System.Math.Cos(ang), System.Math.Sin(ang));
+                double spacing = rng.Range(3.6, 4.4);
+                var baseP = new Vec2(c.Cx + 0.5, c.Cy + 0.5) - dir.Scaled(spacing);
+                for (int k = 0; k < 3; k++) {
+                    var p = baseP + dir.Scaled(k * spacing);
+                    double rad = rng.Range(0.6, 0.95);
+                    if (!Clear(m, p, rad + 0.6)) continue;
+                    if (!m.CellOf(p, out int ocx, out int ocy) || m.RegionOf[ocy * w + ocx] != c.Region) continue;
+                    if ((p - m.PlayerStart).Length < rad + 2.5 || (p - m.ExitPos).Length < rad + 2.5) continue;
+                    bool near = false;
+                    for (int a = 0; a < m.Altars.Count && !near; a++) if ((m.Altars[a].Pos - p).Length < rad + 2) near = true;
+                    for (int o = 0; o < m.Obstacles.Count && !near; o++)
+                        if ((m.Obstacles[o].Pos - p).Length < rad + m.Obstacles[o].Radius + 0.6) near = true;
+                    if (near) continue;
+                    MarkDisc(solidBlocked, w, h, p, rad);
+                    if (!KeyPointsReachable(m, solidBlocked, sx, sy)) { RebuildBlocked(solidBlocked, m); continue; }
+                    m.Obstacles.Add(new ObstacleSpec { Kind = ObstacleKind.Crystal, Pos = p, Radius = rad });
+                }
+            }
+        }
+
+        // ---------- 8в. Опасности биомов (v0.15): лава Г2, течения Г3, жилы Г5 ----------
+        PlaceBiomeHazards(m, biome, depth, chambers, edges, exit, rng);
 
         // ---------- 9. Спавны ----------
         int maxDist = 1;
@@ -311,6 +360,8 @@ public static class WorldGenerator {
             int x = rng.NextInt(w), y = rng.NextInt(h);
             int i = y * w + x;
             if (m.Cells[i] != 1 || solidBlocked[i] || dist[i] == int.MaxValue) continue;
+            var p0 = new Vec2(x + 0.5, y + 0.5);
+            if (SpawnInHazard(m, p0)) continue; // v0.15: не в лаве/течении
             double t = (double)dist[i] / maxDist;
             if (rng.NextDouble01() > 0.25 + 0.75 * t) continue;          // ближе к шахте — гуще
             var p = new Vec2(x + 0.5, y + 0.5);
@@ -763,6 +814,111 @@ public static class WorldGenerator {
             default: names = new[] { "Грибная роща", "Мшистый грот", "Споровый зал" }; break;
         }
         return names[rng.NextInt(names.Length)];
+    }
+
+    /// <summary>v0.15: точка внутри опасной зоны (лава/течение/жила) — спавн там не нужен.</summary>
+    private static bool SpawnInHazard(WorldMap m, Vec2 p) {
+        for (int hz = 0; hz < m.Hazards.Count; hz++)
+            if (HazardRules.Inside(p, m.Hazards[hz])) return true;
+        return false;
+    }
+
+    // ===================== Опасности биомов (v0.15) =====================
+
+    private static void PlaceBiomeHazards(WorldMap m, BiomeDef biome, int depth, List<Chamber> chambers,
+                                          List<int[]> edges, Chamber exit, PmRandom rng) {
+        if (biome.Id == BiomeId.Warm) {
+            // Лавовые реки поперёк тоннелей: полоса с «мостиком» — проход не перекрыт наглухо
+            int rivers = System.Math.Min(edges.Count, 3 + rng.NextInt(3));
+            for (int k = 0, guard = 0; k < rivers && guard < 60; guard++) {
+                var e = edges[rng.NextInt(edges.Count)];
+                var a = chambers[e[0]]; var b = chambers[e[1]];
+                var mid = new Vec2((a.Cx + b.Cx) * 0.5 + 0.5, (a.Cy + b.Cy) * 0.5 + 0.5);
+                int mx = (int)mid.X, my = (int)mid.Y;
+                if (!m.IsFloor(mx, my)) continue;
+                var dir = new Vec2(-(b.Cy - a.Cy), b.Cx - a.Cx).Normalized();
+                if (dir.SqrLength < 0.5) continue;
+                if (!HazardSpotFree(m, mid, 3.5)) continue;
+                double halfLen = rng.Range(3.2, 4.6);
+                m.Hazards.Add(new HazardSpec {
+                    Kind = HazardKind.LavaRiver, Pos = mid, Dir = dir,
+                    HalfLen = halfLen, HalfWidth = rng.Range(1.1, 1.5),
+                    GapAlong = rng.Range(-0.45, 0.45) * halfLen, GapR = rng.Range(1.7, 2.1),
+                });
+                k++;
+            }
+        } else if (biome.Id == BiomeId.Ponds) {
+            // Течения: полосы в свободных залах, сносящие героя и существ
+            int currents = 4 + rng.NextInt(3);
+            for (int k = 0, guard = 0; k < currents && guard < 80; guard++) {
+                var c = chambers[rng.NextInt(chambers.Count)];
+                var kind = m.Regions[c.Region].Kind;
+                if (kind == RegionKind.Start || kind == RegionKind.Exit || kind == RegionKind.BossLair) continue;
+                double ang = rng.Range(0, System.Math.PI * 2);
+                var off = new Vec2(System.Math.Cos(ang), System.Math.Sin(ang)).Scaled(c.R * 0.45);
+                var pos = new Vec2(c.Cx + 0.5, c.Cy + 0.5) + off;
+                if (!m.IsFloor((int)pos.X, (int)pos.Y)) continue;
+                if (!HazardSpotFree(m, pos, 3.0)) continue;
+                m.Hazards.Add(new HazardSpec {
+                    Kind = HazardKind.Current, Pos = pos,
+                    Dir = new Vec2(System.Math.Cos(ang + System.Math.PI / 2), System.Math.Sin(ang + System.Math.PI / 2)),
+                    HalfLen = rng.Range(3.5, 6.0), HalfWidth = rng.Range(1.3, 1.7),
+                });
+                k++;
+            }
+        } else if (biome.Id == BiomeId.Heart && depth == RunState.MaxDepth) {
+            // Пульсирующие жилы вокруг логова: радиальные полосы, удар раз в 4–6 с (телеграф 0.8 с)
+            int count = 4 + rng.NextInt(3);
+            var bc = new Vec2(exit.Cx + 0.5, exit.Cy + 0.5);
+            for (int k = 0; k < count; k++) {
+                double ang = k * System.Math.PI * 2 / count + rng.Range(-0.35, 0.35);
+                var dir = new Vec2(System.Math.Cos(ang), System.Math.Sin(ang));
+                var pos = bc + dir.Scaled(exit.R * 0.45);
+                double period = rng.Range(HazardRules.MinVeinPeriod, HazardRules.MaxVeinPeriod);
+                m.Hazards.Add(new HazardSpec {
+                    Kind = HazardKind.Vein, Pos = pos, Dir = dir,
+                    HalfLen = exit.R * rng.Range(0.75, 0.95), HalfWidth = rng.Range(1.2, 1.5),
+                    Period = period, Phase = rng.Range(0.0, period),
+                });
+            }
+        }
+    }
+
+    /// <summary>Место под опасность: не у старта/выхода/алтарей, не внутри твёрдых препятствий.</summary>
+    private static bool HazardSpotFree(WorldMap m, Vec2 p, double clear) {
+        if ((p - m.PlayerStart).Length < clear + 2) return false;
+        if ((p - m.ExitPos).Length < clear) return false;
+        for (int a = 0; a < m.Altars.Count; a++) if ((m.Altars[a].Pos - p).Length < clear) return false;
+        for (int o = 0; o < m.Obstacles.Count; o++) {
+            var ob = m.Obstacles[o];
+            if (!ObstacleRules.IsSolid(ob.Kind)) continue;
+            if ((ob.Pos - p).Length < ob.Radius + 1.0) return false;
+        }
+        return true;
+    }
+
+    /// <summary>Г5: кольцо тоннелей — залы вокруг логова соединяются по углу (там, где ещё не соединены).</summary>
+    private static void AddRingEdges(WorldMap m, List<Chamber> chambers, Chamber boss, List<int[]> edges, PmRandom rng) {
+        var order = new List<int>();
+        for (int i = 0; i < chambers.Count; i++) if (chambers[i] != boss) order.Add(i);
+        var ang = new double[order.Count];
+        for (int i = 0; i < order.Count; i++) {
+            var c = chambers[order[i]];
+            ang[i] = System.Math.Atan2(c.Cy - boss.Cy, c.Cx - boss.Cx);
+        }
+        for (int i = 0; i < order.Count - 1; i++)
+            for (int j = i + 1; j < order.Count; j++)
+                if (ang[j] < ang[i]) {
+                    double ta = ang[i]; ang[i] = ang[j]; ang[j] = ta;
+                    int ti = order[i]; order[i] = order[j]; order[j] = ti;
+                }
+        for (int i = 0; i < order.Count; i++) {
+            int ia = order[i], ib = order[(i + 1) % order.Count];
+            if (ia == ib || HasEdge(edges, ia, ib)) continue;
+            edges.Add(new[] { ia, ib });
+            var a = chambers[ia]; var b = chambers[ib];
+            CarveTunnel(m, a.Cx, a.Cy, b.Cx, b.Cy, 1 + rng.NextInt(2), rng, true);
+        }
     }
 
     // ===================== Мелочи =====================
